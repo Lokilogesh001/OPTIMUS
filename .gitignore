@@ -1,0 +1,71 @@
+# ==============================================================================
+# OPTIMUS .gitignore — Secrets, Runtime Data, Environments, and Build Artifacts
+# ==============================================================================
+
+# --- Secrets & Private Credentials ---
+config/api_keys.json
+config/certs/
+config/whatsapp_web/
+**/token*.json
+**/client_secret*.json
+*credentials*.json
+*.pem
+*.key
+*.crt
+.env
+.env.*
+!.env.example
+
+# --- Runtime Memory & Session State ---
+memory/*.json
+memory/*.db
+memory/optimus/
+memory/orchestrator/
+memory/tasks/
+memory/verification/
+memory/workflows/executions/
+memory/workflows/approvals/
+!memory/workflows/definitions/
+
+# --- Python Build & Bytecode ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Testing & Coverage Artifacts ---
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+output.txt
+
+# --- Virtual Environments ---
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- IDEs & OS Metadata ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Runtime Logs, Downloads & Captures ---
+*.log
+logs/
+downloads/
+screenshots/
+tmp/
+temp/

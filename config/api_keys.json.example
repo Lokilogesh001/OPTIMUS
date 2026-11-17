@@ -1,0 +1,12 @@
+{
+  "os_system": "windows",
+  "local_only": false,
+  "gemini_api_key": "",
+  "assistant_name": "OPTIMUS",
+  "user_name": "Sir",
+  "ui_color": "#00d4ff",
+  "hud_style": "face",
+  "camera_index": 0,
+  "providers": {},
+  "voice_name": "Puck"
+}

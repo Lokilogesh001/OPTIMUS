@@ -1,0 +1,37 @@
+Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+
+Copyright (c) 2026 OPTIMUS Contributors
+Derived from Mark-LVII (Copyright (c) 2026 @FatihMakes)
+
+==============================================================================
+License Terms
+==============================================================================
+
+You are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material
+
+Under the following terms:
+- Attribution — You must give appropriate credit, provide a link to the license,
+  and indicate if changes were made. You may do so in any reasonable manner,
+  but not in any way that suggests the licensor endorses you or your use.
+- NonCommercial — You may not use the material for commercial purposes.
+- No additional restrictions — You may not apply legal terms or technological
+  measures that legally restrict others from doing anything the license permits.
+
+Full license text available at:
+https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+==============================================================================
+Third-Party Attributions & Licenses
+==============================================================================
+
+1. Mark-LVII Base Architecture:
+   Copyright (c) @FatihMakes (YouTube: @FatihMakes, Instagram: @fatihmakes)
+   Licensed under CC BY-NC 4.0.
+
+2. MediaPipe Canonical Face Model (`core/face_model.obj`):
+   Copyright (c) Google LLC
+   Licensed under the Apache License, Version 2.0 (the "License").
+   You may obtain a copy of the License at:
+   http://www.apache.org/licenses/LICENSE-2.0

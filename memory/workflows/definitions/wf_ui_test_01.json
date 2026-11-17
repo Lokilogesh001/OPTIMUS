@@ -1,0 +1,62 @@
+{
+  "workflow_id": "wf_ui_test_01",
+  "name": "UI Pipeline Test",
+  "description": "Verifies workflow DAG UI rendering",
+  "version": "1.0.0",
+  "parameters": {},
+  "steps": [
+    {
+      "step_id": "step_a",
+      "name": "Step Alpha",
+      "description": "",
+      "assigned_agent": "central_orchestrator",
+      "required_capabilities": [],
+      "allowed_tools": [],
+      "inputs": {},
+      "depends_on": [],
+      "condition": null,
+      "requires_approval": false,
+      "approval_role": "admin",
+      "approval_timeout_seconds": 3600.0,
+      "retry_policy": {
+        "max_retries": 3,
+        "backoff_factor": 2.0,
+        "initial_delay_seconds": 1.0,
+        "max_delay_seconds": 30.0
+      },
+      "timeout_seconds": 120.0,
+      "expected_deliverables": [],
+      "is_destructive": false,
+      "nested_workflow_id": null
+    },
+    {
+      "step_id": "step_b",
+      "name": "Step Beta",
+      "description": "",
+      "assigned_agent": "code_intel",
+      "required_capabilities": [],
+      "allowed_tools": [],
+      "inputs": {},
+      "depends_on": [
+        "step_a"
+      ],
+      "condition": null,
+      "requires_approval": false,
+      "approval_role": "admin",
+      "approval_timeout_seconds": 3600.0,
+      "retry_policy": {
+        "max_retries": 3,
+        "backoff_factor": 2.0,
+        "initial_delay_seconds": 1.0,
+        "max_delay_seconds": 30.0
+      },
+      "timeout_seconds": 120.0,
+      "expected_deliverables": [],
+      "is_destructive": false,
+      "nested_workflow_id": null
+    }
+  ],
+  "max_depth": 3,
+  "created_at": 1794933148.7283313,
+  "updated_at": 1794933148.7283316
+}
