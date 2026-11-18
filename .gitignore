@@ -33,6 +33,7 @@ memory/monitors/
 memory/schedules/
 memory/notifications/
 memory/proactive/
+memory/audit/
 memory/workflows/executions/
 memory/workflows/approvals/
 !memory/workflows/definitions/

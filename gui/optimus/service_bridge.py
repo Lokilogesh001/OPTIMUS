@@ -890,6 +890,16 @@ class OptimusServiceBridge(QObject):
         except Exception:
             pass
 
+        try:
+            from core.windows_runtime.client import get_windows_runtime_client
+            wr_client = get_windows_runtime_client()
+            base_telem.update({
+                "windows_runtime_service_active": wr_client.is_service_available(),
+                "windows_runtime_drives": wr_client.discover_drives(),
+            })
+        except Exception:
+            pass
+
         return base_telem
 
     def _poll_telemetry(self) -> None:

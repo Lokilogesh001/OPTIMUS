@@ -150,7 +150,11 @@ def safe_eval_expression(expr: str) -> float | int:
 
 # ── Built-in Filesystem Operations with Boundary Enforcement ─────────────────
 
-def _resolve_safe_path(raw_path: str, allowed_roots: list[str] | None = None) -> Path:
+def _resolve_safe_path(
+    raw_path: str,
+    allowed_roots: list[str] | None = None,
+    allow_cross_drive: bool = False,
+) -> Path:
     """Canonicalize path and verify it does not traverse outside allowed roots."""
     p = Path(raw_path)
     if allowed_roots:
@@ -165,6 +169,18 @@ def _resolve_safe_path(raw_path: str, allowed_roots: list[str] | None = None) ->
             p_under_root = (canonical_roots[0] / p).resolve()
             if any(p_under_root == r or r in p_under_root.parents for r in canonical_roots):
                 return p_under_root
+
+        # 3. Cross-drive / system path permission: if allowed or wildcard is present
+        if allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots):
+            try:
+                from core.windows_runtime.policy import WindowsRuntimePolicy
+                if p_resolved.is_absolute() and p_resolved.drive:
+                    mounted = WindowsRuntimePolicy.discover_mounted_drives()
+                    drive_prefix = p_resolved.drive.upper()
+                    if any(m.upper().startswith(drive_prefix) for m in mounted):
+                        return p_resolved
+            except Exception:  # noqa: BLE001, S110
+                pass
 
         raise PermissionError(f"PATH_VIOLATION: Access denied: path '{p}' is outside permitted directories (allowed roots: {allowed_roots})")
 
@@ -193,6 +209,11 @@ class ToolRegistry:
         try:
             from core.computer_use.tools import register_computer_tools
             register_computer_tools(self)
+        except ImportError:
+            pass
+        try:
+            from core.windows_runtime.tools import register_windows_runtime_tools
+            register_windows_runtime_tools(self)
         except ImportError:
             pass
 
@@ -232,7 +253,7 @@ class ToolRegistry:
                     error=result.error,
                     evidence_digest=ev_digest,
                 ))
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
     def _register_default_tools(self) -> None:
@@ -281,12 +302,19 @@ class ToolRegistry:
         # 2. Read File
         def _read_handler(params: dict, context: dict | None = None) -> ToolResult:
             raw_path = str(params.get("path") or "")
-            allowed_roots = (context or {}).get("allowed_roots")
+            ctx = context or {}
+            allowed_roots = ctx.get("allowed_roots")
+            allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
             try:
-                target = _resolve_safe_path(raw_path, allowed_roots)
+                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
                 if not target.is_file():
                     return ToolResult(status="failed", error=f"File not found: '{target}'", output="File not found")
-                content = target.read_text(encoding="utf-8", errors="replace")
+                try:
+                    content = target.read_text(encoding="utf-8", errors="replace")
+                except PermissionError:
+                    from core.windows_runtime.client import get_windows_runtime_client
+                    client = get_windows_runtime_client()
+                    content = client.read_file(str(target))
                 digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
                 return ToolResult(
                     status="done",
@@ -315,12 +343,19 @@ class ToolRegistry:
         def _write_handler(params: dict, context: dict | None = None) -> ToolResult:
             raw_path = str(params.get("path") or "")
             content = str(params.get("content") or "")
-            allowed_roots = (context or {}).get("allowed_roots")
+            ctx = context or {}
+            allowed_roots = ctx.get("allowed_roots")
+            allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
             try:
-                target = _resolve_safe_path(raw_path, allowed_roots)
-                target.parent.mkdir(parents=True, exist_ok=True)
+                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
                 raw_bytes = content.encode("utf-8")
-                target.write_bytes(raw_bytes)
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(raw_bytes)
+                except PermissionError:
+                    from core.windows_runtime.client import get_windows_runtime_client
+                    client = get_windows_runtime_client()
+                    client.write_file(str(target), content)
                 digest = hashlib.sha256(raw_bytes).hexdigest()
                 return ToolResult(
                     status="done",
@@ -353,16 +388,30 @@ class ToolRegistry:
         # 4. List Directory
         def _list_handler(params: dict, context: dict | None = None) -> ToolResult:
             raw_path = str(params.get("path") or ".")
-            allowed_roots = (context or {}).get("allowed_roots")
+            ctx = context or {}
+            allowed_roots = ctx.get("allowed_roots")
+            allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
             try:
-                target = _resolve_safe_path(raw_path, allowed_roots)
+                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
                 if not target.is_dir():
                     return ToolResult(status="failed", error=f"Not a directory: '{target}'", output="Not a directory")
                 entries = []
-                for entry in target.iterdir():
-                    kind = "DIR" if entry.is_dir() else "FILE"
-                    size = entry.stat().st_size if entry.is_file() else 0
-                    entries.append(f"{kind:4}  {size:10} bytes  {entry.name}")
+                try:
+                    for entry in target.iterdir():
+                        kind = "DIR" if entry.is_dir() else "FILE"
+                        size = entry.stat().st_size if entry.is_file() else 0
+                        entries.append(f"{kind:4}  {size:10} bytes  {entry.name}")
+                except PermissionError:
+                    from core.windows_runtime.client import get_windows_runtime_client
+                    client = get_windows_runtime_client()
+                    res = client.list_directory(str(target))
+                    if res.get("error"):
+                        raise PermissionError(res["error"])
+                    entries = []
+                    for e in res.get("entries", []):
+                        kind = "DIR" if e.get("is_dir") else "FILE"
+                        size = e.get("size", 0)
+                        entries.append(f"{kind:4}  {size:10} bytes  {e.get('name')}")
                 out = "\n".join(entries[:100])
                 return ToolResult(
                     status="done",

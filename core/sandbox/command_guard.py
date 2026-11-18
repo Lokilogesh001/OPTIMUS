@@ -84,11 +84,25 @@ def execute_sandboxed_command(
         canonical_roots = [Path(r).resolve() for r in allowed_roots]
         is_in_bounds = any(target_cwd == r or r in target_cwd.parents for r in canonical_roots)
         if not is_in_bounds:
-            return ToolResult(
-                status="failed",
-                error=f"WORKSPACE_VIOLATION: Execution directory '{target_cwd}' is outside allowed roots: {allowed_roots}",
-                duration_ms=(time.perf_counter() - start) * 1000.0,
-            )
+            # Check for cross-drive or wildcard permission
+            allowed_cross_drive = any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)
+            if not allowed_cross_drive:
+                try:
+                    from core.windows_runtime.policy import WindowsRuntimePolicy
+                    if target_cwd.is_absolute() and target_cwd.drive:
+                        mounted = WindowsRuntimePolicy.discover_mounted_drives()
+                        drive_prefix = target_cwd.drive.upper()
+                        if any(m.upper().startswith(drive_prefix) for m in mounted) and ("ALL_DRIVES" in allowed_roots or "*" in allowed_roots):
+                            allowed_cross_drive = True
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+            if not allowed_cross_drive:
+                return ToolResult(
+                    status="failed",
+                    error=f"WORKSPACE_VIOLATION: Execution directory '{target_cwd}' is outside allowed roots: {allowed_roots}",
+                    duration_ms=(time.perf_counter() - start) * 1000.0,
+                )
 
     # 3. Environment sanitization
     clean_env = os.environ.copy()

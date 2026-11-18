@@ -60,6 +60,11 @@ class SectionSystem(QWidget):
         self.lbl_inference_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(0, 255, 128, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
         hdr.addWidget(self.lbl_inference_badge)
 
+        self.lbl_runtime_badge = QLabel("[RUNTIME: INITIALIZING]")
+        self.lbl_runtime_badge.setFont(mono_font(8))
+        self.lbl_runtime_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 212, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
+        hdr.addWidget(self.lbl_runtime_badge)
+
         hdr.addStretch()
 
         btn_refresh = QPushButton("REFRESH PROCESSES")
@@ -172,6 +177,19 @@ class SectionSystem(QWidget):
         tok_s = float(telem.get("tokens_per_sec", 27.6))
         model_state = telem.get("model_state", "READY")
         self.lbl_inference_badge.setText(f"[INFERENCE: {inf_backend} · {tok_s:.1f} tok/s · {model_state}]")
+
+        try:
+            from core.windows_runtime.client import get_windows_runtime_client
+            client = get_windows_runtime_client()
+            svc_active = client.is_service_available()
+            ident = client.get_execution_identity()
+            drives = client.discover_drives()
+            status_txt = "SERVICE" if svc_active else "STANDALONE"
+            admin_txt = "ADMIN" if ident.is_admin else "USER"
+            drives_str = ", ".join(d[:2] for d in drives)
+            self.lbl_runtime_badge.setText(f"[RUNTIME: {status_txt} · {admin_txt} · {drives_str}]")
+        except Exception:
+            pass
 
         procs = telem.get("processes")
         if isinstance(procs, list) and procs:

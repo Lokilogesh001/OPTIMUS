@@ -121,7 +121,7 @@ class DevelopmentWorkspace:
         except Exception:
             return False
 
-    def resolve_path(self, relative_or_absolute: Path | str) -> Path:
+    def resolve_path(self, relative_or_absolute: Path | str, allow_cross_drive: bool = False) -> Path:
         """Resolve a path safely, preventing traversal and symlink escapes."""
         raw = Path(relative_or_absolute)
         if raw.is_absolute():
@@ -131,6 +131,16 @@ class DevelopmentWorkspace:
 
         # Boundary check
         if resolved != self.root and self.root not in resolved.parents:
+            if allow_cross_drive:
+                try:
+                    from core.windows_runtime.policy import WindowsRuntimePolicy
+                    if resolved.is_absolute() and resolved.drive:
+                        mounted = WindowsRuntimePolicy.discover_mounted_drives()
+                        drive_prefix = resolved.drive.upper()
+                        if any(m.upper().startswith(drive_prefix) for m in mounted):
+                            return resolved
+                except Exception:  # noqa: BLE001, S110
+                    pass
             raise PermissionError(
                 f"WORKSPACE_VIOLATION: Path '{resolved}' escapes authorized workspace root '{self.root}'"
             )
