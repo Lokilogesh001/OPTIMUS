@@ -91,6 +91,10 @@ class PermissionManager:
     def get_profile(self) -> PermissionProfile:
         return self._profile
 
+    @property
+    def profile(self) -> PermissionProfile:
+        return self._profile
+
     def set_profile(self, profile: PermissionProfile | str) -> None:
         """Update permission profile. Must only be invoked via direct user action / UI."""
         if isinstance(profile, str):

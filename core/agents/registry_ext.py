@@ -12,9 +12,11 @@ from typing import TYPE_CHECKING
 from core.agents.base import SpecializedAgent
 from core.agents.code_intel import CodeIntelligenceAgent
 from core.agents.data_intel import DataIntelligenceAgent
+from core.agents.developer import DeveloperAgent, create_developer_profile
 from core.agents.executor import ExecutionAgent, create_execution_profile
 from core.agents.researcher import ResearchAgent, create_researcher_profile
 from core.agents.sys_diag import SystemDiagnosisAgent
+from core.agents.verifier import VerificationAgent, create_verification_agent_profile
 
 if TYPE_CHECKING:
     from core.orchestrator.agents import AgentRegistry
@@ -24,7 +26,7 @@ _SPECIALIZED_AGENTS: dict[str, SpecializedAgent] = {}
 
 
 def register_specialized_agents(registry: AgentRegistry) -> None:
-    """Register all 5 canonical specialized agent profiles and runners into AgentRegistry."""
+    """Register all canonical specialized agent profiles and runners into AgentRegistry."""
     with _lock:
         # 1. Code Intelligence Agent
         code_agent = CodeIntelligenceAgent()
@@ -45,7 +47,6 @@ def register_specialized_agents(registry: AgentRegistry) -> None:
         research_agent = ResearchAgent()
         _SPECIALIZED_AGENTS[research_agent.name] = research_agent
         registry.register(research_agent.profile)
-        # Register alias 'research_agent'
         alias_research = create_researcher_profile()
         alias_research.name = "research_agent"
         registry.register(alias_research)
@@ -55,11 +56,28 @@ def register_specialized_agents(registry: AgentRegistry) -> None:
         exec_agent = ExecutionAgent()
         _SPECIALIZED_AGENTS[exec_agent.name] = exec_agent
         registry.register(exec_agent.profile)
-        # Register alias 'execution'
         alias_exec = create_execution_profile()
         alias_exec.name = "execution"
         registry.register(alias_exec)
         _SPECIALIZED_AGENTS["execution"] = exec_agent
+
+        # 6. Developer Agent
+        dev_agent = DeveloperAgent()
+        _SPECIALIZED_AGENTS[dev_agent.name] = dev_agent
+        registry.register(dev_agent.profile)
+        alias_dev = create_developer_profile()
+        alias_dev.name = "developer"
+        registry.register(alias_dev)
+        _SPECIALIZED_AGENTS["developer"] = dev_agent
+
+        # 7. Verification Agent
+        verif_agent = VerificationAgent()
+        _SPECIALIZED_AGENTS[verif_agent.name] = verif_agent
+        registry.register(verif_agent.profile)
+        alias_verif = create_verification_agent_profile()
+        alias_verif.name = "verifier"
+        registry.register(alias_verif)
+        _SPECIALIZED_AGENTS["verifier"] = verif_agent
 
 
 def get_specialized_agent(name: str) -> SpecializedAgent | None:

@@ -182,6 +182,11 @@ class ToolRegistry:
             register_sandbox_tools(self)
         except ImportError:
             pass
+        try:
+            from core.developer.tools import register_developer_tools
+            register_developer_tools(self)
+        except ImportError:
+            pass
 
     def set_event_bus(self, event_bus: Any) -> None:
         """Attach or update the EventBus for audit events."""
