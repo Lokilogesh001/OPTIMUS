@@ -20,8 +20,10 @@ config/whatsapp_web/
 !.env.example
 
 # --- Runtime Memory & Session State ---
+config/skills_registry.json
 memory/*.json
 memory/*.db
+memory/skills/
 memory/optimus/
 memory/orchestrator/
 memory/tasks/

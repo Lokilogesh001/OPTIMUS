@@ -67,7 +67,7 @@ def main():
     print("      Control Center visible.")
 
     # Navigate between sections
-    sections = ["command", "agents", "workflows", "intelligence", "system", "verification", "planning", "developer"]
+    sections = ["command", "agents", "workflows", "intelligence", "system", "verification", "planning", "developer", "skills"]
     for s in sections:
         win.show_optimus(s)
         app.processEvents()

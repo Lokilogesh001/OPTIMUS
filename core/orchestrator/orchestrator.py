@@ -316,6 +316,24 @@ class CentralOrchestrator:
             "- Deliver factual, verified answers. Never hallucinate completions."
         )
 
+        # Select compatible skills for this subtask & agent
+        try:
+            from core.skills import SkillLoader, SkillSelector
+            selector = SkillSelector()
+            selected_set = selector.select_skills_for_task(
+                task_id=task_id,
+                goal=f"{subtask.title}: {subtask.description}",
+                agent_name=agent.name,
+                tool_registry=self.tool_registry,
+                max_skills=2,
+            )
+            if selected_set.skills:
+                loader = SkillLoader()
+                for skill in selected_set.skills:
+                    system_prompt += "\n" + loader.format_skill_prompt(skill)
+        except Exception:
+            pass
+
         # Build scoped, compacted context from the SharedContextBus
         scoped_context = self.memory_manager.build_subtask_prompt_context(
             task_id=task_id,
