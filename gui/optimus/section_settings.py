@@ -9,9 +9,7 @@ Provides configuration for:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -22,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.security.permissions import PermissionProfile, get_permission_manager
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import mono_font, px_font
 from gui.theme import C, apply_ui_accent
@@ -59,7 +58,40 @@ class SectionSettings(QWidget):
         p_work.body.addLayout(w_lay)
         layout.addWidget(p_work)
 
-        # 2. Privacy & Isolation
+        # 2. Central Permission Architecture
+        self.perm_mgr = get_permission_manager()
+
+        p_perm = HoloPanel("AUTONOMOUS PERMISSION PROFILE (CBAC ENFORCEMENT)", "PERMISSIONS")
+        pm_lay = QVBoxLayout()
+        self.lbl_active_perm = QLabel(f"ACTIVE PROFILE: {self.perm_mgr.get_profile().value}")
+        self.lbl_active_perm.setFont(px_font(10, QFont.Weight.Bold))
+        self.lbl_active_perm.setStyleSheet(f"color: {C.PRI};")
+        pm_lay.addWidget(self.lbl_active_perm)
+
+        self.lbl_perm_desc = QLabel("")
+        self.lbl_perm_desc.setFont(px_font(8))
+        self.lbl_perm_desc.setStyleSheet(f"color: {C.TEXT_DIM};")
+        self.lbl_perm_desc.setWordWrap(True)
+        pm_lay.addWidget(self.lbl_perm_desc)
+
+        btn_row = QHBoxLayout()
+        self.perm_btns: dict[PermissionProfile, QPushButton] = {}
+        for prof in (PermissionProfile.LOW, PermissionProfile.MODERATE, PermissionProfile.ADVANCED):
+            b = QPushButton(prof.value)
+            b.setFont(px_font(8, QFont.Weight.Bold))
+            b.setFixedHeight(28)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _, p=prof: self._set_perm_profile(p))
+            btn_row.addWidget(b)
+            self.perm_btns[prof] = b
+        btn_row.addStretch()
+        pm_lay.addLayout(btn_row)
+
+        p_perm.body.addLayout(pm_lay)
+        layout.addWidget(p_perm)
+        self._update_perm_ui()
+
+        # 3. Privacy & Isolation
         p_priv = HoloPanel("DATA PRIVACY & LOCAL ENCLAVE", "PRIVACY")
         pv_lay = QVBoxLayout()
         self.chk_local_only = QCheckBox("STRICT LOCAL-ONLY MODE (Never transmit data to cloud endpoints)")
@@ -108,31 +140,22 @@ class SectionSettings(QWidget):
         p_theme.body.addLayout(th_lay)
         layout.addWidget(p_theme)
 
-        # 4. API Keys & Providers Status
-        p_keys = HoloPanel("PROVIDER CREDENTIALS STATUS", "API_KEYS")
-        k_lay = QVBoxLayout()
-        cfg_file = Path.cwd() / "config" / "api_keys.json"
-        has_gemini = False
-        has_openai = False
-        has_anthropic = False
-        if cfg_file.exists():
-            try:
-                data = json.loads(cfg_file.read_text(encoding="utf-8"))
-                has_gemini = bool(data.get("gemini_api_key"))
-                has_openai = bool(data.get("openai_api_key"))
-                has_anthropic = bool(data.get("anthropic_api_key"))
-            except Exception:
-                pass
+        # 5. API Keys & OS Secure Keyring
+        from core.security.credentials import get_credential, mask_credential
 
-        def _make_key_row(name: str, has_k: bool) -> QHBoxLayout:
+        p_keys = HoloPanel("PROVIDER CREDENTIALS & SECURE OS KEYRING", "API_KEYS")
+        k_lay = QVBoxLayout()
+
+        def _make_key_row(name: str, key_val: str | None) -> QHBoxLayout:
             r = QHBoxLayout()
             n = QLabel(name)
             n.setFont(mono_font(9))
             n.setStyleSheet(f"color: {C.WHITE};")
-            n.setFixedWidth(120)
+            n.setFixedWidth(140)
             r.addWidget(n)
 
-            st = "CONFIGURED" if has_k else "NOT DETECTED"
+            has_k = bool(key_val)
+            st = f"CONFIGURED ({mask_credential(key_val)})" if has_k else "NOT DETECTED"
             col = C.GREEN if has_k else C.TEXT_DIM
             s = QLabel(st)
             s.setFont(px_font(9, QFont.Weight.Bold))
@@ -141,15 +164,64 @@ class SectionSettings(QWidget):
             r.addStretch()
             return r
 
-        k_lay.addLayout(_make_key_row("GEMINI LIVE", has_gemini))
-        k_lay.addLayout(_make_key_row("OPENAI API", has_openai))
-        k_lay.addLayout(_make_key_row("ANTHROPIC API", has_anthropic))
-        k_lay.addLayout(_make_key_row("OLLAMA LOCAL", True))
+        k_lay.addLayout(_make_key_row("GEMINI LIVE", get_credential("gemini")))
+        k_lay.addLayout(_make_key_row("OPENAI API", get_credential("openai")))
+        k_lay.addLayout(_make_key_row("ANTHROPIC API", get_credential("anthropic")))
+        k_lay.addLayout(_make_key_row("GROQ API", get_credential("groq")))
+        k_lay.addLayout(_make_key_row("OPENROUTER API", get_credential("openrouter")))
+        k_lay.addLayout(_make_key_row("OLLAMA LOCAL", "Local / Active"))
+
+        # Re-run onboarding button
+        ob_row = QHBoxLayout()
+        btn_re_onboard = QPushButton("◈  RE-RUN ONBOARDING WIZARD")
+        btn_re_onboard.setFont(px_font(9, QFont.Weight.Bold))
+        btn_re_onboard.setFixedHeight(30)
+        btn_re_onboard.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_re_onboard.setStyleSheet(f"""
+            QPushButton {{
+                color: {C.PRI}; background: transparent;
+                border: 1px solid {C.PRI_DIM}; border-radius: 4px; padding: 4px 14px;
+            }}
+            QPushButton:hover {{ background: rgba(0, 212, 255, 0.1); border-color: {C.PRI}; }}
+        """)
+        btn_re_onboard.clicked.connect(self._open_onboarding_wizard)
+        ob_row.addWidget(btn_re_onboard)
+        ob_row.addStretch()
+        k_lay.addLayout(ob_row)
 
         p_keys.body.addLayout(k_lay)
         layout.addWidget(p_keys)
 
         layout.addStretch()
+
+    def _update_perm_ui(self) -> None:
+        prof = self.perm_mgr.get_profile()
+        self.lbl_active_perm.setText(f"ACTIVE PROFILE: {prof.value}")
+        desc_map = {
+            PermissionProfile.LOW: "LOW MODE: Read-only operations by default. Asks confirmation before file writes or network calls.",
+            PermissionProfile.MODERATE: "MODERATE MODE: Autonomous workflow execution & workspace file writes. Approval required for execution.",
+            PermissionProfile.ADVANCED: "ADVANCED MODE: Full autonomous execution (terminal, tools, dev agents). Mandatory approval for destructive/financial actions.",
+        }
+        self.lbl_perm_desc.setText(desc_map.get(prof, ""))
+        for p, btn in self.perm_btns.items():
+            is_active = p == prof
+            col = C.PRI if is_active else C.TEXT_DIM
+            bg = "rgba(0, 212, 255, 0.15)" if is_active else "transparent"
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    color: {col}; background: {bg};
+                    border: 1px solid {col}; border-radius: 3px; padding: 2px 10px;
+                }}
+            """)
+
+    def _set_perm_profile(self, profile: PermissionProfile) -> None:
+        self.perm_mgr.set_profile(profile)
+        self._update_perm_ui()
+
+    def _open_onboarding_wizard(self) -> None:
+        win = self.window()
+        if hasattr(win, "_show_setup"):
+            win._show_setup()
 
     def _on_privacy_toggled(self, checked: bool) -> None:
         gateway = getattr(self.bridge.orchestrator, "intelligence_gateway", None)

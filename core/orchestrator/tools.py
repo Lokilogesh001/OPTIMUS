@@ -482,7 +482,43 @@ class ToolRegistry:
                 self._emit_audit(tool_name, caller_agent, res, arguments)
                 return res
 
-        # 3. Input parameter schema validation
+        # 3.5 Central Permission Profile & Approval Gate Enforcement
+        try:
+            from core.security.permissions import get_permission_manager
+            perm_mgr = get_permission_manager()
+            is_pre_approved = bool((context or {}).get("is_approved") or (permission_context or {}).get("is_approved"))
+            workspace_roots = (context or {}).get("allowed_roots") or (permission_context or {}).get("allowed_roots")
+            verdict = perm_mgr.evaluate_tool(
+                tool=tool,
+                caller_agent=caller_agent,
+                arguments=arguments,
+                workspace_roots=workspace_roots,
+                is_pre_approved=is_pre_approved,
+            )
+            if not verdict.allowed:
+                if verdict.requires_approval:
+                    res = ToolResult(
+                        status="unverified",
+                        error=f"APPROVAL_REQUIRED: {verdict.approval_reason}",
+                        evidence={
+                            "requires_approval": True,
+                            "approval_reason": verdict.approval_reason,
+                            "profile": perm_mgr.get_profile().value,
+                        },
+                        duration_ms=(time.perf_counter() - start) * 1000.0,
+                    )
+                else:
+                    res = ToolResult(
+                        status="failed",
+                        error=f"PERMISSION_DENIED: {verdict.reason}",
+                        duration_ms=(time.perf_counter() - start) * 1000.0,
+                    )
+                self._emit_audit(tool_name, caller_agent, res, arguments)
+                return res
+        except ImportError:
+            pass
+
+        # 4. Input parameter schema validation
         if tool.parameters and isinstance(tool.parameters, dict):
             required_params = tool.parameters.get("required") or []
             for rp in required_params:

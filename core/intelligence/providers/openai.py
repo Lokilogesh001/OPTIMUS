@@ -45,6 +45,12 @@ class OpenAIProvider(ModelProvider):
     ) -> None:
         p_type = ModelProviderType.OPENAI_COMPATIBLE if is_local else ModelProviderType.OPENAI
         super().__init__(name=name, provider_type=p_type, is_local=is_local)
+        if not api_key:
+            try:
+                from core.security.credentials import get_credential
+                api_key = get_credential(name) or get_credential("openai")
+            except Exception:
+                pass
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
         self._transport = transport or self._default_transport

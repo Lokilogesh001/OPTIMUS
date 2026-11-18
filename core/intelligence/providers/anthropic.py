@@ -42,6 +42,12 @@ class AnthropicProvider(ModelProvider):
         transport: Callable[[str, dict[str, Any] | None, dict[str, str], float], tuple[int, bytes]] | None = None,
     ) -> None:
         super().__init__(name=name, provider_type=ModelProviderType.ANTHROPIC, is_local=False)
+        if not api_key:
+            try:
+                from core.security.credentials import get_credential
+                api_key = get_credential("anthropic")
+            except Exception:
+                pass
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.base_url = (base_url or os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com/v1").rstrip("/")
         self._transport = transport or self._default_transport

@@ -4,6 +4,8 @@
 
 # --- Secrets & Private Credentials ---
 config/api_keys.json
+config/optimus_settings.json
+config/*vault*
 config/certs/
 config/whatsapp_web/
 **/token*.json

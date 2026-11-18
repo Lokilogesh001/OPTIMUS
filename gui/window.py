@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import psutil
 from PyQt6.QtCore import (
@@ -1190,7 +1191,7 @@ class MainWindow(QMainWindow):
         self._fit_side_columns()
         cw = self.centralWidget()
         if self._overlay and self._overlay.isVisible():
-            ow, oh = 460, 390
+            ow, oh = min(560, cw.width() - 40), min(540, cw.height() - 40)
             self._overlay.setGeometry(
                 (cw.width()  - ow) // 2,
                 (cw.height() - oh) // 2,
@@ -2995,6 +2996,9 @@ class MainWindow(QMainWindow):
             self._state_chip.set_state(state)
 
     def _check_config(self) -> bool:
+        from core.security.onboarding import is_onboarded
+        if is_onboarded():
+            return True
         d = _read_full_config()
         if not d.get("os_system"):
             return False
@@ -3004,41 +3008,30 @@ class MainWindow(QMainWindow):
                     or str(providers.get("mode") or "").lower() == "pipeline")
 
     def _show_setup(self):
-        ov = SetupOverlay(self.centralWidget())
+        from gui.optimus.onboarding_dialog import OptimusOnboardingDialog
+        ov = OptimusOnboardingDialog(self.centralWidget())
         cw = self.centralWidget()
-        ow, oh = 460, 440
+        ow, oh = min(560, cw.width() - 40), min(540, cw.height() - 40)
         ov.setGeometry(
             (cw.width()  - ow) // 2,
             (cw.height() - oh) // 2,
             ow, oh,
         )
-        ov.done.connect(self._on_setup_done)
+        ov.completed.connect(self._on_setup_done)
         ov.show()
         self._overlay = ov
 
-    def _on_setup_done(self, key: str, os_name: str):
-        # Merged into the settings, never written over them. This used to replace
-        # the whole file with these two keys, so re-entering a key after an
-        # "API key invalid" error erased every other setting — the wake word, the
-        # local engine, plugin credentials, the assistant's name.
-        from memory.config_manager import update_config
-        fields = {"os_system": os_name, "local_only": not key}
-        if key:
-            fields["gemini_api_key"] = key
-        update_config(**fields)
-        try:
-            from core import gemini as _gemini
-            _gemini.api_key(refresh=True)
-        except Exception:
-            pass
-        if not key:
-            QTimer.singleShot(400, self._open_providers)
+    def _on_setup_done(self, cfg_or_key: Any, os_name: str | None = None):
+        cfg = cfg_or_key if isinstance(cfg_or_key, dict) else {"primary_provider": "gemini", "gemini_api_key": str(cfg_or_key)}
+        prov = str(cfg.get("primary_provider", "gemini")).upper()
+        perm = str(cfg.get("permission_profile", "ADVANCED"))
+
         self._ready = True
         if self._overlay:
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
         self._assistant_name = _read_full_config().get("assistant_name", "OPTIMUS") or "OPTIMUS"
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
+        self._log.append_log(f"SYS: Initialised. Provider={prov}. Permissions={perm}. {self._assistant_name} online.")
 
 
