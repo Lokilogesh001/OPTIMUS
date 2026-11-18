@@ -29,6 +29,10 @@ memory/orchestrator/
 memory/tasks/
 memory/verification/
 memory/missions/
+memory/monitors/
+memory/schedules/
+memory/notifications/
+memory/proactive/
 memory/workflows/executions/
 memory/workflows/approvals/
 !memory/workflows/definitions/

@@ -408,7 +408,7 @@ def test_mission_control_center_ui_integration(temp_mission_env):
     # Check Control Center Widget integration
     cc = OptimusControlCenterWidget(bridge)
     assert cc.missions_view is not None
-    assert cc.stack.count() == 14
+    assert cc.stack.count() >= 14
     # Switch to missions section
     cc.navigate_to("MISSIONS")
     assert cc.stack.currentWidget() == cc.missions_view

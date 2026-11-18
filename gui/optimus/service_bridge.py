@@ -123,6 +123,13 @@ class OptimusServiceBridge(QObject):
     mission_state_changed = pyqtSignal(dict)
     mission_updated = pyqtSignal(dict)
 
+    # Proactive Intelligence Signals
+    recommendation_created = pyqtSignal(dict)
+    recommendation_updated = pyqtSignal(dict)
+    notification_received = pyqtSignal(dict)
+    schedule_triggered = pyqtSignal(dict)
+    monitor_triggered = pyqtSignal(dict)
+
     timeline_event = pyqtSignal(dict)
     telemetry_updated = pyqtSignal(dict)
     agent_states_updated = pyqtSignal(list)
@@ -1174,3 +1181,210 @@ class OptimusServiceBridge(QObject):
             }
         except Exception as e:
             return {"error": str(e), "elements_count": 0, "active_app": "", "window_title": ""}
+
+    # ── Proactive Personal Intelligence Bridge ──────────────────────────────
+
+    def list_recommendations(self, status: str | None = None, category: str | None = None) -> list[dict[str, Any]]:
+        """List active proactive recommendations."""
+        try:
+            from core.proactive import (
+                RecommendationCategory,
+                RecommendationStatus,
+                get_proactive_engine,
+            )
+            engine = get_proactive_engine()
+            st_filter = RecommendationStatus(status) if status else None
+            cat_filter = RecommendationCategory(category) if category else None
+            recs = engine.list_recommendations(status=st_filter, category=cat_filter)
+            return [r.to_dict() for r in recs]
+        except Exception as e:
+            return []
+
+    def accept_recommendation(self, rec_id: str, operator_approved: bool = False) -> dict[str, Any]:
+        """Accept a proactive recommendation."""
+        try:
+            from core.proactive import get_proactive_engine
+            return get_proactive_engine().accept_recommendation(rec_id, operator_approved=operator_approved)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def reject_recommendation(self, rec_id: str, reason: str = "") -> bool:
+        """Reject a proactive recommendation."""
+        try:
+            from core.proactive import get_proactive_engine
+            return get_proactive_engine().reject_recommendation(rec_id, reason=reason)
+        except Exception:
+            return False
+
+    def snooze_recommendation(self, rec_id: str, duration_seconds: float = 3600.0) -> bool:
+        """Snooze a proactive recommendation."""
+        try:
+            from core.proactive import get_proactive_engine
+            return get_proactive_engine().snooze_recommendation(rec_id, duration_seconds=duration_seconds)
+        except Exception:
+            return False
+
+    def dismiss_recommendation(self, rec_id: str) -> bool:
+        """Dismiss a proactive recommendation."""
+        try:
+            from core.proactive import get_proactive_engine
+            return get_proactive_engine().dismiss_recommendation(rec_id)
+        except Exception:
+            return False
+
+    def list_schedules(self) -> list[dict[str, Any]]:
+        """List all configured schedules."""
+        try:
+            from core.proactive import get_intelligent_scheduler
+            return [s.to_dict() for s in get_intelligent_scheduler().list_schedules()]
+        except Exception:
+            return []
+
+    def create_schedule(
+        self,
+        name: str,
+        target: str,
+        schedule_type: str = "ONE_TIME",
+        frequency: str = "ONCE",
+        run_at: float | None = None,
+        interval_seconds: float = 0.0,
+        action_type: str = "mission",
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Create and schedule a new task."""
+        try:
+            from core.proactive import (
+                ScheduleFrequency,
+                ScheduleType,
+                get_intelligent_scheduler,
+            )
+            sch = get_intelligent_scheduler().create_schedule(
+                name=name,
+                target=target,
+                schedule_type=ScheduleType(schedule_type),
+                frequency=ScheduleFrequency(frequency),
+                run_at=run_at,
+                interval_seconds=interval_seconds,
+                action_type=action_type,
+                payload=payload,
+            )
+            return sch.to_dict()
+        except Exception as e:
+            return {"error": str(e)}
+
+    def pause_schedule(self, schedule_id: str) -> bool:
+        try:
+            from core.proactive import get_intelligent_scheduler
+            return get_intelligent_scheduler().pause_schedule(schedule_id)
+        except Exception:
+            return False
+
+    def resume_schedule(self, schedule_id: str) -> bool:
+        try:
+            from core.proactive import get_intelligent_scheduler
+            return get_intelligent_scheduler().resume_schedule(schedule_id)
+        except Exception:
+            return False
+
+    def cancel_schedule(self, schedule_id: str) -> bool:
+        try:
+            from core.proactive import get_intelligent_scheduler
+            return get_intelligent_scheduler().cancel_schedule(schedule_id)
+        except Exception:
+            return False
+
+    def delete_schedule(self, schedule_id: str) -> bool:
+        try:
+            from core.proactive import get_intelligent_scheduler
+            return get_intelligent_scheduler().delete_schedule(schedule_id)
+        except Exception:
+            return False
+
+    def list_monitors(self) -> list[dict[str, Any]]:
+        """List all active condition monitors."""
+        try:
+            from core.proactive import get_condition_monitor_engine
+            return [m.to_dict() for m in get_condition_monitor_engine().list_monitors()]
+        except Exception:
+            return []
+
+    def create_monitor(
+        self,
+        name: str,
+        condition_type: str,
+        target: str,
+        operator: str,
+        threshold: Any,
+        evaluation_interval: float = 30.0,
+    ) -> dict[str, Any] | None:
+        try:
+            from core.proactive import get_condition_monitor_engine
+            mon = get_condition_monitor_engine().create_monitor(
+                name=name,
+                condition_type=condition_type,
+                target=target,
+                operator=operator,
+                threshold=threshold,
+                evaluation_interval=evaluation_interval,
+            )
+            return mon.to_dict()
+        except Exception as e:
+            return {"error": str(e)}
+
+    def pause_monitor(self, monitor_id: str) -> bool:
+        try:
+            from core.proactive import get_condition_monitor_engine
+            return get_condition_monitor_engine().pause_monitor(monitor_id)
+        except Exception:
+            return False
+
+    def resume_monitor(self, monitor_id: str) -> bool:
+        try:
+            from core.proactive import get_condition_monitor_engine
+            return get_condition_monitor_engine().resume_monitor(monitor_id)
+        except Exception:
+            return False
+
+    def delete_monitor(self, monitor_id: str) -> bool:
+        try:
+            from core.proactive import get_condition_monitor_engine
+            return get_condition_monitor_engine().delete_monitor(monitor_id)
+        except Exception:
+            return False
+
+    def list_notifications(self, unread_only: bool = False) -> list[dict[str, Any]]:
+        """List user notifications."""
+        try:
+            from core.proactive import get_notification_manager
+            return [n.to_dict() for n in get_notification_manager().list_notifications(unread_only=unread_only)]
+        except Exception:
+            return []
+
+    def get_unread_notification_count(self) -> int:
+        try:
+            from core.proactive import get_notification_manager
+            return get_notification_manager().unread_count()
+        except Exception:
+            return 0
+
+    def mark_notification_read(self, notif_id: str) -> bool:
+        try:
+            from core.proactive import get_notification_manager
+            return get_notification_manager().mark_read(notif_id)
+        except Exception:
+            return False
+
+    def mark_all_notifications_read(self) -> int:
+        try:
+            from core.proactive import get_notification_manager
+            return get_notification_manager().mark_all_read()
+        except Exception:
+            return 0
+
+    def dismiss_notification(self, notif_id: str) -> bool:
+        try:
+            from core.proactive import get_notification_manager
+            return get_notification_manager().dismiss(notif_id)
+        except Exception:
+            return False
+

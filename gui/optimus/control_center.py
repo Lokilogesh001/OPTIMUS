@@ -31,6 +31,7 @@ from gui.optimus.section_intelligence import SectionIntelligence
 from gui.optimus.section_memory import SectionMemory
 from gui.optimus.section_missions import SectionMissions
 from gui.optimus.section_planning import SectionPlanning
+from gui.optimus.section_proactive import SectionProactive
 from gui.optimus.section_settings import SectionSettings
 from gui.optimus.section_skills import SectionSkills
 from gui.optimus.section_system import SectionSystem
@@ -76,6 +77,7 @@ class OptimusControlCenterWidget(QWidget):
         self.developer_view = SectionDeveloper(self.bridge, parent=self.stack)
         self.skills_view = SectionSkills(self.bridge, parent=self.stack)
         self.missions_view = SectionMissions(self.bridge, parent=self.stack)
+        self.proactive_view = SectionProactive(self.bridge, parent=self.stack)
 
         # Add to stack in index order matching OptimusNavBar.SECTIONS
         self.stack.addWidget(self.dashboard_view)      # 0: DASHBOARD
@@ -92,6 +94,7 @@ class OptimusControlCenterWidget(QWidget):
         self.stack.addWidget(self.developer_view)      # 11: DEVELOPER
         self.stack.addWidget(self.skills_view)         # 12: SKILLS
         self.stack.addWidget(self.missions_view)       # 13: MISSIONS
+        self.stack.addWidget(self.proactive_view)      # 14: PROACTIVE
 
         layout.addWidget(self.stack, stretch=1)
 
@@ -99,6 +102,11 @@ class OptimusControlCenterWidget(QWidget):
         self.bridge.approval_requested.connect(self._update_approval_badge)
         self.bridge.approval_resolved.connect(self._update_approval_badge)
         self._update_approval_badge(None)
+
+        # Connect bridge notification events to nav bar badge
+        self.bridge.notification_received.connect(self._update_proactive_badge)
+        self.bridge.recommendation_created.connect(self._update_proactive_badge)
+        self._update_proactive_badge(None)
 
     def _on_tab_selected(self, index: int, title: str) -> None:
         self.stack.setCurrentIndex(index)
@@ -128,6 +136,10 @@ class OptimusControlCenterWidget(QWidget):
     def _update_approval_badge(self, _) -> None:
         pending = self.bridge.get_pending_approvals()
         self.nav_bar.set_approval_badge(len(pending))
+
+    def _update_proactive_badge(self, _) -> None:
+        count = self.bridge.get_unread_notification_count()
+        self.nav_bar.set_proactive_badge(count)
 
     def show_section(self, target: int | str) -> None:
         """Switch section programmatically by index or section name."""

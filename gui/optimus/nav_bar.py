@@ -116,6 +116,7 @@ class OptimusNavBar(QWidget):
         ("DEVELOPER", "⌨"),
         ("SKILLS", "🧩"),
         ("MISSIONS", "🎯"),
+        ("PROACTIVE", "🔔"),
     ]
 
     def __init__(self, parent=None):
@@ -215,6 +216,13 @@ class OptimusNavBar(QWidget):
             self._approval_badge.show()
         else:
             self._approval_badge.hide()
+
+    def set_proactive_badge(self, count: int) -> None:
+        """Update the notification/recommendation badge on the PROACTIVE tab (Index 14)."""
+        for btn in self._buttons:
+            if btn.section_index == 14:
+                btn.set_badge(count)
+                break
 
     def update_health(self, status: str, agent_count: int = 5) -> None:
         """Update system health status badge."""
