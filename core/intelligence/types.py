@@ -28,6 +28,14 @@ class ModelProviderType(str, Enum):
     GEMINI = "GEMINI"
 
 
+class ModelExecutionBackend(str, Enum):
+    """Physical hardware execution target of a model."""
+    CLOUD = "CLOUD"
+    CPU_LOCAL = "CPU_LOCAL"
+    GPU_LOCAL = "GPU_LOCAL"
+    HYBRID_LOCAL = "HYBRID_LOCAL"
+
+
 class ModelCapability(str, Enum):
     """Functional model capabilities matched by the router."""
     CHAT = "CHAT"
@@ -120,6 +128,12 @@ class ModelMetadata:
     is_enabled: bool = True
     latency_p50_ms: float = 100.0
 
+    # Hardware & Execution Specifications
+    execution_backend: ModelExecutionBackend = ModelExecutionBackend.CLOUD
+    min_ram_mb: float = 0.0
+    min_vram_mb: float = 0.0
+    quantization: str = ""
+
     # Operational statistics
     request_count: int = 0
     error_count: int = 0
@@ -144,6 +158,10 @@ class ModelMetadata:
             "display_name": self.display_name or self.model_id,
             "context_window": self.context_window,
             "is_local": self.is_local,
+            "execution_backend": self.execution_backend.value if hasattr(self.execution_backend, "value") else str(self.execution_backend),
+            "min_ram_mb": self.min_ram_mb,
+            "min_vram_mb": self.min_vram_mb,
+            "quantization": self.quantization,
             "capabilities": [c.value for c in self.capabilities],
             "input_cost_per_million": self.input_cost_per_million,
             "output_cost_per_million": self.output_cost_per_million,

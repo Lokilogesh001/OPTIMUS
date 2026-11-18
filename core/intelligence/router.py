@@ -15,6 +15,7 @@ from typing import Any
 
 from core.intelligence.registry import ModelRegistry
 from core.intelligence.types import (
+    ModelExecutionBackend,
     ModelMetadata,
     ModelRequest,
     ModelResponse,
@@ -22,6 +23,8 @@ from core.intelligence.types import (
     PrivacyViolationError,
     RoutingPolicy,
 )
+from core.runtime.profiles import HardwareProfileType
+from core.runtime.resources import AdaptiveResourceManager, MemoryPressureLevel
 
 logger = logging.getLogger("optimus.intelligence.router")
 
@@ -80,6 +83,36 @@ class ModelRouter:
                 f"No available model satisfies requirements (caps={request.required_capabilities}, "
                 f"tokens={est_tokens}, private={is_private})."
             )
+
+        # 4b. Hardware Profile & Resource Pressure Filter
+        try:
+            res_mgr = AdaptiveResourceManager.instance()
+            profile = res_mgr.get_profile()
+            pressure = res_mgr.evaluate_memory_pressure()
+            budget = res_mgr.budget
+
+            # On CPU_ONLY profiles, filter out local models that strictly mandate a GPU
+            if profile.profile_type == HardwareProfileType.CPU_ONLY:
+                cpu_compatible = []
+                for m in candidates:
+                    if not m.is_local:
+                        cpu_compatible.append(m)
+                    elif m.execution_backend in (ModelExecutionBackend.CPU_LOCAL, ModelExecutionBackend.CLOUD) or m.min_vram_mb == 0.0:
+                        cpu_compatible.append(m)
+                if cpu_compatible:
+                    candidates = cpu_compatible
+
+            # Under CRITICAL memory pressure, strictly prevent local LLM spin-up to avoid OOM
+            if pressure == MemoryPressureLevel.CRITICAL and not is_private:
+                cloud_models = [m for m in candidates if not m.is_local]
+                if cloud_models:
+                    candidates = cloud_models
+            elif not budget.allow_local_llm and not is_private:
+                cloud_models = [m for m in candidates if not m.is_local]
+                if cloud_models:
+                    candidates = cloud_models
+        except Exception as e:
+            logger.debug("Resource manager filter bypassed: %s", e)
 
         # 5. Circuit Breaker Health Filter (demote models whose providers have an OPEN circuit)
         healthy_candidates = []

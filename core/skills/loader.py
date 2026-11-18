@@ -1,31 +1,62 @@
 """core/skills/loader.py — Dynamic Skill Prompt Injection & Context Loader for OPTIMUS.
 
-Formats and injects selected skills into:
+Formulates and injects selected skills into:
 - AgentInputContract instructions.
 - System prompt contexts for specialized agents.
 - Task execution environments.
+
+Optimizations:
+- Lazy loading: Native skills are read from disk only on demand.
+- Bounded LRU Cache: Prevents memory growth during extended runs.
+- Adaptive Memory Relief: Flushes and compacts cached instructions under host memory pressure.
 """
 
 from __future__ import annotations
 
+import collections
+import logging
 import threading
+from typing import Any
 
 from core.agents.contracts import AgentInputContract
 from core.skills.models import SkillManifest
 from core.skills.selector import SelectedSkillSet
 
+logger = logging.getLogger("optimus.skills.loader")
+
 
 class SkillLoader:
-    """Manages the in-memory formatting and injection of skills into agent execution contexts."""
+    """Manages the in-memory formatting and injection of skills with bounded LRU caching."""
 
-    def __init__(self) -> None:
-        self._cache: dict[str, str] = {}
+    def __init__(self, max_cache_size: int = 15) -> None:
+        self.max_cache_size = max_cache_size
+        self._cache: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._lock = threading.RLock()
 
-    def format_skill_prompt(self, skill: SkillManifest) -> str:
-        """Render a single skill into standard agent instruction block."""
+        # Connect to AdaptiveResourceManager for memory pressure relief
+        try:
+            from core.runtime.resources import AdaptiveResourceManager
+            AdaptiveResourceManager.instance().register_pressure_relief_handler(self._on_pressure_relief)
+        except Exception:
+            pass
+
+    def _on_pressure_relief(self, pressure: Any) -> None:
+        """Evict cache aggressively when host memory pressure rises."""
+        from core.runtime.resources import MemoryPressureLevel
         with self._lock:
-            if self._cache.get(skill.id):
+            if pressure in (MemoryPressureLevel.HIGH, MemoryPressureLevel.CRITICAL):
+                logger.info("SkillLoader evicting cache under %s memory pressure.", pressure.value)
+                self._cache.clear()
+            elif pressure == MemoryPressureLevel.MODERATE:
+                # Retain only the most recent 3 skills
+                while len(self._cache) > 3:
+                    self._cache.popitem(last=False)
+
+    def format_skill_prompt(self, skill: SkillManifest) -> str:
+        """Render a single skill into a standard agent instruction block with LRU caching."""
+        with self._lock:
+            if skill.id in self._cache:
+                self._cache.move_to_end(skill.id)
                 return self._cache[skill.id]
 
             # If installed natively, read directly from native installation directory to ensure source independence
@@ -47,6 +78,11 @@ class SkillLoader:
                 f"{instructions.strip()}\n"
                 f"## [END SKILL: {skill.name.upper()}]\n"
             )
+
+            # Evict oldest entry if exceeding cache limit
+            if len(self._cache) >= self.max_cache_size:
+                self._cache.popitem(last=False)
+
             self._cache[skill.id] = rendered
             return rendered
 

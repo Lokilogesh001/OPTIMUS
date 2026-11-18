@@ -105,20 +105,25 @@ class DependencyResolver:
         return resolved
 
     def check_hardware_compatibility(self, hw: HardwareRequirements) -> tuple[bool, list[str]]:
-        """Verify hardware compatibility without requiring GPU / CUDA acceleration."""
+        """Verify hardware compatibility using HardwareDetector without requiring GPU / CUDA acceleration."""
         warnings: list[str] = []
         is_compatible = True
 
-        # Check CUDA if explicitly marked mandatory
-        if hw.cuda_required:
-            try:
-                import torch
-                if not torch.cuda.is_available():
-                    warnings.append("CUDA is declared required but no compatible CUDA device was found.")
-                    is_compatible = False
-            except ImportError:
-                warnings.append("CUDA required but PyTorch/CUDA runtime is not installed.")
+        try:
+            from core.runtime.hardware import HardwareDetector
+            rep = HardwareDetector.instance().detect()
+
+            # Check CUDA only if explicitly declared mandatory
+            if hw.cuda_required and not rep.is_cuda_available:
+                warnings.append("CUDA is declared required but no active CUDA device is available.")
                 is_compatible = False
+
+            # Check RAM if declared
+            if hw.min_ram_mb > 0 and rep.memory.total_ram_mb < hw.min_ram_mb:
+                warnings.append(f"Requires {hw.min_ram_mb:.0f} MB RAM, but system has {rep.memory.total_ram_mb:.0f} MB.")
+                is_compatible = False
+        except Exception:
+            pass
 
         return is_compatible, warnings
 

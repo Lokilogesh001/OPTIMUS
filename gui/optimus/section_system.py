@@ -48,6 +48,13 @@ class SectionSystem(QWidget):
         title.setFont(px_font(13, QFont.Weight.Bold, spacing=2.0))
         title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         hdr.addWidget(title)
+        hdr.addSpacing(15)
+
+        self.lbl_profile_badge = QLabel("[PROFILE: HYBRID | PRESSURE: NORMAL]")
+        self.lbl_profile_badge.setFont(mono_font(8))
+        self.lbl_profile_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 212, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
+        hdr.addWidget(self.lbl_profile_badge)
+
         hdr.addStretch()
 
         btn_refresh = QPushButton("REFRESH PROCESSES")
@@ -149,6 +156,12 @@ class SectionSystem(QWidget):
         self.gauge_mem.set_value(ram, f"{ram:.0f}%")
         self.gauge_disk.set_value(disk, f"{disk:.0f}%")
         self.gauge_gpu.set_value(gpu, f"{gpu:.0f}%")
+
+        prof = telem.get("hardware_profile", "HYBRID")
+        press = telem.get("memory_pressure", "NORMAL")
+        col = C.GREEN if press == "NORMAL" else (C.ACC2 if press == "MODERATE" else C.RED)
+        self.lbl_profile_badge.setText(f"[PROFILE: {prof} | PRESSURE: {press}]")
+        self.lbl_profile_badge.setStyleSheet(f"color: {col}; background: rgba(0, 0, 0, 0.3); border: 1px solid {col}; border-radius: 3px; padding: 2px 8px;")
 
         procs = telem.get("processes")
         if isinstance(procs, list) and procs:

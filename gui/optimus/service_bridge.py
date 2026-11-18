@@ -826,7 +826,7 @@ class OptimusServiceBridge(QObject):
         except Exception:
             pass
 
-        return {
+        base_telem = {
             "cpu_percent": round(cpu_pct, 1),
             "cpu_pct": round(cpu_pct, 1),
             "ram_percent": round(mem.percent, 1),
@@ -847,10 +847,40 @@ class OptimusServiceBridge(QObject):
             "optimus_cpu_pct": optimus_cpu_pct,
             "status": "HEALTHY",
             "app_health": "HEALTHY",
+            "hardware_profile": "HYBRID",
+            "memory_pressure": "NORMAL",
+            "active_agents_count": 0,
+            "max_concurrent_agents": 3,
         }
 
+        # Enrich with runtime governor vitals if available
+        try:
+            from core.runtime.resources import AdaptiveResourceManager
+            vitals = AdaptiveResourceManager.instance().get_vitals()
+            base_telem.update({
+                "hardware_profile": vitals.get("profile", "HYBRID"),
+                "memory_pressure": vitals.get("memory_pressure", "NORMAL"),
+                "active_agents_count": vitals.get("active_agents", 0),
+                "max_concurrent_agents": vitals.get("max_concurrent_agents", 3),
+                "allow_local_llm": vitals.get("allow_local_llm", True),
+                "supported_backends": vitals.get("supported_backends", ["CPU"]),
+            })
+        except Exception:
+            pass
+
+        return base_telem
+
     def _poll_telemetry(self) -> None:
-        """Periodic slot triggered by QTimer to publish real telemetry."""
+        """Periodic slot triggered by QTimer to publish real telemetry with adaptive throttling."""
+        try:
+            from core.runtime.resources import AdaptiveResourceManager
+            res_mgr = AdaptiveResourceManager.instance()
+            target_interval = res_mgr.budget.background_poll_interval_ms
+            if self._telemetry_timer.interval() != target_interval:
+                self._telemetry_timer.setInterval(target_interval)
+        except Exception:
+            pass
+
         telem = self.get_system_telemetry()
         self.telemetry_updated.emit(telem)
 

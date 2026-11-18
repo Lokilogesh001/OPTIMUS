@@ -20,6 +20,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.runtime.profiles import HardwareProfileType
+from core.runtime.resources import AdaptiveResourceManager
 from core.security.permissions import PermissionProfile, get_permission_manager
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import mono_font, px_font
@@ -109,7 +111,72 @@ class SectionSettings(QWidget):
         p_priv.body.addLayout(pv_lay)
         layout.addWidget(p_priv)
 
-        # 3. Theme & UI Styling
+        # 4. Runtime & Hardware Governance
+        self.res_mgr = AdaptiveResourceManager.instance()
+        p_runtime = HoloPanel("RUNTIME & HARDWARE GOVERNANCE (ADAPTIVE CPU/GPU)", "HARDWARE")
+        rt_lay = QVBoxLayout()
+
+        # Profile selection row
+        prof_row = QHBoxLayout()
+        prof_lbl = QLabel("HARDWARE PROFILE:")
+        prof_lbl.setFont(px_font(9, QFont.Weight.Bold))
+        prof_lbl.setStyleSheet(f"color: {C.WHITE};")
+        prof_row.addWidget(prof_lbl)
+
+        self.prof_btns: dict[str, QPushButton] = {}
+        for p_type in (HardwareProfileType.CPU_ONLY, HardwareProfileType.HYBRID, HardwareProfileType.GPU_ACCELERATED):
+            b = QPushButton(p_type.value)
+            b.setFont(px_font(8, QFont.Weight.Bold))
+            b.setFixedHeight(26)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _, pt=p_type: self._set_hardware_profile(pt))
+            prof_row.addWidget(b)
+            self.prof_btns[p_type.value] = b
+        prof_row.addStretch()
+        rt_lay.addLayout(prof_row)
+
+        # Diagnostics & Vitals row
+        self.lbl_vitals_summary = QLabel("")
+        self.lbl_vitals_summary.setFont(mono_font(8))
+        self.lbl_vitals_summary.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 212, 255, 0.05); padding: 6px; border: 1px solid {C.BORDER};")
+        self.lbl_vitals_summary.setWordWrap(True)
+        rt_lay.addWidget(self.lbl_vitals_summary)
+
+        # Configurable limits row
+        cfg_row = QHBoxLayout()
+        cfg_row.setSpacing(15)
+
+        lbl_c = QLabel("MAX AGENT CONCURRENCY:")
+        lbl_c.setFont(px_font(8, QFont.Weight.Bold))
+        lbl_c.setStyleSheet(f"color: {C.TEXT_DIM};")
+        cfg_row.addWidget(lbl_c)
+
+        for limit_val in (1, 2, 3, 5):
+            b_lim = QPushButton(str(limit_val))
+            b_lim.setFont(mono_font(8))
+            b_lim.setFixedSize(28, 24)
+            b_lim.setCursor(Qt.CursorShape.PointingHandCursor)
+            b_lim.clicked.connect(lambda _, lv=limit_val: self._set_concurrency_limit(lv))
+            cfg_row.addWidget(b_lim)
+
+        cfg_row.addSpacing(20)
+        self.chk_allow_local_llm = QCheckBox("ALLOW LOCAL LLM")
+        self.chk_allow_local_llm.setFont(px_font(8, QFont.Weight.Bold))
+        self.chk_allow_local_llm.setStyleSheet(f"color: {C.PRI};")
+        self.chk_allow_local_llm.setChecked(self.res_mgr.budget.allow_local_llm)
+        self.chk_allow_local_llm.toggled.connect(self._on_local_llm_toggled)
+        cfg_row.addWidget(self.chk_allow_local_llm)
+        cfg_row.addStretch()
+
+        rt_lay.addLayout(cfg_row)
+        p_runtime.body.addLayout(rt_lay)
+        layout.addWidget(p_runtime)
+        self._update_hardware_ui()
+
+        # Connect bridge telemetry for live vitals refresh
+        self.bridge.telemetry_updated.connect(self._on_telemetry_updated)
+
+        # 5. Theme & UI Styling
         p_theme = HoloPanel("VISUAL ACCENT PALETTE", "HUD_THEME")
         th_lay = QHBoxLayout()
         th_lbl = QLabel("ACCENT COLOR:")
@@ -234,3 +301,50 @@ class SectionSettings(QWidget):
 
     def _on_accent_selected(self, hex_val: str) -> None:
         apply_ui_accent(hex_val)
+
+    # ── Hardware & Runtime Governance Slots ──────────────────────────────────
+
+    def _update_hardware_ui(self) -> None:
+        vitals = self.res_mgr.get_vitals()
+        curr_prof = vitals.get("profile", "CPU_ONLY")
+        for p_name, btn in self.prof_btns.items():
+            is_active = (p_name == curr_prof)
+            col = C.PRI if is_active else C.TEXT_DIM
+            bg = "rgba(0, 212, 255, 0.15)" if is_active else "transparent"
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    color: {col}; background: {bg};
+                    border: 1px solid {col}; border-radius: 3px; padding: 2px 8px;
+                }}
+            """)
+
+        pressure = vitals.get("memory_pressure", "NORMAL")
+        ram_gb = vitals.get("ram_total_gb", 0.0)
+        ram_avail = vitals.get("ram_avail_gb", 0.0)
+        gpu_name = vitals.get("gpu_name", "None")
+        vram_mb = vitals.get("gpu_vram_total_mb", 0.0)
+        active_ag = vitals.get("active_agents", 0)
+        max_ag = vitals.get("max_concurrent_agents", 2)
+        backends = ", ".join(vitals.get("supported_backends", ["CPU"]))
+
+        summary = (
+            f"PROFILE: [{curr_prof}]  ·  PRESSURE: [{pressure}]  ·  RAM: {ram_avail:.1f} GB free / {ram_gb:.1f} GB\n"
+            f"GPU: {gpu_name} ({vram_mb:.0f} MB VRAM)  ·  CONCURRENCY: {active_ag}/{max_ag} active agents\n"
+            f"ACCELERATION BACKENDS: {backends}  ·  STATUS: HEALTHY"
+        )
+        self.lbl_vitals_summary.setText(summary)
+
+    def _set_hardware_profile(self, profile_type: HardwareProfileType) -> None:
+        self.res_mgr.set_profile(profile_type)
+        self._update_hardware_ui()
+
+    def _set_concurrency_limit(self, limit: int) -> None:
+        self.res_mgr.set_user_concurrency(limit)
+        self._update_hardware_ui()
+
+    def _on_local_llm_toggled(self, checked: bool) -> None:
+        self.res_mgr.set_user_local_llm_allowed(checked)
+        self._update_hardware_ui()
+
+    def _on_telemetry_updated(self, telem: dict) -> None:
+        self._update_hardware_ui()

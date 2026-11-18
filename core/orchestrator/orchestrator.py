@@ -112,11 +112,16 @@ class CentralOrchestrator:
         subtasks: list[Subtask] = []
 
         # 1. Attempt model-assisted structured planning if brain is available
+        from core.runtime.resources import AdaptiveResourceManager, MemoryPressureLevel
+        res_mgr = AdaptiveResourceManager.instance()
+        pressure = res_mgr.evaluate_memory_pressure()
+        max_subtasks_limit = 2 if pressure in (MemoryPressureLevel.HIGH, MemoryPressureLevel.CRITICAL) else 4
+
         plan_prompt = (
             f"You are the OPTIMUS Central Orchestrator.\n"
             f"Goal: '{goal}'\n"
             f"Available agents: {[a.name for a in self.agent_registry.list_agents()]}\n"
-            f"Break this goal down into 1 to 4 sequential subtasks.\n"
+            f"Break this goal down into 1 to {max_subtasks_limit} sequential subtasks.\n"
             f"Respond with JSON list: [{{'agent': str, 'title': str, 'description': str}}]"
         )
         try:
@@ -286,6 +291,22 @@ class CentralOrchestrator:
     # ── Subtask Execution Phase ──────────────────────────────────────────────
 
     def _execute_subtask(
+        self,
+        subtask: Subtask,
+        workflow_context: dict[str, Any],
+        task_id: str,
+    ) -> tuple[bool, str, list[dict[str, Any]]]:
+        """Execute a subtask with dynamic resource slot management."""
+        from core.runtime.resources import AdaptiveResourceManager
+        res_mgr = AdaptiveResourceManager.instance()
+        slot_acquired = res_mgr.acquire_agent_slot(subtask.assigned_agent, is_interactive=False, timeout=2.0)
+        try:
+            return self._execute_subtask_internal(subtask, workflow_context, task_id)
+        finally:
+            if slot_acquired:
+                res_mgr.release_agent_slot(subtask.assigned_agent)
+
+    def _execute_subtask_internal(
         self,
         subtask: Subtask,
         workflow_context: dict[str, Any],
