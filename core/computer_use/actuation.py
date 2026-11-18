@@ -10,16 +10,14 @@ Implements Phase 3 and Phase 8 of Milestone 9: Computer Use & Visual Intelligenc
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
 import logging
 import platform
 import time
 from typing import Any
 
-from core.computer_use.observation import attach_desktop, get_open_windows
-from core.computer_use.types import InteractionAction, UIElement
 import core.screenact as sa
 import core.screenview as sv
+from core.computer_use.observation import attach_desktop, get_open_windows
 
 logger = logging.getLogger("optimus.computer_use.actuation")
 _IS_WINDOWS = platform.system() == "Windows"
@@ -27,12 +25,10 @@ _IS_WINDOWS = platform.system() == "Windows"
 
 class BoundaryViolationError(ValueError):
     """Raised when actuation coordinates fall outside physical screen or target bounds."""
-    pass
 
 
 class RunawayInteractionError(RuntimeError):
     """Raised when repetitive actions exceed safety thresholds without state changes."""
-    pass
 
 
 class ComputerActuator:

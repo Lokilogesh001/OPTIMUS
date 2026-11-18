@@ -10,11 +10,11 @@ Verifies:
 7. ComputerAgent specialization and MissionPlanner computer use DAG generation.
 """
 
-import time
 from unittest.mock import MagicMock, patch
+
 import pytest
 
-from core.agents.computer import ComputerAgent, create_computer_agent_profile
+from core.agents.computer import ComputerAgent
 from core.agents.contracts import AgentInputContract
 from core.computer_use.actuation import (
     BoundaryViolationError,
@@ -23,18 +23,14 @@ from core.computer_use.actuation import (
 )
 from core.computer_use.lifecycle import ComputerInteractionLifecycle
 from core.computer_use.observation import DesktopObserver
-from core.computer_use.tools import register_computer_tools
 from core.computer_use.types import (
     DesktopObservation,
     InteractionAction,
-    InteractionResult,
     UIElement,
 )
 from core.computer_use.understanding import VisualUnderstandingPipeline
 from core.missions.planner import MissionPlanner
 from core.orchestrator.tools import ToolRegistry
-from core.security.permissions import PermissionProfile, get_permission_manager
-
 
 # ── 1. Data Contracts ────────────────────────────────────────────────────────
 
@@ -160,17 +156,17 @@ def test_understanding_confidence_and_ambiguity():
     obs = DesktopObservation(elements=[e_save, e_save_as, e_cancel])
 
     # Confident exact match
-    el, conf, reason = pipeline.find_best_element(obs, query="Cancel", role="button")
+    el, conf, _reason = pipeline.find_best_element(obs, query="Cancel", role="button")
     assert el is not None
     assert el.name == "Cancel"
     assert conf >= 0.85
 
     # Ambiguity between Save File and Save As when searching generic "Save"
-    el_ambig, conf_ambig, reason_ambig = pipeline.find_best_element(obs, query="Save", role="button")
+    el_ambig, _conf_ambig, reason_ambig = pipeline.find_best_element(obs, query="Save", role="button")
     assert "Ambiguous match" in reason_ambig or el_ambig is not None
 
     # Low confidence refusal without coordinate hallucination
-    el_none, conf_none, reason_none = pipeline.find_best_element(obs, query="CompletelyMissingElement")
+    el_none, conf_none, _reason_none = pipeline.find_best_element(obs, query="CompletelyMissingElement")
     assert el_none is None
     assert conf_none < 0.60
 

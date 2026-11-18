@@ -39,11 +39,12 @@ def search_web_handler(params: dict[str, Any], context: dict[str, Any] | None = 
 
         if raw_res and not str(raw_res).startswith("status=failed"):
             found_urls = re.findall(r"https?://[^\s\)\>\"']+", str(raw_res))
-            return ToolResult(
-                status="done",
-                output=str(raw_res)[:4000],
-                evidence={"query": query, "source": "actions.web_search", "urls": found_urls, "citations_count": len(found_urls)},
-            )
+            if found_urls:
+                return ToolResult(
+                    status="done",
+                    output=str(raw_res)[:4000],
+                    evidence={"query": query, "source": "actions.web_search", "urls": found_urls, "citations_count": len(found_urls)},
+                )
     except Exception:
         pass
 

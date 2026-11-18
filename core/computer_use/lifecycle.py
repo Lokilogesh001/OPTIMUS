@@ -20,7 +20,10 @@ from typing import Any
 from core.computer_use.actuation import ComputerActuator, get_computer_actuator
 from core.computer_use.observation import DesktopObserver, get_desktop_observer
 from core.computer_use.types import InteractionAction, InteractionResult, UIElement
-from core.computer_use.understanding import VisualUnderstandingPipeline, get_visual_understanding
+from core.computer_use.understanding import (
+    VisualUnderstandingPipeline,
+    get_visual_understanding,
+)
 from core.security.permissions import PermissionProfile, get_permission_manager
 
 logger = logging.getLogger("optimus.computer_use.lifecycle")

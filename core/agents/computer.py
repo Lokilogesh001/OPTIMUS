@@ -87,7 +87,7 @@ class ComputerAgent(SpecializedAgent):
             evidence["initial_observation"] = obs_res.evidence
 
         # Check if the objective specifies an app to open or switch to
-        open_match = re.search(r"(?:open|launch|start|switch to)\s+([a-zA-Z0-9_\-\.\s]+?)(?:$|\band\b|\bto\b)", objective, re.I)
+        open_match = re.search(r"(?:open|launch|start|switch to)\s+([a-zA-Z0-9_\-\.\s]+?)(?:$|\band\b|\bto\b)", objective, re.IGNORECASE)
         target_app = open_match.group(1).strip() if open_match else ""
 
         if target_app and target_app.lower() not in ("desktop", "computer", "screen"):
@@ -103,7 +103,7 @@ class ComputerAgent(SpecializedAgent):
             side_effects.append({"action": "switch_window", "target": target_app})
 
         # Check for typing text request
-        type_match = re.search(r"(?:type|write|enter)\s+['\"](.*?)['\"]", objective, re.I)
+        type_match = re.search(r"(?:type|write|enter)\s+['\"](.*?)['\"]", objective, re.IGNORECASE)
         if type_match:
             text_to_type = type_match.group(1)
             type_res = tool_registry.execute(
@@ -118,7 +118,7 @@ class ComputerAgent(SpecializedAgent):
             side_effects.append({"action": "type_text", "status": type_res.status})
 
         # Check for hotkey request (e.g. ctrl+s)
-        hotkey_match = re.search(r"(?:press|hotkey)\s+(ctrl\+[a-z0-9]|alt\+[a-z0-9]|enter|esc)", objective, re.I)
+        hotkey_match = re.search(r"(?:press|hotkey)\s+(ctrl\+[a-z0-9]|alt\+[a-z0-9]|enter|esc)", objective, re.IGNORECASE)
         if hotkey_match:
             raw_hk = hotkey_match.group(1).lower()
             keys = raw_hk.split("+")
@@ -132,7 +132,7 @@ class ComputerAgent(SpecializedAgent):
             side_effects.append({"action": "hotkey", "keys": keys})
 
         # Check for clicking an element
-        click_match = re.search(r"(?:click|press button)\s+['\"]?([a-zA-Z0-9_\-\s]+?)['\"]?(?:\s+button)?(?:$|\band\b)", objective, re.I)
+        click_match = re.search(r"(?:click|press button)\s+['\"]?([a-zA-Z0-9_\-\s]+?)['\"]?(?:\s+button)?(?:$|\band\b)", objective, re.IGNORECASE)
         if click_match and not target_app.lower().startswith(click_match.group(1).lower()):
             btn_name = click_match.group(1).strip()
             if btn_name.lower() not in ("the", "a", "button"):

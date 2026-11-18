@@ -13,17 +13,16 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
-from ctypes import wintypes
 import hashlib
-import json
-import os
-from pathlib import Path
 import platform
 import time
-from typing import Any, Generator
+from collections.abc import Generator
+from ctypes import wintypes
+from pathlib import Path
+from typing import Any
 
-from core.computer_use.types import DesktopObservation, UIElement
 import core.screenview as sv
+from core.computer_use.types import DesktopObservation, UIElement
 
 _OS = platform.system()
 _IS_WINDOWS = _OS == "Windows"

@@ -11,7 +11,6 @@ Implements Phase 2 of Milestone 9: Computer Use & Visual Intelligence.
 from __future__ import annotations
 
 import difflib
-import re
 from typing import Any
 
 from core.computer_use.types import DesktopObservation, UIElement

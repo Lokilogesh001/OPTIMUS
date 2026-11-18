@@ -12,22 +12,22 @@ Exposes high-level tools registered with ToolRegistry:
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-from core.computer_use.actuation import get_computer_actuator
 from core.computer_use.lifecycle import get_computer_lifecycle
 from core.computer_use.observation import get_desktop_observer
 from core.computer_use.types import InteractionAction
 from core.computer_use.understanding import get_visual_understanding
-from core.orchestrator.tools import CapabilityTier, ToolDefinition, ToolRegistry, ToolResult
+from core.orchestrator.tools import (
+    CapabilityTier,
+    ToolDefinition,
+    ToolRegistry,
+    ToolResult,
+)
 
 
 def register_computer_tools(registry: ToolRegistry) -> None:
     """Register all computer use tools into the central ToolRegistry."""
     observer = get_desktop_observer()
     understanding = get_visual_understanding()
-    actuator = get_computer_actuator()
     lifecycle = get_computer_lifecycle()
 
     # 1. computer_observe

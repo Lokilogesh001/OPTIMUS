@@ -24,7 +24,7 @@ def _note_gemini_error(exc: Exception) -> None:
     """Trip the breaker when the error is a quota / rate-limit rejection."""
     global _quota_blocked_until
     msg = str(exc)
-    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+    if any(k in msg for k in ("429", "RESOURCE_EXHAUSTED", "every Gemini model on the ladder failed")) or "quota" in msg.lower():
         with _quota_lock:
             already = time.monotonic() < _quota_blocked_until
             _quota_blocked_until = time.monotonic() + _QUOTA_COOLDOWN_SEC
@@ -130,16 +130,22 @@ def _get_ddgs():
 def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
     DDGS = _get_ddgs()
     results = []
-    try:
-        with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=max_results):
-                results.append({
-                    "title":   r.get("title",  ""),
-                    "snippet": r.get("body",   ""),
-                    "url":     r.get("href",   ""),
-                })
-    except Exception as e:
-        print(f"[WebSearch] ⚠️ DDG text() failed: {e}")
+    for attempt in range(2):
+        try:
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=max_results):
+                    results.append({
+                        "title":   r.get("title",  ""),
+                        "snippet": r.get("body",   ""),
+                        "url":     r.get("href",   ""),
+                    })
+            if results:
+                break
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(0.5)
+                continue
+            print(f"[WebSearch] ⚠️ DDG text() failed: {e}")
     return results
 
 
