@@ -58,6 +58,16 @@ class SkillExecutor:
             self._record_telemetry(skill.id, task_id, caller_agent, start_time, "blocked", res.error)
             return res
 
+        # 1b. Suspicious Gate: Suspicious skills require explicit pre-approval
+        if skill.trust_level == SkillTrustLevel.SUSPICIOUS and not (context or {}).get("is_pre_approved", False):
+            from core.orchestrator.tools import ToolResult
+            res = ToolResult(
+                status="failed",
+                error=f"SKILL_SUSPICIOUS_UNAPPROVED: Skill '{skill.id}' is flagged SUSPICIOUS and requires explicit human pre-approval before tool invocation.",
+            )
+            self._record_telemetry(skill.id, task_id, caller_agent, start_time, "unapproved_suspicious", res.error)
+            return res
+
         # 2. Disabled Gate
         if not skill.enabled:
             from core.orchestrator.tools import ToolResult

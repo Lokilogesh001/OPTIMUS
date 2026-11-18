@@ -35,12 +35,21 @@ del _mod, _name, _value
 
 
 class _RootShim:
-    def __init__(self, app: QApplication):
+    def __init__(self, app: QApplication, win: MainWindow | None = None):
         self._app = app
+        self._win = win
     def mainloop(self):
         self._app.exec()
     def protocol(self, *_):
         pass
+    def show(self):
+        if self._win:
+            self._win.show()
+    def close(self):
+        if self._win:
+            self._win.close()
+    def quit(self):
+        self._app.quit()
 
 
 def _auto_ui_scale() -> float:
@@ -94,8 +103,16 @@ class OptimusUI:
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
         self._win = MainWindow(face_path)
-        self.root = _RootShim(self._app)
+        self.root = _RootShim(self._app, self._win)
         self._win.show()
+
+    def show(self) -> None:
+        """Display the main application window."""
+        self._win.show()
+
+    def close(self) -> None:
+        """Close the main application window and clean up."""
+        self._win.close()
 
     @property
     def muted(self) -> bool:

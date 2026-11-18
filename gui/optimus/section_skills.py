@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import time
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -228,10 +228,14 @@ class SectionSkills(QWidget):
         splitter.setStretchFactor(1, 5)
         root_layout.addWidget(splitter, stretch=1)
 
-        # Initial Rescan or Load
+        # Initial Rescan or Load (deferred if registry empty so UI construction is instantaneous)
         if not self.registry.list_skills():
-            self.lifecycle.rescan()
+            QTimer.singleShot(100, self._deferred_initial_rescan)
+        else:
+            self.refresh_skills()
 
+    def _deferred_initial_rescan(self) -> None:
+        self.lifecycle.rescan()
         self.refresh_skills()
 
     # ── UI Actions & Event Handlers ──────────────────────────────────────────

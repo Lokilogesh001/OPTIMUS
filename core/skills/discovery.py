@@ -36,6 +36,7 @@ DEFAULT_SEARCH_ROOTS: list[tuple[str, str]] = [
     (r"C:\Users\loges\.antigravity\skills\gstack\gstack-source", "gstack"),
     (r"C:\Users\loges\ECC\skills", "ecc"),
     (r"C:\Users\loges\.gemini\antigravity\builtin\skills", "builtin"),
+    (r"C:\Users\loges\.antigravity\tools\skillspector\skills", "nvidia_skillspector"),
 ]
 
 
@@ -127,9 +128,8 @@ class SkillDiscoveryEngine:
             m = self.parse_skill_folder(dir_path, provenance=provenance)
             if m:
                 manifests.append(m)
-                return manifests
 
-        # Iterate child folders
+        # Iterate child folders for additional skills
         try:
             for item in dir_path.iterdir():
                 if not item.is_dir() or item.name.startswith("."):
