@@ -118,6 +118,11 @@ class OptimusServiceBridge(QObject):
     optimization_applied = pyqtSignal(dict)
     optimization_rolled_back = pyqtSignal(dict)
 
+    # Autonomous Missions Signals
+    mission_created = pyqtSignal(dict)
+    mission_state_changed = pyqtSignal(dict)
+    mission_updated = pyqtSignal(dict)
+
     timeline_event = pyqtSignal(dict)
     telemetry_updated = pyqtSignal(dict)
     agent_states_updated = pyqtSignal(list)
@@ -200,6 +205,14 @@ class OptimusServiceBridge(QObject):
             verification_engine=self.verification_engine,
             event_bus=self.event_bus,
         )
+
+        # Autonomous Missions Engine
+        try:
+            from core.missions import get_mission_engine
+            self.mission_engine = get_mission_engine()
+            self.mission_engine.on_state_change = self._on_mission_state_change
+        except Exception:
+            self.mission_engine = None
 
     @property
     def workflow_engine(self):
@@ -1074,3 +1087,63 @@ class OptimusServiceBridge(QObject):
     def rollback_optimization_recommendation(self, rec_id: str) -> bool:
         """Roll back an applied optimization recommendation."""
         return self.optimizer.rollback_recommendation(rec_id)
+
+    # ── Autonomous Missions Accessors ───────────────────────────────────────
+
+    def _on_mission_state_change(self, record: Any) -> None:
+        try:
+            self.mission_state_changed.emit(record.to_dict())
+        except Exception:
+            pass
+
+    def create_mission(self, objective: str) -> dict[str, Any]:
+        if not self.mission_engine:
+            from core.missions import get_mission_engine
+            self.mission_engine = get_mission_engine()
+        rec = self.mission_engine.create_mission(objective)
+        self.mission_created.emit(rec.to_dict())
+        return rec.to_dict()
+
+    def start_mission(self, mission_id: str) -> dict[str, Any]:
+        if not self.mission_engine:
+            from core.missions import get_mission_engine
+            self.mission_engine = get_mission_engine()
+        rec = self.mission_engine.start_mission(mission_id)
+        return rec.to_dict()
+
+    def pause_mission(self, mission_id: str) -> bool:
+        if self.mission_engine:
+            return self.mission_engine.pause_mission(mission_id)
+        return False
+
+    def resume_mission(self, mission_id: str) -> dict[str, Any] | None:
+        if self.mission_engine:
+            rec = self.mission_engine.resume_mission(mission_id)
+            return rec.to_dict()
+        return None
+
+    def cancel_mission(self, mission_id: str) -> bool:
+        if self.mission_engine:
+            return self.mission_engine.cancel_mission(mission_id)
+        return False
+
+    def approve_mission(self, mission_id: str) -> bool:
+        if self.mission_engine:
+            return self.mission_engine.approve_mission(mission_id)
+        return False
+
+    def reject_mission(self, mission_id: str) -> bool:
+        if self.mission_engine:
+            return self.mission_engine.reject_mission(mission_id)
+        return False
+
+    def list_missions(self, limit: int = 100) -> list[dict[str, Any]]:
+        if self.mission_engine:
+            return [m.to_dict() for m in self.mission_engine.store.list_all(limit=limit)]
+        return []
+
+    def get_mission(self, mission_id: str) -> dict[str, Any] | None:
+        if self.mission_engine:
+            rec = self.mission_engine.store.get(mission_id)
+            return rec.to_dict() if rec else None
+        return None

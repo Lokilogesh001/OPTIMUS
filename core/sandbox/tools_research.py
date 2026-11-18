@@ -37,7 +37,7 @@ def search_web_handler(params: dict[str, Any], context: dict[str, Any] | None = 
         elif hasattr(web_search, "search"):
             raw_res = web_search.search(query)
 
-        if raw_res:
+        if raw_res and not str(raw_res).startswith("status=failed"):
             found_urls = re.findall(r"https?://[^\s\)\>\"']+", str(raw_res))
             return ToolResult(
                 status="done",

@@ -454,7 +454,15 @@ class ToolRegistry:
                 allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE]
 
         # 1. Existence check in tool registry
-        tool = self._tools.get(tool_name)
+        _TOOL_ALIASES = {
+            "web_search": "search_web",
+            "python_env": "python_version",
+            "ollama_check": "check_ollama",
+            "disk_space": "disk_status",
+            "git_status": "dev_git_status",
+        }
+        resolved_name = _TOOL_ALIASES.get(tool_name, tool_name)
+        tool = self._tools.get(resolved_name)
         if not tool:
             res = ToolResult(
                 status="failed",

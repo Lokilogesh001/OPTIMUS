@@ -1,13 +1,14 @@
 """core/agents — Specialized Functional Agent Library for OPTIMUS.
 
 Provides:
-- Developer Agent (8-phase engineering lifecycle: understand, inspect, plan, approve, implement, execute, verify, report).
+- Developer Agent (developer / developer_agent).
 - Code Intelligence Agent (code structure, AST search, metrics, testing).
-- System Diagnosis Agent (CPU, RAM, GPU, storage, processes).
-- Data Intelligence Agent (tabular CSV/JSON, transformations, statistics).
-- Research Agent (web queries, citations, source verification).
-- Execution Agent (sandboxed commands, scripts, process management).
-- Verification Agent (independent postconditions, physical files, ledger recording).
+- System Diagnosis Agent (system_agent / system_diagnosis).
+- Data Intelligence Agent (data_agent / data_intel).
+- Research Agent (researcher / research_agent).
+- Execution Agent (file_agent / execution).
+- Verification Agent (verification_agent / verifier).
+- Planning Agent (planning_agent / planner).
 - Typed Input/Output contracts and failure policies.
 """
 
@@ -27,6 +28,7 @@ from core.agents.data_intel import (
 )
 from core.agents.developer import DeveloperAgent, create_developer_profile
 from core.agents.executor import ExecutionAgent, create_execution_profile
+from core.agents.planner import PlanningAgent, create_planning_agent_profile
 from core.agents.registry_ext import (
     get_specialized_agent,
     list_specialized_agents,
@@ -44,6 +46,7 @@ __all__ = [
     "DataIntelligenceAgent",
     "DeveloperAgent",
     "ExecutionAgent",
+    "PlanningAgent",
     "ResearchAgent",
     "SpecializedAgent",
     "SystemDiagnosisAgent",
@@ -52,6 +55,7 @@ __all__ = [
     "create_data_intelligence_profile",
     "create_developer_profile",
     "create_execution_profile",
+    "create_planning_agent_profile",
     "create_researcher_profile",
     "create_system_diagnosis_profile",
     "create_verification_agent_profile",

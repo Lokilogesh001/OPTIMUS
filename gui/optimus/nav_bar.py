@@ -115,6 +115,7 @@ class OptimusNavBar(QWidget):
         ("PLANNING", "📐"),
         ("DEVELOPER", "⌨"),
         ("SKILLS", "🧩"),
+        ("MISSIONS", "🎯"),
     ]
 
     def __init__(self, parent=None):
