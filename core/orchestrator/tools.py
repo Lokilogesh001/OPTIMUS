@@ -190,6 +190,11 @@ class ToolRegistry:
             register_developer_tools(self)
         except ImportError:
             pass
+        try:
+            from core.computer_use.tools import register_computer_tools
+            register_computer_tools(self)
+        except ImportError:
+            pass
 
     def set_event_bus(self, event_bus: Any) -> None:
         """Attach or update the EventBus for audit events."""

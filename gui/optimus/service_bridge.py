@@ -1147,3 +1147,30 @@ class OptimusServiceBridge(QObject):
             rec = self.mission_engine.store.get(mission_id)
             return rec.to_dict() if rec else None
         return None
+
+    # ── Computer Use & Visual Intelligence Bridge ───────────────────────────
+
+    def observe_desktop(self, target_window_title: str | None = None, capture_screenshot: bool = False) -> dict[str, Any]:
+        """Perform a live desktop observation and return structured results."""
+        try:
+            from core.computer_use.observation import get_desktop_observer
+            from core.computer_use.understanding import get_visual_understanding
+            obs = get_desktop_observer().observe(target_window_title=target_window_title, capture_screenshot=capture_screenshot)
+            ui_state = get_visual_understanding().classify_ui_state(obs)
+            return {
+                "active_app": obs.active_app,
+                "window_title": obs.window_title,
+                "pid": obs.pid,
+                "hwnd": obs.hwnd,
+                "screen_bounds": list(obs.screen_bounds),
+                "scale_factor": obs.scale_factor,
+                "elements_count": len(obs.elements),
+                "digest": obs.digest,
+                "degraded": obs.degraded,
+                "degraded_reason": obs.degraded_reason,
+                "screenshot_path": obs.screenshot_path,
+                "ui_state": ui_state,
+                "elements": [e.to_dict() for e in obs.elements[:50]],
+            }
+        except Exception as e:
+            return {"error": str(e), "elements_count": 0, "active_app": "", "window_title": ""}

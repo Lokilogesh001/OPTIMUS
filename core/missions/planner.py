@@ -69,7 +69,14 @@ class MissionPlanner:
         elif any(kw in lower for kw in ("developer mission", "inspect project", "inspect codebase", "run tests and report", "project inspection")):
             subtasks = self._plan_developer_mission(plan_id, objective)
 
-        # Mission Type D: General / Multi-Domain Objective
+        # Mission Type D: Visual Computer Use & GUI Desktop Automation
+        elif any(kw in lower for kw in (
+            "computer use", "visual interaction", "desktop workflow", "gui automation",
+            "open notepad", "type text", "click button", "desktop observation", "interact with"
+        )):
+            subtasks = self._plan_computer_use_mission(plan_id, objective)
+
+        # Mission Type E: General / Multi-Domain Objective
         else:
             subtasks = self._plan_composite_mission(plan_id, objective)
 
@@ -354,6 +361,63 @@ class MissionPlanner:
             description="Verify deliverable without touching source code.",
             assigned_agent="verification_agent",
             required_tools=["read_file"],
+            depends_on=[st3_id],
+            parallelizable=False,
+            expected_deliverables=[],
+            postconditions=[{"type": "verified_success"}],
+        )
+
+        return [s1, s2, s3, s4]
+
+    def _plan_computer_use_mission(self, plan_id: str, objective: str) -> list[MissionSubtask]:
+        """Archetype D: Visual Computer Use & GUI Desktop Automation."""
+        st1_id = f"{plan_id}_st1"
+        st2_id = f"{plan_id}_st2"
+        st3_id = f"{plan_id}_st3"
+        st4_id = f"{plan_id}_st4"
+
+        s1 = MissionSubtask(
+            subtask_id=st1_id,
+            title="Desktop Observation & Target Identification",
+            description="Inspect desktop state, active windows, and UI element tree to locate application targets.",
+            assigned_agent="computer_agent",
+            required_tools=["computer_observe", "computer_find_element"],
+            depends_on=[],
+            parallelizable=False,
+            expected_deliverables=["desktop_observation"],
+            postconditions=[{"type": "non_empty_output"}],
+        )
+
+        s2 = MissionSubtask(
+            subtask_id=st2_id,
+            title="Execute GUI Interactions",
+            description=f"Perform closed-loop UI interactions, window navigation, and typing: {objective}",
+            assigned_agent="computer_agent",
+            required_tools=["computer_switch_window", "computer_type_text", "computer_interact", "computer_hotkey"],
+            depends_on=[st1_id],
+            parallelizable=False,
+            expected_deliverables=["actuation_evidence"],
+            postconditions=[{"type": "non_empty_output"}],
+        )
+
+        s3 = MissionSubtask(
+            subtask_id=st3_id,
+            title="Compile Visual Interaction Evidence",
+            description="Aggregate observation logs, UI state diffs, and verification digests into a mission report.",
+            assigned_agent="data_agent",
+            required_tools=["write_file"],
+            depends_on=[st2_id],
+            parallelizable=False,
+            expected_deliverables=["reports/visual_interaction_report.md"],
+            postconditions=[{"type": "file_exists", "path": "reports/visual_interaction_report.md"}],
+        )
+
+        s4 = MissionSubtask(
+            subtask_id=st4_id,
+            title="Verify Visual State & Deliverable Integrity",
+            description="Verify that GUI postconditions hold and interaction report is valid.",
+            assigned_agent="verification_agent",
+            required_tools=["computer_verify_state", "read_file"],
             depends_on=[st3_id],
             parallelizable=False,
             expected_deliverables=[],

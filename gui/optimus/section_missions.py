@@ -148,6 +148,38 @@ class SectionMissions(QWidget):
         self.table_missions.itemSelectionChanged.connect(self._on_mission_selected)
         left_layout.addWidget(self.table_missions)
 
+        # ── Desktop Observation Card ─────────────────────────────────────────
+        dt_frame = QFrame()
+        dt_frame.setStyleSheet(f"background: {C.PANEL}; border: 1px solid {C.BORDER_A}; border-radius: 4px; padding: 6px;")
+        dt_layout = QVBoxLayout(dt_frame)
+        dt_layout.setContentsMargins(6, 6, 6, 6)
+        dt_layout.setSpacing(4)
+
+        dt_hdr = QHBoxLayout()
+        dt_title = QLabel("VISUAL COMPUTER OBSERVATION")
+        dt_title.setFont(px_font(9, QFont.Weight.Bold, spacing=1.0))
+        dt_title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        dt_hdr.addWidget(dt_title, stretch=1)
+
+        self.btn_scan_desktop = QPushButton("SCAN")
+        self.btn_scan_desktop.setFont(px_font(8, QFont.Weight.Bold))
+        self.btn_scan_desktop.setStyleSheet(btn_css("secondary"))
+        self.btn_scan_desktop.clicked.connect(self._refresh_desktop_observation)
+        dt_hdr.addWidget(self.btn_scan_desktop)
+        dt_layout.addLayout(dt_hdr)
+
+        self.lbl_desktop_app = QLabel("TARGET: Idle / Ready")
+        self.lbl_desktop_app.setFont(mono_font(8))
+        self.lbl_desktop_app.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
+        dt_layout.addWidget(self.lbl_desktop_app)
+
+        self.lbl_desktop_metrics = QLabel("METRICS: Res --x-- | Scale 1.0 | Controls: 0")
+        self.lbl_desktop_metrics.setFont(mono_font(8))
+        self.lbl_desktop_metrics.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        dt_layout.addWidget(self.lbl_desktop_metrics)
+
+        left_layout.addWidget(dt_frame)
+
         splitter.addWidget(left_panel)
 
         # ── Right: Mission Details & Live DAG Pane ───────────────────────────
@@ -284,6 +316,28 @@ class SectionMissions(QWidget):
                 color: {C.WHITE};
             }}
         """
+
+    # ── Desktop & Visual Observation Refresh ─────────────────────────────────
+
+    def _refresh_desktop_observation(self) -> None:
+        """Query bridge for active desktop observation metrics."""
+        try:
+            obs = self.bridge.observe_desktop()
+            app = obs.get("active_app") or "Unknown"
+            title = obs.get("window_title") or "No active window"
+            bounds = obs.get("screen_bounds", [0, 0, 1920, 1080])
+            scale = obs.get("scale_factor", 1.0)
+            count = obs.get("elements_count", 0)
+            digest = obs.get("digest", "")[:8]
+            ui_state = obs.get("ui_state", {})
+            dlg_cnt = len(ui_state.get("dialogs", []))
+
+            self.lbl_desktop_app.setText(f"TARGET: {app} — {title[:35]}")
+            self.lbl_desktop_metrics.setText(
+                f"SCREEN: {bounds[2]}x{bounds[3]} (Scale {scale}) | Controls: {count} | Dialogs: {dlg_cnt} | Digest: {digest}"
+            )
+        except Exception:
+            self.lbl_desktop_app.setText("TARGET: Observation unavailable")
 
     # ── Data Refresh & Filtering ─────────────────────────────────────────────
 

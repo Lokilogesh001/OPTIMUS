@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from core.agents.base import SpecializedAgent
 from core.agents.code_intel import CodeIntelligenceAgent
+from core.agents.computer import ComputerAgent, create_computer_agent_profile
 from core.agents.data_intel import DataIntelligenceAgent
 from core.agents.developer import DeveloperAgent, create_developer_profile
 from core.agents.executor import ExecutionAgent, create_execution_profile
@@ -115,6 +116,18 @@ def register_specialized_agents(registry: AgentRegistry) -> None:
         registry.register(alias_plan)
         _SPECIALIZED_AGENTS["planner"] = plan_agent
         _SPECIALIZED_AGENTS["planning_agent"] = plan_agent
+
+        # 8. Computer Use & Visual Interaction Agent (computer_agent / computer)
+        comp_agent = ComputerAgent()
+        _SPECIALIZED_AGENTS[comp_agent.name] = comp_agent
+        registry.register(comp_agent.profile)
+        alias_comp = create_computer_agent_profile()
+        alias_comp.name = "computer"
+        registry.register(alias_comp)
+        _SPECIALIZED_AGENTS["computer"] = comp_agent
+        _SPECIALIZED_AGENTS["computer_agent"] = comp_agent
+        _SPECIALIZED_AGENTS["vision_agent"] = comp_agent
+        _SPECIALIZED_AGENTS["computer_use"] = comp_agent
 
         # Code Intelligence Agent (helper)
         code_agent = CodeIntelligenceAgent()
