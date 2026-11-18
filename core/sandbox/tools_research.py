@@ -29,12 +29,20 @@ def search_web_handler(params: dict[str, Any], context: dict[str, Any] | None = 
     # Check for Mark-LVII web_search action bridge
     try:
         from actions import web_search
-        if hasattr(web_search, "search"):
+        raw_res = None
+        if hasattr(web_search, "web_search"):
+            raw_res = web_search.web_search({"query": query})
+        elif hasattr(web_search, "_search"):
+            raw_res = web_search._search(query)
+        elif hasattr(web_search, "search"):
             raw_res = web_search.search(query)
+
+        if raw_res:
+            found_urls = re.findall(r"https?://[^\s\)\>\"']+", str(raw_res))
             return ToolResult(
                 status="done",
                 output=str(raw_res)[:4000],
-                evidence={"query": query, "source": "actions.web_search"},
+                evidence={"query": query, "source": "actions.web_search", "urls": found_urls, "citations_count": len(found_urls)},
             )
     except Exception:
         pass

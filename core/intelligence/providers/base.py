@@ -88,6 +88,12 @@ class ModelProvider(ABC):
                 self.circuit_breaker.record_success()
                 return result
             except (RateLimitError, TimeoutError) as recoverable_err:
+                err_str = str(recoverable_err).lower()
+                # Quota exhaustion cannot be resolved by immediate retries; fail fast and trip circuit breaker
+                if "insufficient_quota" in err_str or "credit_balance_exhausted" in err_str or "exceeded your current quota" in err_str:
+                    self.circuit_breaker.record_failure(recoverable_err)
+                    raise
+
                 last_exception = recoverable_err
                 attempt += 1
                 if attempt > max_retries:

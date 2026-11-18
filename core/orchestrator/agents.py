@@ -78,8 +78,8 @@ class AgentRegistry:
             description="Performs deep data gathering, file inspection, and content exploration.",
             capability=AgentCapability(
                 domain="research",
-                allowed_tools=["read_file", "list_directory", "calculate", "calculator"],
-                allowed_tiers=[CapabilityTier.READ_ONLY],
+                allowed_tools=["read_file", "list_directory", "calculate", "calculator", "search_web", "find_files", "largest_files"],
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.NETWORK_EXTERNAL],
                 max_turns=5,
                 timeout_seconds=90.0,
             ),
@@ -114,7 +114,17 @@ class AgentRegistry:
             description="Manages workspace files, directories, data persistence, and artifact generation.",
             capability=AgentCapability(
                 domain="io",
-                allowed_tools=["read_file", "write_file", "list_directory"],
+                allowed_tools=[
+                    "read_file",
+                    "write_file",
+                    "list_directory",
+                    "open_directory",
+                    "open_folder",
+                    "find_files",
+                    "largest_files",
+                    "create_directory",
+                    "create_folder",
+                ],
                 allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE],
                 max_turns=6,
                 timeout_seconds=120.0,
@@ -129,17 +139,40 @@ class AgentRegistry:
         self.register(AgentProfile(
             name="general",
             title="General Multi-Domain Assistant",
-            description="Handles general multi-step tasks across calculation, file operations, and synthesis.",
+            description="Handles general multi-step tasks across calculation, file operations, system actions, and synthesis.",
             capability=AgentCapability(
                 domain="general",
-                allowed_tools=["calculator", "read_file", "write_file", "list_directory"],
-                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE],
+                allowed_tools=[
+                    "calculator",
+                    "read_file",
+                    "write_file",
+                    "list_directory",
+                    "open_app",
+                    "open_directory",
+                    "open_folder",
+                    "find_files",
+                    "largest_files",
+                    "create_directory",
+                    "create_folder",
+                    "ollama_status",
+                    "check_ollama",
+                    "python_version",
+                    "computer_audit",
+                    "search_web",
+                    "cpu_status",
+                    "memory_status",
+                    "disk_status",
+                    "gpu_status",
+                    "system_info",
+                ],
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE, CapabilityTier.EXECUTION, CapabilityTier.NETWORK_EXTERNAL],
                 max_turns=8,
                 timeout_seconds=180.0,
             ),
             instructions=(
-                "You are a general agent capable of coordinating simple subtasks. Execute steps "
-                "carefully and report factual findings."
+                "You are a general agent capable of coordinating and executing computer tasks. "
+                "Execute authorized tools directly to gather real facts and perform actions. "
+                "Never write scripts instructing the user to perform tasks manually when tools exist."
             ),
         ))
 

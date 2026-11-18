@@ -153,19 +153,22 @@ def safe_eval_expression(expr: str) -> float | int:
 def _resolve_safe_path(raw_path: str, allowed_roots: list[str] | None = None) -> Path:
     """Canonicalize path and verify it does not traverse outside allowed roots."""
     p = Path(raw_path)
-    if not p.is_absolute() and allowed_roots:
-        p = (Path(allowed_roots[0]) / p).resolve()
-    else:
-        p = p.resolve()
+    if allowed_roots:
+        canonical_roots = [Path(r).resolve() for r in allowed_roots]
+        # 1. If path is already inside an allowed root (e.g. absolute or normalized relative), use it directly
+        p_resolved = p.resolve()
+        if any(p_resolved == r or r in p_resolved.parents for r in canonical_roots):
+            return p_resolved
 
-    if not allowed_roots:
-        return p
+        # 2. If relative, resolve relative to allowed_roots[0]
+        if not p.is_absolute():
+            p_under_root = (canonical_roots[0] / p).resolve()
+            if any(p_under_root == r or r in p_under_root.parents for r in canonical_roots):
+                return p_under_root
 
-    canonical_roots = [Path(r).resolve() for r in allowed_roots]
-    is_allowed = any(p == r or r in p.parents for r in canonical_roots)
-    if not is_allowed:
         raise PermissionError(f"PATH_VIOLATION: Access denied: path '{p}' is outside permitted directories (allowed roots: {allowed_roots})")
-    return p
+
+    return p.resolve()
 
 
 # ── Central Tool Registry ────────────────────────────────────────────────────

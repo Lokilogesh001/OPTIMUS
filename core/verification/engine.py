@@ -176,6 +176,37 @@ class VerificationEngine:
                             )
                         )
 
+                elif tool_name == "open_app":
+                    pid = (effect.get("evidence") or {}).get("pid")
+                    if pid:
+                        key = f"proc_open:{pid}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            postconditions.append(
+                                Postcondition(
+                                    postcondition_type=PostconditionType.PROCESS,
+                                    spec={"pid": pid, "should_be_running": True},
+                                    description=f"Process for '{args.get('app_name', 'application')}' (PID: {pid}) must be active",
+                                    critical=True,
+                                )
+                            )
+
+                elif tool_name in ("create_directory", "create_folder"):
+                    raw_path = args.get("path") or (effect.get("evidence") or {}).get("path")
+                    if raw_path:
+                        path_str = str(raw_path)
+                        key = f"fs_mkdir:{path_str}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            postconditions.append(
+                                Postcondition(
+                                    postcondition_type=PostconditionType.FILESYSTEM,
+                                    spec={"path": path_str, "must_exist": True, "is_directory": True},
+                                    description=f"Created directory must physically exist on disk: {Path(path_str).name}",
+                                    critical=True,
+                                )
+                            )
+
         return postconditions
 
     def verify_postcondition(

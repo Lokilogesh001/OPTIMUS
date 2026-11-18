@@ -36,6 +36,10 @@ def create_system_diagnosis_profile() -> AgentProfile:
                 "disk_status",
                 "gpu_status",
                 "process_diagnostics",
+                "ollama_status",
+                "check_ollama",
+                "python_version",
+                "computer_audit",
             ],
             allowed_tiers=[CapabilityTier.READ_ONLY],
             max_turns=6,
@@ -68,12 +72,30 @@ class SystemDiagnosisAgent(SpecializedAgent):
         text = (contract.goal + " " + contract.instructions).lower()
 
         # Check target metrics requested or run full sweep
+        check_audit = any(kw in text for kw in ("audit", "computer audit", "system audit", "complete audit"))
+        if check_audit:
+            audit_res = self.call_tool(tool_registry, "computer_audit", {}, context=context)
+            side_effects.append({"tool_name": "computer_audit", "status": audit_res.status, "output": audit_res.output[:200]})
+            if audit_res.is_success:
+                return AgentOutputContract(
+                    subtask_id=contract.subtask_id,
+                    agent_name=self.name,
+                    status="success",
+                    summary=audit_res.output,
+                    deliverables=[],
+                    side_effects=side_effects,
+                    evidence=audit_res.evidence,
+                    duration_ms=(time.perf_counter() - start_time) * 1000.0,
+                )
+
         check_all = any(kw in text for kw in ("all", "sweep", "full", "health", "system", "diagnos"))
         check_cpu = check_all or any(kw in text for kw in ("cpu", "processor", "load"))
         check_mem = check_all or any(kw in text for kw in ("ram", "memory", "swap"))
         check_disk = check_all or any(kw in text for kw in ("disk", "storage", "drive", "space"))
         check_gpu = check_all or any(kw in text for kw in ("gpu", "graphics", "vram"))
         check_proc = any(kw in text for kw in ("process", "pid", "top", "task"))
+        check_ollama = any(kw in text for kw in ("ollama", "local llm", "local model"))
+        check_py = any(kw in text for kw in ("python", "python version", "dev tool", "environment"))
 
         # 1. System Info
         sys_res = self.call_tool(tool_registry, "system_info", {}, context=context)
@@ -121,6 +143,22 @@ class SystemDiagnosisAgent(SpecializedAgent):
             if proc_res.is_success:
                 reports.append(proc_res.output)
                 evidence["processes"] = proc_res.evidence
+
+        # 7. Ollama Status
+        if check_ollama:
+            ollama_res = self.call_tool(tool_registry, "ollama_status", {}, context=context)
+            side_effects.append({"tool_name": "ollama_status", "status": ollama_res.status, "output": ollama_res.output[:200]})
+            if ollama_res.is_success:
+                reports.append(ollama_res.output)
+                evidence["ollama"] = ollama_res.evidence
+
+        # 8. Python Version & Environment
+        if check_py:
+            py_res = self.call_tool(tool_registry, "python_version", {}, context=context)
+            side_effects.append({"tool_name": "python_version", "status": py_res.status, "output": py_res.output[:200]})
+            if py_res.is_success:
+                reports.append(py_res.output)
+                evidence["python_environment"] = py_res.evidence
 
         summary = "\n\n".join(reports)
         duration_ms = (time.perf_counter() - start_time) * 1000.0

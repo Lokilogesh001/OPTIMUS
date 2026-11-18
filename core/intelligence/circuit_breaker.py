@@ -84,8 +84,11 @@ class CircuitBreaker:
             self._last_failure_time = now
             self._last_error = str(error) if error else "Unknown error"
 
-            if self._state == CircuitState.HALF_OPEN:
-                # Immediate trip back to OPEN on probe failure
+            err_str = self._last_error.lower()
+            is_unrecoverable = any(kw in err_str for kw in ("insufficient_quota", "credit_balance_exhausted", "quota", "auth failed", "invalid api key"))
+
+            if self._state == CircuitState.HALF_OPEN or is_unrecoverable:
+                # Immediate trip back to OPEN on probe failure or unrecoverable error
                 self._state = CircuitState.OPEN
                 self._last_state_change = now
             elif self._state == CircuitState.CLOSED:

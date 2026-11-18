@@ -29,10 +29,61 @@ from core import outcome
 
 _WEB = {"web_search", "search_web", "fetch_page"}
 KNOWN = ("search_web", "web_search", "fetch_page", "notes", "write_file", "file_processor",
-         "recall_memory")
+         "recall_memory", "computer_audit", "system_info", "cpu_status", "memory_status",
+         "disk_status", "gpu_status", "process_diagnostics", "ollama_status", "python_version",
+         "largest_files", "find_files")
 _MAX_WRITE = 2_000_000
 
 _DECLS = {
+    "computer_audit": {
+        "name": "computer_audit",
+        "description": "Execute a complete read-only physical audit of computer hardware, OS, storage, memory, processes, dev tools, and Ollama.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "system_info": {
+        "name": "system_info",
+        "description": "Inspect hardware, OS, platform architecture, and Python runtime information.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "cpu_status": {
+        "name": "cpu_status",
+        "description": "Measure real-time CPU core counts, load averages, and utilization.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "memory_status": {
+        "name": "memory_status",
+        "description": "Measure physical RAM and swap memory usage.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "disk_status": {
+        "name": "disk_status",
+        "description": "Inspect storage partitions, filesystem mounts, and free disk space.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "gpu_status": {
+        "name": "gpu_status",
+        "description": "Check dedicated GPU presence, driver version, VRAM, and load.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "ollama_status": {
+        "name": "ollama_status",
+        "description": "Check whether local Ollama daemon is active, retrieve version, and list installed models.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "python_version": {
+        "name": "python_version",
+        "description": "Retrieve installed Python version, virtual environment details, and developer tooling.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    "largest_files": {
+        "name": "largest_files",
+        "description": "Identify largest files in an authorized directory, optionally filtered by extension (e.g. 'pdf').",
+        "parameters": {"type": "OBJECT", "properties": {
+            "path": {"type": "STRING", "description": "Directory to inspect (default 'downloads')"},
+            "extension": {"type": "STRING", "description": "Optional extension filter, e.g. 'pdf'"},
+            "count": {"type": "INTEGER", "description": "Number of files to return (default 10)"},
+        }},
+    },
     "search_web": {
         "name": "search_web",
         "description": ("Search the web and get a list of results — title, address and snippet — "
@@ -161,6 +212,32 @@ class TaskTools:
             if name == "recall_memory":
                 from memory.memory_manager import search_memory
                 return search_memory(str(args.get("query") or ""), limit=8)
+            if name in ("computer_audit", "system_info", "cpu_status", "memory_status", "disk_status", "gpu_status", "ollama_status", "python_version"):
+                from core.sandbox.tools_system import (
+                    computer_audit_handler, cpu_status_handler, disk_status_handler,
+                    gpu_status_handler, memory_status_handler, ollama_status_handler,
+                    python_version_handler, system_info_handler,
+                )
+                h_map = {
+                    "computer_audit": computer_audit_handler,
+                    "system_info": system_info_handler,
+                    "cpu_status": cpu_status_handler,
+                    "memory_status": memory_status_handler,
+                    "disk_status": disk_status_handler,
+                    "gpu_status": gpu_status_handler,
+                    "ollama_status": ollama_status_handler,
+                    "python_version": python_version_handler,
+                }
+                res = h_map[name](args, {})
+                return res.output
+            if name in ("largest_files", "find_files"):
+                from core.sandbox.tools_execution import find_files_handler, largest_files_handler
+                h_map_exec = {
+                    "largest_files": largest_files_handler,
+                    "find_files": find_files_handler,
+                }
+                res = h_map_exec[name](args, {})
+                return res.output
             from core.action_loader import _call_handler
             if name == "file_processor":
                 if str(args.get("action") or "").lower() in ("run", "test"):

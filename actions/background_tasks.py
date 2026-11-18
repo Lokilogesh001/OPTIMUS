@@ -45,10 +45,12 @@ def background_tasks(parameters: dict, player=None) -> str:
 
     a = dict(parameters or {})
     action = str(a.get("action") or "list").strip().lower()
+    task_text = str(a.get("task") or a.get("goal") or "").strip().lower()
     is_optimus = (
         action == "orchestrate"
-        or str(a.get("agent") or "").strip().lower() == "optimus"
+        or str(a.get("agent") or "").strip().lower() in ("optimus", "central", "orchestrator")
         or str(a.get("engine") or "").strip().lower() == "optimus"
+        or any(kw in task_text for kw in ("audit", "diagnos", "system check", "hardware", "cpu", "memory", "storage"))
     )
 
     if is_optimus:

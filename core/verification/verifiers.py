@@ -76,7 +76,13 @@ class FilesystemVerifier(BaseVerifier):
                 verdict="Failed: No target path provided in postcondition spec.",
             )
 
-        target_path = Path(raw_path).resolve()
+        allowed_roots = (context or {}).get("allowed_roots")
+        target_path = Path(raw_path)
+        if not target_path.is_absolute() and allowed_roots:
+            cand = Path(allowed_roots[0]) / target_path
+            if cand.exists() or not target_path.exists():
+                target_path = cand
+        target_path = target_path.resolve()
         is_directory = bool(spec.get("is_directory", False))
         observed: dict[str, Any] = {
             "path": str(target_path),

@@ -114,15 +114,19 @@ class ModelRouter:
         except Exception as e:
             logger.debug("Resource manager filter bypassed: %s", e)
 
-        # 5. Circuit Breaker Health Filter (demote models whose providers have an OPEN circuit)
+        # 5. Circuit Breaker & Credential Health Filter (demote unconfigured or degraded providers)
         healthy_candidates = []
         degraded_candidates = []
         for m in candidates:
             provider = self._find_provider_for_model(m)
-            if provider and not provider.circuit_breaker.allow_request():
-                degraded_candidates.append(m)
-            else:
-                healthy_candidates.append(m)
+            if provider:
+                if not getattr(provider, "is_local", False) and not getattr(provider, "api_key", None):
+                    degraded_candidates.append(m)
+                    continue
+                if hasattr(provider, "circuit_breaker") and not provider.circuit_breaker.allow_request():
+                    degraded_candidates.append(m)
+                    continue
+            healthy_candidates.append(m)
 
         active_pool = healthy_candidates or degraded_candidates
 
@@ -170,8 +174,10 @@ class ModelRouter:
 
         for candidate in candidate_chain:
             provider = self._find_provider_for_model(candidate)
-            if provider and hasattr(provider, "circuit_breaker"):
-                if not provider.circuit_breaker.allow_request():
+            if provider:
+                if not getattr(provider, "is_local", False) and not getattr(provider, "api_key", None):
+                    continue
+                if hasattr(provider, "circuit_breaker") and not provider.circuit_breaker.allow_request():
                     logger.info("Fast-skipping candidate '%s' due to OPEN circuit breaker on '%s'", candidate.model_id, provider.name)
                     continue
 

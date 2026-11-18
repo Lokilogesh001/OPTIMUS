@@ -35,6 +35,9 @@ def create_execution_profile() -> AgentProfile:
                 "script_runner",
                 "process_status",
                 "process_kill",
+                "open_app",
+                "open_directory",
+                "open_folder",
                 "read_file",
                 "list_directory",
             ],
@@ -68,9 +71,59 @@ class ExecutionAgent(SpecializedAgent):
 
         text = contract.instructions or contract.goal
 
+        # 0a. Application launch detection
+        low_text = text.lower()
+        app_match = re.search(r"(?:open|launch|start)\s+(?:application\s+|app\s+)?([a-zA-Z0-9_\-\.]+)", low_text)
+        if app_match and any(kw in low_text for kw in ("notepad", "calc", "calculator", "terminal", "cmd", "explorer", "code", "app")):
+            target_app = app_match.group(1).strip()
+            res = self.call_tool(
+                tool_registry,
+                "open_app",
+                {"app_name": target_app},
+                context=context,
+            )
+            side_effects.append({
+                "tool_name": "open_app",
+                "status": res.status,
+                "output": res.output[:500],
+                "error": res.error,
+            })
+            reports.append(res.output if res.is_success else f"Launch Error: {res.error}")
+            evidence["open_app"] = res.evidence
+            status = "success" if res.is_success else "failed"
+
+        # 0b. Open directory / folder detection
+        elif any(kw in low_text for kw in ("open downloads", "open folder", "open directory", "explore folder", "open desktop")):
+            folder_target = "downloads"
+            if "desktop" in low_text:
+                folder_target = "desktop"
+            elif "documents" in low_text:
+                folder_target = "documents"
+            elif "workspace" in low_text:
+                folder_target = "workspace"
+            else:
+                m = re.search(r"(?:open|explore)\s+(?:folder\s+|directory\s+)?([a-zA-Z0-9_\-\.\/\\]+)", low_text)
+                if m:
+                    folder_target = m.group(1)
+
+            res = self.call_tool(
+                tool_registry,
+                "open_directory",
+                {"path": folder_target},
+                context=context,
+            )
+            side_effects.append({
+                "tool_name": "open_directory",
+                "status": res.status,
+                "output": res.output[:500],
+                "error": res.error,
+            })
+            reports.append(res.output if res.is_success else f"Open Directory Error: {res.error}")
+            evidence["open_directory"] = res.evidence
+            status = "success" if res.is_success else "failed"
+
         # 1. Script runner detection
-        script_match = re.search(r"([\w\-/\\]+\.py)", text)
-        if "script" in text.lower() and script_match:
+        elif "script" in text.lower() and (script_match := re.search(r"([\w\-/\\]+\.py)", text)):
             script_path = script_match.group(1)
             res = self.call_tool(
                 tool_registry,

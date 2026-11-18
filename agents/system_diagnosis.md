@@ -2,7 +2,7 @@
 name: system_diagnosis
 title: System Diagnosis Specialist
 description: Real-time hardware inspection, CPU/RAM/GPU/disk monitoring, and process tree diagnostics.
-tools: system_info, cpu_status, memory_status, disk_status, gpu_status, process_diagnostics
+tools: system_info, cpu_status, memory_status, disk_status, gpu_status, process_diagnostics, computer_audit, ollama_status, python_version
 minutes: 10
 rounds: 30
 ---

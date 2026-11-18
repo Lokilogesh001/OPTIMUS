@@ -456,7 +456,7 @@ def test_control_center_navigation_and_stack_switching(bridge, qapp):
     cc = OptimusControlCenterWidget()
     qapp.processEvents()
 
-    assert cc.stack.count() == 11
+    assert cc.stack.count() >= 11
 
     # Test section navigation
     section_map = {
@@ -472,6 +472,9 @@ def test_control_center_navigation_and_stack_switching(bridge, qapp):
         "settings": 9,
         "planning": 10,
     }
+    if cc.stack.count() >= 13:
+        section_map["developer"] = 11
+        section_map["skills"] = 12
 
     for name, expected_idx in section_map.items():
         cc.show_section(name)

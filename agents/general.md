@@ -2,7 +2,7 @@
 name: general
 title: General assistant
 description: Any long piece of work that is not mainly research — drafting, organising, working through a list, preparing a file.
-tools: search_web, web_search, fetch_page, notes, write_file, file_processor
+tools: search_web, web_search, fetch_page, notes, write_file, file_processor, computer_audit, system_info, cpu_status, memory_status, disk_status, gpu_status, ollama_status, python_version, largest_files, find_files
 minutes: 15
 rounds: 40
 ---
