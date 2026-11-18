@@ -88,6 +88,7 @@ class SkillRegistry:
     def list_skills(
         self,
         enabled_only: bool = False,
+        installed_only: bool = False,
         category: SkillCategory | None = None,
         trust_level: SkillTrustLevel | None = None,
         search_query: str = "",
@@ -98,6 +99,8 @@ class SkillRegistry:
 
             if enabled_only:
                 results = [s for s in results if s.enabled]
+            if installed_only:
+                results = [s for s in results if s.is_installed]
             if category:
                 results = [s for s in results if s.category == category]
             if trust_level:
@@ -110,6 +113,15 @@ class SkillRegistry:
                 ]
 
             return results
+
+    def list_installed_skills(self) -> list[SkillManifest]:
+        """Fetch all natively installed skills."""
+        return self.list_skills(installed_only=True)
+
+    def list_discovered_skills(self) -> list[SkillManifest]:
+        """Fetch all discovered external skills available for import."""
+        with self._lock:
+            return [s for s in self._skills.values() if not s.is_installed]
 
     def set_enabled(self, skill_id: str, enabled: bool) -> bool:
         """Enable or disable a registered skill."""

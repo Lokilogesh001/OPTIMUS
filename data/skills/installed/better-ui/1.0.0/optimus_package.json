@@ -1,0 +1,49 @@
+{
+  "id": "better-ui",
+  "name": "better-ui",
+  "version": "1.0.0",
+  "description": "Polishes the surfaces, icons and motion in your project with exact values for border radius, optical alignment, shadows, icon states and animation.",
+  "author": "Ecosystem Developer",
+  "license": "Open",
+  "original_source": "C:\\Users\\loges\\.gemini\\config\\skills\\better-ui",
+  "installed_at": 1794986967.8618932,
+  "entrypoint_file": "SKILL.md",
+  "skill_type": "INSTRUCTION",
+  "category": "GENERAL",
+  "tags": [
+    "better-ui",
+    "general",
+    "gemini_config"
+  ],
+  "required_tools": [],
+  "dependencies": [],
+  "hardware_requirements": {
+    "gpu_required": false,
+    "cuda_required": false,
+    "min_ram_mb": 128,
+    "notes": "Hardware independent instruction-based execution."
+  },
+  "security_report": {
+    "is_safe": true,
+    "risk_score": 0.0,
+    "trust_level": "TRUSTED",
+    "issues": [],
+    "scanned_at": 1794986967.8503358,
+    "scanner_name": "OptimusSecurityValidator + NVIDIA SkillSpector"
+  },
+  "integrity_checksum": "1ba7b9e7964ae9a7f7dfeac6878f3e37a99dbcc4e23e55b6e0e99e2e087b3ff3",
+  "files_checksums": {
+    "agents/openai.yaml": "f5f540f98c5e40313da784242b600819faea305a676ed8706f5116eda72b98b5",
+    "animations.md": "a0e3409b9f438dc7a1b3382e93a893ea84b81af3f0a9ce9ce956ce2197df584d",
+    "enter-exit.md": "6a75a5dd1195d9d940b43938f43220b91d6e6cca8a5ea321cb3cac32ffd4dca6",
+    "icon-transitions.md": "46cfe2358ee51e5de34485e78df55ce35d379052ac962869541023f6941bf86b",
+    "icons.md": "5390780d40ea927bb70ac72f2bed866019bb4e2dd5c23c0147fa9b1592affc8f",
+    "performance.md": "bbfed883ab6036c2934571f5c6230674ff5695d3ea9fd458d34f71755b21d488",
+    "SKILL.md": "ed3c13ed6b3a9ef7fc129fb2b7e5db899addf44333f42e4d80159e2d5e882a17",
+    "surfaces.md": "a44cebcd59f762625a849547b534b6ee01333a7b25d21a03d9c540ba08cdb545"
+  },
+  "enabled": true,
+  "metadata": {
+    "origin_provenance": "gemini_config"
+  }
+}

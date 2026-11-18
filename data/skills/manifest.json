@@ -1,0 +1,27 @@
+{
+  "library_root": "D:\\project\\srrr\\Mark-LVII-main\\Mark-LVII-main\\data\\skills\\installed",
+  "total_installed": 4,
+  "updated_at": 1794986967.9995112,
+  "skills": {
+    "agentic-tdd": {
+      "version": "3.7.0",
+      "enabled": true,
+      "category": "GENERAL"
+    },
+    "ai-regression-testing": {
+      "version": "1.0.0",
+      "enabled": true,
+      "category": "GENERAL"
+    },
+    "antislop": {
+      "version": "1.0.0",
+      "enabled": true,
+      "category": "GENERAL"
+    },
+    "better-ui": {
+      "version": "1.0.0",
+      "enabled": true,
+      "category": "GENERAL"
+    }
+  }
+}

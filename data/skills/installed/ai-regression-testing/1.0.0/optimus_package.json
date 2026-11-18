@@ -1,0 +1,50 @@
+{
+  "id": "ai-regression-testing",
+  "name": "ai-regression-testing",
+  "version": "1.0.0",
+  "description": "Regression testing strategies for AI-assisted development. Sandbox-mode API testing without database dependencies, automated bug-check workflows, and patterns to catch AI blind spots where the same model writes and reviews code. Use when adding regression coverage to AI-assisted code, or when the same model both wrote and reviewed a change.",
+  "author": "Ecosystem Developer",
+  "license": "Open",
+  "original_source": "C:\\Users\\loges\\.gemini\\config\\skills\\ai-regression-testing",
+  "installed_at": 1794986967.9462483,
+  "entrypoint_file": "SKILL.md",
+  "skill_type": "INSTRUCTION",
+  "category": "GENERAL",
+  "tags": [
+    "ai-regression-testing",
+    "general",
+    "gemini_config"
+  ],
+  "required_tools": [],
+  "dependencies": [],
+  "hardware_requirements": {
+    "gpu_required": false,
+    "cuda_required": false,
+    "min_ram_mb": 128,
+    "notes": "Hardware independent instruction-based execution."
+  },
+  "security_report": {
+    "is_safe": true,
+    "risk_score": 0.5,
+    "trust_level": "TRUSTED",
+    "issues": [
+      {
+        "severity": "LOW",
+        "category": "TRAVERSAL",
+        "description": "Filesystem traversal or system directory pattern: Directory traversal",
+        "line_number": 131,
+        "snippet": "import { createTestRequest, parseResponse } from \"../../helpers\";"
+      }
+    ],
+    "scanned_at": 1794986967.944938,
+    "scanner_name": "OptimusSecurityValidator + NVIDIA SkillSpector"
+  },
+  "integrity_checksum": "64ebb62a9a64069b3bf0dd28739d4f639a7efc73ea3d2d6b1cf019592a1ffceb",
+  "files_checksums": {
+    "SKILL.md": "83f2f5c4083af5762dd658f742d4a390eb3a6f969d835f69e8f47efba296c127"
+  },
+  "enabled": true,
+  "metadata": {
+    "origin_provenance": "gemini_config"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "id": "agentic-tdd",
+  "name": "agentic-tdd",
+  "version": "3.7.0",
+  "description": "Test-driven development for behaviour a unit test cannot reach, by writing the expectation against the running app before writing the code. Declare the consequence first, watch it fail, implement, watch it pass. Use when building a user-facing feature, when the user asks for TDD on UI or full-stack work, when a unit test cannot express the outcome that matters, or when you want a red-green loop that runs against the real app instead of mocks.",
+  "author": "Ecosystem Developer",
+  "license": "Apache-2.0",
+  "original_source": "C:\\Users\\loges\\.gemini\\config\\skills\\agentic-tdd",
+  "installed_at": 1794986967.6948173,
+  "entrypoint_file": "SKILL.md",
+  "skill_type": "INSTRUCTION",
+  "category": "GENERAL",
+  "tags": [
+    "agentic-tdd",
+    "general",
+    "gemini_config"
+  ],
+  "required_tools": [],
+  "dependencies": [
+    {
+      "name": "curl",
+      "kind": "EXTERNAL_BINARY",
+      "required": false,
+      "version_constraint": "",
+      "status": "SATISFIED",
+      "details": "Binary 'curl' located at 'C:\\WINDOWS\\system32\\curl.EXE'."
+    }
+  ],
+  "hardware_requirements": {
+    "gpu_required": false,
+    "cuda_required": false,
+    "min_ram_mb": 128,
+    "notes": "Hardware independent instruction-based execution."
+  },
+  "security_report": {
+    "is_safe": true,
+    "risk_score": 0.0,
+    "trust_level": "TRUSTED",
+    "issues": [],
+    "scanned_at": 1794986967.6903913,
+    "scanner_name": "OptimusSecurityValidator + NVIDIA SkillSpector"
+  },
+  "integrity_checksum": "b7ce4a39e9ed8a1a0341e4f3bc307a10ce99310adc1b36045e0bbf63fd68befe",
+  "files_checksums": {
+    "SKILL.md": "6adfce7d7af6372bab213b55800f15fe52e6fddec260d71c0fc5c05e400b6c69"
+  },
+  "enabled": true,
+  "metadata": {
+    "origin_provenance": "gemini_config"
+  }
+}

@@ -127,6 +127,11 @@ class SkillSelector:
             elif skill.trust_level == SkillTrustLevel.TRUSTED:
                 score += 1.0
 
+            # C2. Native Installed Library Priority
+            if skill.is_installed:
+                score += 5.0
+                reasons.append("Natively installed in OPTIMUS library")
+
             # D. Tool Compatibility Gate
             if tool_registry and skill.required_tools:
                 missing = [t for t in skill.required_tools if not tool_registry.is_registered(t)]

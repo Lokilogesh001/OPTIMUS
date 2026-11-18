@@ -120,6 +120,9 @@ class SkillManifest:
     provenance: str = "local"         # "ecc", "gstack", "antislop", "nvidia", "builtin", "local"
     execution_count: int = 0
     last_executed_at: float | None = None
+    is_installed: bool = False
+    installed_path: str = ""
+    installed_at: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -146,6 +149,9 @@ class SkillManifest:
             "provenance": self.provenance,
             "execution_count": self.execution_count,
             "last_executed_at": self.last_executed_at,
+            "is_installed": self.is_installed,
+            "installed_path": self.installed_path,
+            "installed_at": self.installed_at,
         }
 
     @classmethod

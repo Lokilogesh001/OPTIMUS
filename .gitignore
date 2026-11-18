@@ -31,6 +31,8 @@ memory/verification/
 memory/workflows/executions/
 memory/workflows/approvals/
 !memory/workflows/definitions/
+data/skills/.staging/
+data/skills/**/backups/
 
 # --- Python Build & Bytecode ---
 __pycache__/

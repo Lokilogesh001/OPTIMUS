@@ -1,0 +1,42 @@
+{
+  "id": "antislop",
+  "name": "antislop",
+  "version": "1.0.0",
+  "description": "Anti Slop: Rules for AI Coding Agents. The core filter. Load always to stop generic AI slop.",
+  "author": "Ecosystem Developer",
+  "license": "Open",
+  "original_source": "C:\\Users\\loges\\.gemini\\config\\skills\\antislop",
+  "installed_at": 1794986967.7739902,
+  "entrypoint_file": "SKILL.md",
+  "skill_type": "INSTRUCTION",
+  "category": "GENERAL",
+  "tags": [
+    "antislop",
+    "general",
+    "gemini_config"
+  ],
+  "required_tools": [],
+  "dependencies": [],
+  "hardware_requirements": {
+    "gpu_required": false,
+    "cuda_required": false,
+    "min_ram_mb": 128,
+    "notes": "Hardware independent instruction-based execution."
+  },
+  "security_report": {
+    "is_safe": true,
+    "risk_score": 0.0,
+    "trust_level": "TRUSTED",
+    "issues": [],
+    "scanned_at": 1794986967.7720785,
+    "scanner_name": "OptimusSecurityValidator + NVIDIA SkillSpector"
+  },
+  "integrity_checksum": "8d2265c8db17bf7dec2a93b08921d72f0afc0b6bde04ccbb2931d4fde601f54f",
+  "files_checksums": {
+    "SKILL.md": "c6b805851156117acb37a0fbb3694903803a1e9ab5f04326e5ac64ff2fa8e14b"
+  },
+  "enabled": true,
+  "metadata": {
+    "origin_provenance": "gemini_config"
+  }
+}

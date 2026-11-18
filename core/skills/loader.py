@@ -28,11 +28,23 @@ class SkillLoader:
             if self._cache.get(skill.id):
                 return self._cache[skill.id]
 
+            # If installed natively, read directly from native installation directory to ensure source independence
+            instructions = skill.instructions
+            if skill.is_installed and skill.installed_path:
+                from pathlib import Path
+                entry_file = Path(skill.installed_path) / skill.entrypoint_file
+                if entry_file.is_file():
+                    try:
+                        instructions = entry_file.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        pass
+
+            installed_badge = " [NATIVE]" if skill.is_installed else ""
             rendered = (
-                f"\n## [ACTIVATED SKILL: {skill.name.upper()}]\n"
+                f"\n## [ACTIVATED SKILL: {skill.name.upper()}{installed_badge}]\n"
                 f"> Provenance: {skill.provenance} | Category: {skill.category.value} | Trust: {skill.trust_level.value}\n"
                 f"> Description: {skill.description}\n\n"
-                f"{skill.instructions.strip()}\n"
+                f"{instructions.strip()}\n"
                 f"## [END SKILL: {skill.name.upper()}]\n"
             )
             self._cache[skill.id] = rendered
