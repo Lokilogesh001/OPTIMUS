@@ -53,6 +53,7 @@ class MemoryStore:
         self._cat_key_index: dict[MemoryCategory, dict[str, str]] = {
             cat: {} for cat in MemoryCategory
         }
+        self._search_cache: dict[tuple, list[MemoryEntry]] = {}
         self._load_all()
 
     def _get_category_file(self, category: MemoryCategory) -> Path:
@@ -92,6 +93,7 @@ class MemoryStore:
             entry.updated_at = time.time()
             self._entries[entry.entry_id] = entry
             self._cat_key_index[entry.category][entry.key] = entry.entry_id
+            self._search_cache.clear()
             self._persist_category(entry.category)
 
             # Optional bridge to Mark-LVII legacy long_term.json
@@ -130,6 +132,7 @@ class MemoryStore:
             if not entry:
                 return False
             self._cat_key_index.get(entry.category, {}).pop(entry.key, None)
+            self._search_cache.clear()
             self._persist_category(entry.category)
             return True
 
@@ -148,6 +151,7 @@ class MemoryStore:
                     setattr(entry, k, v)
 
             entry.updated_at = time.time()
+            self._search_cache.clear()
 
             # Handle index updates if category or key changed
             if entry.category != old_category or entry.key != old_key:
@@ -170,7 +174,19 @@ class MemoryStore:
         caller_role: str | None = None,
     ) -> list[MemoryEntry]:
         """Lexical search across memory entries with category, tag, and permission filtering."""
+        cache_key = (
+            query or "",
+            category.value if category else None,
+            tuple(sorted(tags)) if tags else None,
+            limit,
+            min_confidence,
+            caller_role,
+        )
+
         with self._lock:
+            if cache_key in self._search_cache:
+                return list(self._search_cache[cache_key])
+
             words = [w for w in re.split(r"[^\w]+", (query or "").lower()) if len(w) > 1]
             tag_set = {t.lower() for t in tags} if tags else None
 
@@ -229,7 +245,13 @@ class MemoryStore:
 
             # Sort by score descending, then by updated_at descending
             scored_entries.sort(key=lambda t: (t[0], t[1].updated_at), reverse=True)
-            return [entry for _, entry in scored_entries[:limit]]
+            results = [entry for _, entry in scored_entries[:limit]]
+
+            if len(self._search_cache) >= 128:
+                self._search_cache.clear()
+            self._search_cache[cache_key] = results
+
+            return list(results)
 
     def list_all(self, limit: int = 100) -> list[MemoryEntry]:
         """Return all memories across categories sorted by recency."""

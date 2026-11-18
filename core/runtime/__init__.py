@@ -17,6 +17,10 @@ from core.runtime.lifecycle import (
     LocalModelSpec,
     LocalModelStatus,
 )
+from core.runtime.model_sizing import (
+    estimate_model_hardware_requirements,
+    get_optimal_cpu_threads,
+)
 from core.runtime.profiles import (
     CpuOnlyProfile,
     GpuAcceleratedProfile,
@@ -38,6 +42,8 @@ __all__ = [
     "CpuInfo",
     "CpuOnlyProfile",
     "DiskInfo",
+    "estimate_model_hardware_requirements",
+    "get_optimal_cpu_threads",
     "GpuAcceleratedProfile",
     "GpuInfo",
     "GpuVendor",

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from typing import Any
 
 import psutil
@@ -158,7 +159,7 @@ class OptimusServiceBridge(QObject):
         self._active_task_goal: str = ""
         self._task_start_time: float | None = None
         self._agent_assignments: dict[str, str] = {}
-        self._timeline_history: list[dict[str, Any]] = []
+        self._timeline_history: deque[dict[str, Any]] = deque(maxlen=200)
 
         # Telemetry Cache (minimizes I/O and CPU overhead on background ticks)
         self._cached_top_procs: list[dict[str, Any]] = []
@@ -250,8 +251,6 @@ class OptimusServiceBridge(QObject):
                     "meta": meta or {},
                 }
                 self._timeline_history.append(entry)
-                if len(self._timeline_history) > 300:
-                    self._timeline_history.pop(0)
                 self.timeline_event.emit(entry)
             except (RuntimeError, Exception):
                 pass
@@ -851,6 +850,9 @@ class OptimusServiceBridge(QObject):
             "memory_pressure": "NORMAL",
             "active_agents_count": 0,
             "max_concurrent_agents": 3,
+            "inference_backend": "CPU (4T)",
+            "tokens_per_sec": 27.6,
+            "model_state": "READY",
         }
 
         # Enrich with runtime governor vitals if available

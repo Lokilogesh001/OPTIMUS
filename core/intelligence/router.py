@@ -169,6 +169,12 @@ class ModelRouter:
         attempted_models: list[str] = []
 
         for candidate in candidate_chain:
+            provider = self._find_provider_for_model(candidate)
+            if provider and hasattr(provider, "circuit_breaker"):
+                if not provider.circuit_breaker.allow_request():
+                    logger.info("Fast-skipping candidate '%s' due to OPEN circuit breaker on '%s'", candidate.model_id, provider.name)
+                    continue
+
             attempted_models.append(candidate.model_id)
             try:
                 # Dispatch execution to provider

@@ -7,6 +7,8 @@ the Central Orchestrator, and Mark-LVII desktop/voice interfaces.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -27,6 +29,45 @@ from core.intelligence.types import (
 logger = logging.getLogger("optimus.intelligence.gateway")
 
 
+class ProviderHealthCache:
+    """Thread-safe TTL cache for provider health checks to prevent redundant network I/O."""
+
+    def __init__(self, ttl_seconds: float = 60.0) -> None:
+        self.ttl_seconds = ttl_seconds
+        self._cache: dict[str, tuple[bool, float]] = {}
+        self._lock = threading.Lock()
+
+    def get_health(self, provider: ModelProvider, force_refresh: bool = False) -> bool:
+        """Check provider health using cached result if fresh, or perform health check."""
+        # Fast path: If circuit breaker is OPEN, provider is unhealthy without network check
+        if hasattr(provider, "circuit_breaker") and provider.circuit_breaker.state.value == "OPEN":
+            return False
+
+        now = time.time()
+        with self._lock:
+            if not force_refresh and provider.name in self._cache:
+                status, timestamp = self._cache[provider.name]
+                if now - timestamp < self.ttl_seconds:
+                    return status
+
+        try:
+            status = provider.health_check()
+        except Exception:
+            status = False
+
+        with self._lock:
+            self._cache[provider.name] = (status, now)
+        return status
+
+    def invalidate(self, provider_name: str | None = None) -> None:
+        """Clear cache for a specific provider or all providers."""
+        with self._lock:
+            if provider_name:
+                self._cache.pop(provider_name, None)
+            else:
+                self._cache.clear()
+
+
 class IntelligenceGateway:
     """The central unified model and intelligence gateway for OPTIMUS."""
 
@@ -38,6 +79,7 @@ class IntelligenceGateway:
     ) -> None:
         self.registry = registry or ModelRegistry()
         self.router = router or ModelRouter(self.registry, default_policy=policy)
+        self.health_cache = ProviderHealthCache(ttl_seconds=60.0)
 
     @classmethod
     def instance(cls) -> IntelligenceGateway:
@@ -64,7 +106,7 @@ class IntelligenceGateway:
         return self.router.execute_with_fallback(request, _execute)
 
     def stream(self, request: ModelRequest) -> Iterator[StreamChunk]:
-        """Stream response tokens from the selected model candidate."""
+        """Stream response tokens from the selected model candidate with safe stream cleanup."""
         candidates = self.router.select_models(request)
         if not candidates:
             raise NoAvailableModelError("No eligible model found for streaming.")
@@ -86,7 +128,16 @@ class IntelligenceGateway:
             stream=True,
             timeout_seconds=request.timeout_seconds,
         )
-        yield from provider.stream(req_copy)
+        stream_iter = provider.stream(req_copy)
+        try:
+            for chunk in stream_iter:
+                yield chunk
+        finally:
+            if hasattr(stream_iter, "close"):
+                try:
+                    stream_iter.close()
+                except Exception:
+                    pass
 
     def ask(
         self,
@@ -175,11 +226,15 @@ class IntelligenceGateway:
                 return provider
         return None
 
-    def health_summary(self, fast: bool = True) -> dict[str, Any]:
+    def health_summary(self, fast: bool = True, force_refresh: bool = False) -> dict[str, Any]:
         """Return end-to-end health check of all providers and routing policies."""
         provider_health = {}
         for p in self.registry.list_providers():
-            is_healthy = (p.circuit_breaker.state.value != "OPEN") if fast else p.health_check()
+            if fast:
+                is_healthy = (p.circuit_breaker.state.value != "OPEN")
+            else:
+                is_healthy = self.health_cache.get_health(p, force_refresh=force_refresh)
+
             provider_health[p.name] = {
                 "type": p.provider_type.value,
                 "is_local": p.is_local,

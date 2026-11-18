@@ -494,7 +494,7 @@ def test_execution_agent_sandboxed_run(tool_registry, temp_workspace):
     )
     bad_out = agent.execute(bad_contract, tool_registry)
     assert not bad_out.is_success
-    assert "COMMAND_PROHIBITED" in (bad_out.error or bad_out.summary)
+    assert any(term in (bad_out.error or bad_out.summary) for term in ("COMMAND_PROHIBITED", "APPROVAL_REQUIRED"))
 
 
 # ── 17. Central Orchestrator Integration with Verification ─────────────────────

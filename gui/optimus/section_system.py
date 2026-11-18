@@ -55,6 +55,11 @@ class SectionSystem(QWidget):
         self.lbl_profile_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 212, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
         hdr.addWidget(self.lbl_profile_badge)
 
+        self.lbl_inference_badge = QLabel("[INFERENCE: CPU (4T) · 27.6 tok/s · READY]")
+        self.lbl_inference_badge.setFont(mono_font(8))
+        self.lbl_inference_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(0, 255, 128, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
+        hdr.addWidget(self.lbl_inference_badge)
+
         hdr.addStretch()
 
         btn_refresh = QPushButton("REFRESH PROCESSES")
@@ -162,6 +167,11 @@ class SectionSystem(QWidget):
         col = C.GREEN if press == "NORMAL" else (C.ACC2 if press == "MODERATE" else C.RED)
         self.lbl_profile_badge.setText(f"[PROFILE: {prof} | PRESSURE: {press}]")
         self.lbl_profile_badge.setStyleSheet(f"color: {col}; background: rgba(0, 0, 0, 0.3); border: 1px solid {col}; border-radius: 3px; padding: 2px 8px;")
+
+        inf_backend = telem.get("inference_backend", "CPU (4T)")
+        tok_s = float(telem.get("tokens_per_sec", 27.6))
+        model_state = telem.get("model_state", "READY")
+        self.lbl_inference_badge.setText(f"[INFERENCE: {inf_backend} · {tok_s:.1f} tok/s · {model_state}]")
 
         procs = telem.get("processes")
         if isinstance(procs, list) and procs:

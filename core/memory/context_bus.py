@@ -196,7 +196,7 @@ class SharedContextBus:
             # 3. Working notes
             working_notes = list(task_ctx.get("working_notes", []))
 
-            # 4. Relevant semantic facts (scoped search matching subtask keywords)
+            # 4. Relevant semantic facts (scoped search matching subtask keywords + deduplication)
             semantic_entries = self.store.search(
                 query=f"{subtask_title} {subtask_description}",
                 category=MemoryCategory.SEMANTIC,
@@ -204,10 +204,18 @@ class SharedContextBus:
                 min_confidence=0.8,
                 caller_role=agent_name,
             )
-            semantic_facts = [
-                {"key": e.key, "fact": e.content, "source": e.source}
-                for e in semantic_entries
-            ]
+            semantic_facts = []
+            seen_keys: set[str] = set()
+            for e in semantic_entries:
+                if e.key in seen_keys:
+                    continue
+                seen_keys.add(e.key)
+                # Deduplicate if content already present in prerequisite outputs
+                if any(e.content in str(v.get("output", "")) for v in prereq_results.values()):
+                    continue
+                # Budget character length per fact
+                truncated_fact = e.content[:1500] + ("... [truncated]" if len(e.content) > 1500 else "")
+                semantic_facts.append({"key": e.key, "fact": truncated_fact, "source": e.source})
 
             # 5. Relevant procedural hints (e.g. calculation formats, file conventions)
             proc_entries = self.store.search(
@@ -216,7 +224,7 @@ class SharedContextBus:
                 limit=2,
                 caller_role=agent_name,
             )
-            procedural_hints = [e.content for e in proc_entries]
+            procedural_hints = [e.content[:800] for e in proc_entries]
 
             return ContextEnvelope(
                 task_id=task_id,

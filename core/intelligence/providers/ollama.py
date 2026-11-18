@@ -84,12 +84,16 @@ class OllamaProvider(ModelProvider):
             model_name = req.preferred_model or "llama3.2:latest"
             url = f"{self.base_url}/api/chat"
 
+            from core.runtime.model_sizing import get_optimal_cpu_threads
+            optimal_threads = get_optimal_cpu_threads()
+
             payload: dict[str, Any] = {
                 "model": model_name,
                 "messages": self._convert_messages(req.messages),
                 "stream": False,
                 "options": {
                     "temperature": req.temperature,
+                    "num_thread": optimal_threads,
                 },
             }
             if req.max_tokens:
@@ -157,11 +161,17 @@ class OllamaProvider(ModelProvider):
         """Stream chunks from Ollama endpoint."""
         model_name = request.preferred_model or "llama3.2:latest"
         url = f"{self.base_url}/api/chat"
+        from core.runtime.model_sizing import get_optimal_cpu_threads
+        optimal_threads = get_optimal_cpu_threads()
+
         payload = {
             "model": model_name,
             "messages": self._convert_messages(request.messages),
             "stream": True,
-            "options": {"temperature": request.temperature},
+            "options": {
+                "temperature": request.temperature,
+                "num_thread": optimal_threads,
+            },
         }
         if request.response_schema:
             payload["format"] = "json"

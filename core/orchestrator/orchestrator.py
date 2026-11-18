@@ -10,7 +10,9 @@ Implements the modular hybrid hierarchical orchestrator:
 
 from __future__ import annotations
 
+import ast
 import json
+import operator
 import re
 import threading
 import time
@@ -44,6 +46,41 @@ from core.orchestrator.runtime import (
     new_task_id,
 )
 from core.orchestrator.tools import ToolRegistry, ToolResult
+
+
+_SAFE_MATH_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+
+def _safe_eval_math(node: ast.AST) -> float | int:
+    """Safely evaluate mathematical expressions using AST inspection without eval()."""
+    if isinstance(node, ast.Expression):
+        return _safe_eval_math(node.body)
+    elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    elif isinstance(node, ast.BinOp):
+        left = _safe_eval_math(node.left)
+        right = _safe_eval_math(node.right)
+        op_type = type(node.op)
+        if op_type in _SAFE_MATH_OPS:
+            return _SAFE_MATH_OPS[op_type](left, right)
+        raise ValueError(f"Unsupported operator: {op_type}")
+    elif isinstance(node, ast.UnaryOp):
+        operand = _safe_eval_math(node.operand)
+        op_type = type(node.op)
+        if op_type in _SAFE_MATH_OPS:
+            return _SAFE_MATH_OPS[op_type](operand)
+        raise ValueError(f"Unsupported unary operator: {op_type}")
+    raise ValueError("Invalid mathematical expression structure")
 
 
 class CentralOrchestrator:
@@ -81,6 +118,75 @@ class CentralOrchestrator:
         self._lock = threading.RLock()
         self._active_workers: dict[str, threading.Thread] = {}
         self._cancelled_tasks: set[str] = set()
+
+    # ── Fast-Path Deterministic Execution ────────────────────────────────────
+
+    def _try_fast_path(self, goal: str, task_id: str) -> tuple[bool, str, str, list[dict[str, Any]]] | None:
+        """Attempt instantaneous deterministic execution without invoking LLM planning or model calls.
+        
+        Supports:
+        - Pure arithmetic calculations (e.g., 'calculate 42 * 17', 'compute 100 / 5', '2 + 2')
+        - Direct file reads / cat (e.g., 'read file notes.txt', 'cat README.md')
+        - Direct status / ping queries (e.g., 'ping', 'echo hello', 'system status')
+        """
+        stripped = goal.strip()
+        lower = stripped.lower()
+
+        # 1. Echo / Ping
+        if lower == "ping":
+            return True, "pong (OPTIMUS runtime responsive)", "system_diagnosis", []
+        
+        echo_match = re.match(r"^echo\s+(.*)$", stripped, re.IGNORECASE)
+        if echo_match:
+            return True, echo_match.group(1), "general", []
+
+        # 2. System Status / Vitals
+        if lower in ("system status", "health check", "ping system", "hardware status"):
+            try:
+                from core.runtime.resources import AdaptiveResourceManager
+                vitals = AdaptiveResourceManager.instance().get_vitals()
+                summary = (
+                    f"OPTIMUS System Status: Profile={vitals.get('profile')}, "
+                    f"Pressure={vitals.get('memory_pressure')}, "
+                    f"RAM Free={vitals.get('free_ram_mb')}MB, "
+                    f"CPU Used={vitals.get('cpu_percent')}%"
+                )
+                return True, summary, "system_diagnosis", []
+            except Exception:
+                pass
+
+        # 3. Arithmetic calculations
+        math_expr = None
+        calc_match = re.match(r"^(?:calculate|compute|what is|eval|math:?)\s+([0-9\.\s\+\-\*\/\(\)\%\^]+)\s*\??$", stripped, re.IGNORECASE)
+        if calc_match:
+            math_expr = calc_match.group(1).strip()
+        elif re.match(r"^[0-9\.\s\+\-\*\/\(\)\%\^]+$", stripped) and any(c in stripped for c in "+-*/^%"):
+            math_expr = stripped
+
+        if math_expr:
+            try:
+                parsed = ast.parse(math_expr.replace("^", "**"), mode="eval")
+                res = _safe_eval_math(parsed)
+                formatted_res = int(res) if isinstance(res, float) and res.is_integer() else res
+                return True, f"Calculation result: {formatted_res}", "general", []
+            except Exception:
+                pass
+
+        # 4. Direct File Reads (within allowed roots)
+        read_match = re.match(r"^(?:read|cat|view|inspect)\s+(?:file\s+)?([a-zA-Z0-9_\-\.\/\\]+)$", stripped, re.IGNORECASE)
+        if read_match:
+            file_name = read_match.group(1)
+            for root_dir in self.allowed_roots:
+                candidate = (Path(root_dir) / file_name).resolve()
+                try:
+                    candidate.relative_to(Path(root_dir).resolve())
+                    if candidate.is_file():
+                        content = candidate.read_text(encoding="utf-8", errors="replace")[:4000]
+                        return True, f"File {candidate.name}:\n{content}", "filesystem", []
+                except Exception:
+                    continue
+
+        return None
 
     # ── Model Access Bridge ──────────────────────────────────────────────────
 
@@ -565,6 +671,88 @@ class CentralOrchestrator:
 
             # 0. Initialize Task Context Isolation on Context Bus
             self.memory_manager.context_bus.isolate_task(t_id)
+
+            # 0b. Deterministic Fast-Path Evaluation (< 5ms latency, zero LLM tokens)
+            fast_res = self._try_fast_path(goal, t_id)
+            if fast_res is not None:
+                success, summary, agent_name, side_effects = fast_res
+                plan_id = f"plan_{uuid.uuid4().hex[:8]}"
+                fast_subtask = Subtask(
+                    subtask_id=new_subtask_id(t_id, 1),
+                    task_id=t_id,
+                    index=1,
+                    title="Deterministic Fast-Path",
+                    description=goal,
+                    assigned_agent=agent_name,
+                    allowed_tools=[],
+                )
+                fast_plan = ExecutionPlan(
+                    plan_id=plan_id,
+                    task_id=t_id,
+                    goal=goal,
+                    subtasks=[fast_subtask],
+                    is_completed=True,
+                )
+                task.plan = fast_plan
+
+                self.event_bus.publish(PlanCreatedEvent(
+                    task_id=t_id,
+                    plan_id=plan_id,
+                    goal=goal,
+                    subtask_count=1,
+                    subtasks=[fast_subtask.to_dict()],
+                ))
+                self.event_bus.publish(SubtaskDelegatedEvent(
+                    task_id=t_id,
+                    subtask_id=fast_subtask.subtask_id,
+                    subtask_index=1,
+                    assigned_agent=agent_name,
+                    title=fast_subtask.title,
+                    allowed_tools=[],
+                ))
+                fast_subtask.status = SubtaskStatus.COMPLETED
+                fast_subtask.output_summary = summary
+                fast_subtask.verification_verdict = "VERIFIED_DETERMINISTIC"
+
+                self.event_bus.publish(SubtaskVerifiedEvent(
+                    task_id=t_id,
+                    subtask_id=fast_subtask.subtask_id,
+                    agent_name=agent_name,
+                    is_verified=True,
+                    verdict="VERIFIED_DETERMINISTIC",
+                    evidence={},
+                ))
+                self.event_bus.publish(SubtaskCompletedEvent(
+                    task_id=t_id,
+                    subtask_id=fast_subtask.subtask_id,
+                    agent_name=agent_name,
+                    output_summary=summary,
+                ))
+
+                now_finish = time.time()
+                task.status = TaskStatus.COMPLETED
+                task.finished_at = now_finish
+                task.duration_seconds = round(now_finish - task.started_at, 4)
+                task.result = summary
+                self.task_store.save_task(task)
+
+                self.memory_manager.context_bus.publish_subtask_output(
+                    task_id=t_id,
+                    subtask_id=fast_subtask.subtask_id,
+                    agent_name=agent_name,
+                    key="step_1",
+                    output=summary,
+                    is_verified=True,
+                    verification_verdict="VERIFIED_DETERMINISTIC",
+                )
+
+                self.event_bus.publish(TaskCompletedEvent(
+                    task_id=t_id,
+                    goal=goal,
+                    result=summary,
+                    duration_seconds=task.duration_seconds,
+                ))
+                return task
 
             # 1. Formulate Plan
             plan = self.plan(goal, t_id)
