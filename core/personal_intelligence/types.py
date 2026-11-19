@@ -31,7 +31,9 @@ class AuthStatus(str, Enum):
     CONNECTED = "CONNECTED"
     EXPIRED = "EXPIRED"
     DISCONNECTED = "DISCONNECTED"
+    DISCONNECTED_LOCAL_ONLY = "DISCONNECTED_LOCAL_ONLY"
     REVOKED = "REVOKED"
+    REVOKED_REMOTE_VERIFIED = "REVOKED_REMOTE_VERIFIED"
     ERROR = "ERROR"
 
 
@@ -462,6 +464,7 @@ class Commitment:
     status: CommitmentStatus = CommitmentStatus.OPEN
     source_ref: SourceReference | None = None
     created_at: float = field(default_factory=time.time)
+    dedup_key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -474,6 +477,7 @@ class Commitment:
             "status": self.status.value if isinstance(self.status, CommitmentStatus) else str(self.status),
             "source_ref": self.source_ref.to_dict() if self.source_ref else None,
             "created_at": self.created_at,
+            "dedup_key": self.dedup_key,
         }
 
     @classmethod
@@ -496,6 +500,7 @@ class Commitment:
             status=st,
             source_ref=s_ref,
             created_at=float(data.get("created_at", time.time())),
+            dedup_key=str(data.get("dedup_key", "")),
         )
 
 

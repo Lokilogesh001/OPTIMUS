@@ -13,11 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from core.orchestrator.tools import _TIER_RANK, CapabilityTier
@@ -122,7 +124,7 @@ IMMUTABLE_DENY_PATTERNS: list[tuple[str, re.Pattern]] = [
 PRIVILEGED_APPROVAL_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Privilege escalation", re.compile(r"(sudo\s+|su\s+-|runas\s+/user:)", re.IGNORECASE)),
     ("Credential dump", re.compile(r"(dump_credentials|mimikatz|sekurlsa|samdump)", re.IGNORECASE)),
-    ("Personal communication mutation", re.compile(r"^(send_email|delete_email|delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|send_whatsapp_message|purge_personal_store)$", re.IGNORECASE)),
+    ("Personal communication mutation", re.compile(r"^(send_email|delete_email|delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|send_whatsapp_message|purge_personal_store|wipe_personal_data|wipe_all_data|disconnect_account|revoke_account|delete_account)$", re.IGNORECASE)),
 ]
 
 
@@ -131,10 +133,71 @@ class PolicyEngine:
 
     _instance: PolicyEngine | None = None
 
-    def __init__(self, permission_manager: PermissionManager | None = None) -> None:
+    def __init__(
+        self,
+        permission_manager: PermissionManager | None = None,
+        journal_path: Path | str | None = None,
+    ) -> None:
         self.permission_manager = permission_manager or PermissionManager.instance()
         self._consumed_nonces: set[str] = set()
         self._lock = threading.RLock()
+        if journal_path:
+            self.journal_path = Path(journal_path)
+        else:
+            self.journal_path = Path.cwd() / "memory" / "security" / "consumed_nonces.journal"
+        self.journal_path.parent.mkdir(parents=True, exist_ok=True)
+        self.journal_lock_path = self.journal_path.with_name(".nonces.lock")
+        self._load_journal()
+
+    def _load_journal(self) -> None:
+        """Hydrate consumed nonces from append-only journal on disk and compact expired entries."""
+        if not self.journal_path.is_file():
+            return
+        try:
+            now = time.time()
+            cutoff = now - 86400.0  # Retain 24 hours of nonces
+            active_lines = []
+            for line in self.journal_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parts = line.split(":")
+                    nonce = parts[0]
+                    self._consumed_nonces.add(nonce)
+                    if len(parts) >= 3:
+                        try:
+                            ts = float(parts[2])
+                            if ts >= cutoff:
+                                active_lines.append(line)
+                        except ValueError:
+                            active_lines.append(line)
+                    else:
+                        active_lines.append(line)
+
+            # Compact if journal contains accumulated stale records
+            if len(self._consumed_nonces) > 200 and len(active_lines) < len(self._consumed_nonces) // 2:
+                with open(self.journal_lock_path, "a+b") as lf:
+                    try:
+                        if os.name == "nt":
+                            import msvcrt
+                            lf.seek(0)
+                            msvcrt.locking(lf.fileno(), msvcrt.LK_LOCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                        self.journal_path.write_text("\n".join(active_lines) + "\n", encoding="utf-8")
+                    finally:
+                        try:
+                            if os.name == "nt":
+                                import msvcrt
+                                lf.seek(0)
+                                msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
+                            else:
+                                import fcntl
+                                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                        except OSError:
+                            pass
+        except Exception as ex:
+            logger.warning("Failed loading nonces journal: %s", ex)
 
     @classmethod
     def instance(cls) -> PolicyEngine:
@@ -178,7 +241,41 @@ class PolicyEngine:
     def is_nonce_consumed(self, nonce: str) -> bool:
         """Check if a token nonce has already been consumed."""
         with self._lock:
+            if nonce in self._consumed_nonces:
+                return True
+            self._load_journal()
             return nonce in self._consumed_nonces
+
+    def _consume_nonce(self, token: ApprovalToken) -> None:
+        """Atomically persist consumed nonce to journal under inter-process lock."""
+        with self._lock:
+            self._consumed_nonces.add(token.nonce)
+            try:
+                with open(self.journal_lock_path, "a+b") as lf:
+                    try:
+                        if os.name == "nt":
+                            import msvcrt
+                            lf.seek(0)
+                            msvcrt.locking(lf.fileno(), msvcrt.LK_LOCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                        with open(self.journal_path, "a", encoding="utf-8") as jf:
+                            jf.write(f"{token.nonce}:{token.token_id}:{int(time.time())}\n")
+                            jf.flush()
+                    finally:
+                        try:
+                            if os.name == "nt":
+                                import msvcrt
+                                lf.seek(0)
+                                msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
+                            else:
+                                import fcntl
+                                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                        except OSError:
+                            pass
+            except Exception as ex:
+                logger.warning("Failed writing consumed nonce to journal: %s", ex)
 
     def evaluate_operation(self, request: OperationRequest) -> PolicyVerdict:
         """Authoritatively evaluate an OperationRequest through the 4-step security pipeline.
@@ -229,7 +326,7 @@ class PolicyEngine:
                         reason="APPROVAL_TOKEN_EXPIRED: The supplied approval token has expired.",
                     )
 
-                if token.nonce in self._consumed_nonces:
+                if self.is_nonce_consumed(token.nonce):
                     return PolicyVerdict(
                         is_authorized=False,
                         requires_approval=True,
@@ -245,7 +342,7 @@ class PolicyEngine:
                     )
 
                 # Atomically consume token
-                self._consumed_nonces.add(token.nonce)
+                self._consume_nonce(token)
                 logger.info(
                     "ApprovalToken '%s' atomically consumed for tool '%s' by agent '%s'.",
                     token.token_id, tool_name, request.agent_name,

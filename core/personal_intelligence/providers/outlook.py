@@ -19,6 +19,7 @@ from typing import Any
 
 from core.personal_intelligence.providers.base import (
     BaseProviderAdapter,
+    oauth_refresh_lock,
     safe_parse_json,
 )
 from core.personal_intelligence.types import (
@@ -64,11 +65,12 @@ class OutlookAdapter(BaseProviderAdapter):
         return True
 
     def refresh_token_if_needed(self) -> bool:
-        token = self._get_access_token()
-        if not token:
-            self.account.auth_status = AuthStatus.EXPIRED
-            return False
-        return True
+        with oauth_refresh_lock(self.account.account_id):
+            token = self._get_access_token()
+            if not token:
+                self.account.auth_status = AuthStatus.EXPIRED
+                return False
+            return True
 
     def check_health(self) -> dict[str, Any]:
         token = self._get_access_token()
@@ -225,7 +227,21 @@ class OutlookAdapter(BaseProviderAdapter):
         return [], [], cursor
 
     def revoke(self) -> bool:
-        self.account.auth_status = AuthStatus.REVOKED
+        remote_ok = False
+        token = self._get_access_token()
+        if token and self.http_client and hasattr(self.http_client, "post"):
+            try:
+                resp = self.http_client.post("https://login.microsoftonline.com/common/oauth2/v2.0/logout")
+                if getattr(resp, "status_code", 0) == 200:
+                    remote_ok = True
+            except Exception as ex:
+                logger.warning("Microsoft revocation failed for %s: %s", self.account.account_id, ex)
+
+        if remote_ok:
+            self.account.auth_status = AuthStatus.REVOKED_REMOTE_VERIFIED
+        else:
+            self.account.auth_status = AuthStatus.DISCONNECTED_LOCAL_ONLY
+
         store_credential(f"outlook_{self.account.account_id}_token", "")
         store_credential(f"outlook_{self.account.account_id}_refresh", "")
         return True

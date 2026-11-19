@@ -56,7 +56,7 @@ class CredentialVault:
             salt = os.urandom(16)
             self.salt_file.write_bytes(salt)
 
-        machine_seed = f"{getpass.getuser()}-{platform.node()}-{platform.machine()}".encode("utf-8")
+        machine_seed = f"{getpass.getuser()}-{platform.node()}-{platform.machine()}".encode()
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -109,10 +109,9 @@ _fallback_vault = CredentialVault()
 
 def store_credential(provider: str, secret: str) -> bool:
     """Store an API credential securely in OS Keyring with encrypted vault fallback."""
-    if not secret:
-        return False
-
     provider_clean = provider.strip().lower()
+    if not secret:
+        return delete_credential(provider_clean)
 
     # 1. Try OS Keyring
     try:

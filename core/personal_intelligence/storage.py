@@ -1,12 +1,14 @@
-"""core/personal_intelligence/storage.py — Local-First Atomic Persistent Store for Personal Intelligence.
+"""core/personal_intelligence/storage.py — Multiprocess-Safe Encrypted Persistent Store.
 
 Implements:
-- Thread-safe multi-category storage under `memory/personal/`.
-- Atomic JSON file writing via tempfile replace with exponential backoff on Windows.
-- Multi-tenant stream cursor management in `sync_state.json` (resolving HIGH-03).
-- In-memory indices for sub-millisecond retrieval (resolving HIGH-04).
-- Idempotent deduplication check via `has_message` (resolving MED-03).
-- Complete provider data wipe and total storage purge routines.
+- Thread-safe and multiprocess-safe multi-category storage under `memory/personal/`.
+- AES-256-GCM authenticated encryption at rest via PersonalStoreCrypto with AAD.
+- OS-level category file locking (.locks/<category>.lock) preventing lost updates.
+- Read-modify-write `mutate_*` patterns ensuring cross-process data integrity.
+- Multi-tenant stream cursor management in `sync_state.json`.
+- Idempotent deduplication for tasks (`find_duplicate_task`) and commitments (`find_duplicate_commitment`).
+- Non-destructive plaintext-to-ciphertext migration with strict downgrade enforcement.
+- Safe tempfile atomic replacements and orphaned tempfile sweeps.
 """
 
 from __future__ import annotations
@@ -19,9 +21,15 @@ import secrets
 import shutil
 import threading
 import time
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from core.personal_intelligence.crypto import (
+    PersonalStoreCrypto,
+    SecurityIntegrityError,
+)
 from core.personal_intelligence.types import (
     Account,
     Commitment,
@@ -36,12 +44,20 @@ from core.personal_intelligence.types import (
 
 logger = logging.getLogger("optimus.personal.storage")
 
+_thread_local = threading.local()
+
+
+def _get_held_locks() -> set[str]:
+    """Retrieve the set of category lock keys currently held by the active thread."""
+    if not hasattr(_thread_local, "held_locks"):
+        _thread_local.held_locks = set()
+    return _thread_local.held_locks
+
 
 def mask_pii_string(text: str) -> str:
-    """Mask email addresses and sensitive identifiers in log outputs (resolving LOW-01)."""
+    """Mask email addresses and sensitive identifiers in log outputs."""
     if not text:
         return ""
-    # Mask email patterns: j***@domain.com
     return re.sub(
         r"([a-zA-Z0-9_.+-])[a-zA-Z0-9_.+-]*@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
         r"\1***@\2",
@@ -49,10 +65,10 @@ def mask_pii_string(text: str) -> str:
     )
 
 
-def _atomic_write_json(target_path: Path, data: Any, max_retries: int = 5) -> None:
+def _atomic_write_json(target_path: Path, data: Any, max_retries: int = 6) -> None:
     """Write data to target_path atomically using a per-write temp file with Windows backoff."""
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target_path.with_name(f"{target_path.name}.{os.getpid()}.{secrets.token_hex(3)}.tmp")
+    temp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     text = json.dumps(data, indent=2, ensure_ascii=False)
     temp_path.write_text(text, encoding="utf-8")
 
@@ -74,12 +90,16 @@ def _atomic_write_json(target_path: Path, data: Any, max_retries: int = 5) -> No
 
 
 class PersonalStore:
-    """Thread-safe, local-first persistent data repository for all personal intelligence entities."""
+    """Multiprocess-safe, local-first encrypted persistent repository for personal intelligence."""
 
     _instance: PersonalStore | None = None
     _singleton_lock = threading.Lock()
 
-    def __init__(self, root_dir: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        root_dir: Path | str | None = None,
+        crypto: PersonalStoreCrypto | None = None,
+    ) -> None:
         if root_dir:
             self.root = Path(root_dir)
         else:
@@ -88,8 +108,12 @@ class PersonalStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self.messages_dir = self.root / "messages"
         self.messages_dir.mkdir(parents=True, exist_ok=True)
+        self.locks_dir = self.root / ".locks"
+        self.locks_dir.mkdir(parents=True, exist_ok=True)
 
         self._lock = threading.RLock()
+        self._crypto = crypto or PersonalStoreCrypto.instance()
+        self._enforce_sentinel = self.root / ".encryption_enforced"
 
         # In-memory entity registries
         self._accounts: dict[str, Account] = {}
@@ -101,6 +125,7 @@ class PersonalStore:
         self._conversations: dict[str, Conversation] = {}
         self._sync_state: dict[str, Any] = {"accounts": {}}
 
+        self._cleanup_orphaned_tmp_files()
         self._load_all()
 
     @classmethod
@@ -111,6 +136,135 @@ class PersonalStore:
                 cls._instance = cls(root_dir)
             return cls._instance
 
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset singleton instance (useful in test harnesses)."""
+        with cls._singleton_lock:
+            cls._instance = None
+
+    # ── Inter-Process Category File Locking ───────────────────────────────────
+
+    @contextmanager
+    def lock_category(self, category: str, timeout: float = 10.0) -> Generator[None, None, None]:
+        """Acquire an exclusive OS-level inter-process lock on an entity category."""
+        held = _get_held_locks()
+        if category in held:
+            yield
+            return
+
+        lock_path = self.locks_dir / f"{category}.lock"
+        with open(lock_path, "a+b") as f:
+            start = time.perf_counter()
+            acquired = False
+            try:
+                while True:
+                    try:
+                        if os.name == "nt":
+                            import msvcrt
+                            f.seek(0)
+                            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        acquired = True
+                        held.add(category)
+                        break
+                    except (OSError, PermissionError):
+                        if (time.perf_counter() - start) >= timeout:
+                            raise TimeoutError(
+                                f"Timed out waiting for file lock on category '{category}' after {timeout:.1f}s"
+                            ) from None
+                        time.sleep(0.01 + (secrets.randbelow(15) / 1000.0))
+                yield
+            finally:
+                if acquired:
+                    held.discard(category)
+                    try:
+                        if os.name == "nt":
+                            import msvcrt
+                            f.seek(0)
+                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+
+    # ── Encryption & Persistence Helpers ──────────────────────────────────────
+
+    def is_encryption_enforced(self) -> bool:
+        """Check if unencrypted legacy data is strictly rejected."""
+        return self._enforce_sentinel.exists()
+
+    def enforce_encryption(self) -> None:
+        """Mark store as encryption-enforced, rejecting unauthenticated plaintext reads."""
+        self._enforce_sentinel.write_text("enforced=true\n", encoding="utf-8")
+
+    def _read_encrypted_or_plaintext(
+        self,
+        path: Path,
+        expected_entity_type: str,
+        expected_record_id: str | None = None,
+        expected_account_id: str | None = None,
+    ) -> Any:
+        """Read file, authenticating and decrypting if encrypted, or parsing plaintext if allowed."""
+        if not path.is_file():
+            return None
+
+        raw_text = path.read_text(encoding="utf-8")
+        data = json.loads(raw_text)
+
+        if PersonalStoreCrypto.is_encrypted_envelope(data):
+            return self._crypto.decrypt_data(
+                envelope=data,
+                expected_entity_type=expected_entity_type,
+                expected_record_id=expected_record_id,
+                expected_account_id=expected_account_id,
+            )
+
+        if self.is_encryption_enforced():
+            raise SecurityIntegrityError(
+                f"Plaintext data found for {path.name} while encryption is strictly enforced."
+            )
+
+        return data
+
+    def _atomic_write_encrypted(
+        self,
+        target_path: Path,
+        data: Any,
+        entity_type: str,
+        record_id: str = "default",
+        account_id: str = "global",
+    ) -> None:
+        """Encrypt and atomically write data to target path with AAD."""
+        envelope = self._crypto.encrypt_data(
+            plaintext_dict=data,
+            entity_type=entity_type,
+            record_id=record_id,
+            account_id=account_id,
+        )
+        _atomic_write_json(target_path, envelope)
+
+    def _cleanup_orphaned_tmp_files(self, max_age_seconds: float = 300.0) -> int:
+        """Sweep and delete abandoned temporary files from crashes or interrupted writes."""
+        now = time.time()
+        cleaned = 0
+        search_dirs = [self.root, self.messages_dir, self.locks_dir]
+
+        for s_dir in search_dirs:
+            if not s_dir.exists():
+                continue
+            for item in list(s_dir.glob("*.tmp")) + list(s_dir.glob(".*.tmp")):
+                try:
+                    mtime = item.stat().st_mtime
+                    if (now - mtime) > max_age_seconds:
+                        item.unlink(missing_ok=True)
+                        cleaned += 1
+                except OSError:
+                    pass
+        return cleaned
+
     # ── Hydration from Disk ───────────────────────────────────────────────────
 
     def _load_all(self) -> None:
@@ -120,10 +274,17 @@ class PersonalStore:
             acc_file = self.root / "accounts.json"
             if acc_file.is_file():
                 try:
-                    raw = json.loads(acc_file.read_text(encoding="utf-8"))
-                    for item in raw:
-                        acc = Account.from_dict(item)
-                        self._accounts[acc.account_id] = acc
+                    raw = self._read_encrypted_or_plaintext(
+                        acc_file, expected_entity_type="accounts", expected_record_id="accounts"
+                    )
+                    if isinstance(raw, list):
+                        self._accounts = {
+                            acc.account_id: acc
+                            for item in raw
+                            if (acc := Account.from_dict(item))
+                        }
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading accounts: %s", ex)
 
@@ -131,10 +292,17 @@ class PersonalStore:
             task_file = self.root / "tasks.json"
             if task_file.is_file():
                 try:
-                    raw = json.loads(task_file.read_text(encoding="utf-8"))
-                    for item in raw:
-                        t = PersonalTask.from_dict(item)
-                        self._tasks[t.task_id] = t
+                    raw = self._read_encrypted_or_plaintext(
+                        task_file, expected_entity_type="tasks", expected_record_id="tasks"
+                    )
+                    if isinstance(raw, list):
+                        self._tasks = {
+                            t.task_id: t
+                            for item in raw
+                            if (t := PersonalTask.from_dict(item))
+                        }
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading tasks: %s", ex)
 
@@ -142,10 +310,17 @@ class PersonalStore:
             evt_file = self.root / "events.json"
             if evt_file.is_file():
                 try:
-                    raw = json.loads(evt_file.read_text(encoding="utf-8"))
-                    for item in raw:
-                        e = PersonalEvent.from_dict(item)
-                        self._events[e.event_id] = e
+                    raw = self._read_encrypted_or_plaintext(
+                        evt_file, expected_entity_type="events", expected_record_id="events"
+                    )
+                    if isinstance(raw, list):
+                        self._events = {
+                            e.event_id: e
+                            for item in raw
+                            if (e := PersonalEvent.from_dict(item))
+                        }
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading events: %s", ex)
 
@@ -153,10 +328,17 @@ class PersonalStore:
             com_file = self.root / "commitments.json"
             if com_file.is_file():
                 try:
-                    raw = json.loads(com_file.read_text(encoding="utf-8"))
-                    for item in raw:
-                        c = Commitment.from_dict(item)
-                        self._commitments[c.commitment_id] = c
+                    raw = self._read_encrypted_or_plaintext(
+                        com_file, expected_entity_type="commitments", expected_record_id="commitments"
+                    )
+                    if isinstance(raw, list):
+                        self._commitments = {
+                            c.commitment_id: c
+                            for item in raw
+                            if (c := Commitment.from_dict(item))
+                        }
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading commitments: %s", ex)
 
@@ -164,10 +346,17 @@ class PersonalStore:
             con_file = self.root / "contacts.json"
             if con_file.is_file():
                 try:
-                    raw = json.loads(con_file.read_text(encoding="utf-8"))
-                    for item in raw:
-                        con = PersonContact.from_dict(item)
-                        self._contacts[con.contact_id] = con
+                    raw = self._read_encrypted_or_plaintext(
+                        con_file, expected_entity_type="contacts", expected_record_id="contacts"
+                    )
+                    if isinstance(raw, list):
+                        self._contacts = {
+                            con.contact_id: con
+                            for item in raw
+                            if (con := PersonContact.from_dict(item))
+                        }
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading contacts: %s", ex)
 
@@ -175,7 +364,13 @@ class PersonalStore:
             sync_file = self.root / "sync_state.json"
             if sync_file.is_file():
                 try:
-                    self._sync_state = json.loads(sync_file.read_text(encoding="utf-8"))
+                    raw = self._read_encrypted_or_plaintext(
+                        sync_file, expected_entity_type="sync_state", expected_record_id="sync_state"
+                    )
+                    if isinstance(raw, dict):
+                        self._sync_state = raw
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.warning("Failed loading sync_state: %s", ex)
                     self._sync_state = {"accounts": {}}
@@ -183,20 +378,178 @@ class PersonalStore:
             # 7. Messages
             for m_path in self.messages_dir.glob("*.json"):
                 try:
-                    raw = json.loads(m_path.read_text(encoding="utf-8"))
-                    msg = Message.from_dict(raw)
-                    self._messages[msg.message_id] = msg
+                    raw = self._read_encrypted_or_plaintext(
+                        m_path,
+                        expected_entity_type="message",
+                        expected_record_id=m_path.stem,
+                    )
+                    if isinstance(raw, dict):
+                        msg = Message.from_dict(raw)
+                        self._messages[msg.message_id] = msg
+                except SecurityIntegrityError:
+                    raise
                 except Exception as ex:
                     logger.debug("Failed loading message %s: %s", m_path.name, ex)
+
+    # ── Multiprocess Mutate Helpers ──────────────────────────────────────────
+
+    def mutate_accounts(self, updater: Callable[[dict[str, Account]], None]) -> dict[str, Account]:
+        """Atomically reload accounts from disk under category lock, apply updater, and save."""
+        with self.lock_category("accounts"), self._lock:
+            acc_file = self.root / "accounts.json"
+            if acc_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        acc_file, expected_entity_type="accounts", expected_record_id="accounts"
+                    )
+                    if isinstance(raw, list):
+                        self._accounts = {
+                            acc.account_id: acc
+                            for item in raw
+                            if (acc := Account.from_dict(item))
+                        }
+                except Exception as ex:
+                    logger.warning("Failed reading accounts during mutate: %s", ex)
+
+            updater(self._accounts)
+            data = [acc.to_dict() for acc in self._accounts.values()]
+            self._atomic_write_encrypted(
+                acc_file, data, entity_type="accounts", record_id="accounts", account_id="global"
+            )
+            return dict(self._accounts)
+
+    def mutate_tasks(self, updater: Callable[[dict[str, PersonalTask]], None]) -> dict[str, PersonalTask]:
+        """Atomically reload tasks from disk under category lock, apply updater, and save."""
+        with self.lock_category("tasks"), self._lock:
+            task_file = self.root / "tasks.json"
+            if task_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        task_file, expected_entity_type="tasks", expected_record_id="tasks"
+                    )
+                    if isinstance(raw, list):
+                        self._tasks = {
+                            t.task_id: t
+                            for item in raw
+                            if (t := PersonalTask.from_dict(item))
+                        }
+                except Exception as ex:
+                    logger.warning("Failed reading tasks during mutate: %s", ex)
+
+            updater(self._tasks)
+            data = [t.to_dict() for t in self._tasks.values()]
+            self._atomic_write_encrypted(
+                task_file, data, entity_type="tasks", record_id="tasks", account_id="global"
+            )
+            return dict(self._tasks)
+
+    def mutate_events(self, updater: Callable[[dict[str, PersonalEvent]], None]) -> dict[str, PersonalEvent]:
+        """Atomically reload events from disk under category lock, apply updater, and save."""
+        with self.lock_category("events"), self._lock:
+            evt_file = self.root / "events.json"
+            if evt_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        evt_file, expected_entity_type="events", expected_record_id="events"
+                    )
+                    if isinstance(raw, list):
+                        self._events = {
+                            e.event_id: e
+                            for item in raw
+                            if (e := PersonalEvent.from_dict(item))
+                        }
+                except Exception as ex:
+                    logger.warning("Failed reading events during mutate: %s", ex)
+
+            updater(self._events)
+            data = [e.to_dict() for e in self._events.values()]
+            self._atomic_write_encrypted(
+                evt_file, data, entity_type="events", record_id="events", account_id="global"
+            )
+            return dict(self._events)
+
+    def mutate_commitments(self, updater: Callable[[dict[str, Commitment]], None]) -> dict[str, Commitment]:
+        """Atomically reload commitments from disk under category lock, apply updater, and save."""
+        with self.lock_category("commitments"), self._lock:
+            com_file = self.root / "commitments.json"
+            if com_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        com_file, expected_entity_type="commitments", expected_record_id="commitments"
+                    )
+                    if isinstance(raw, list):
+                        self._commitments = {
+                            c.commitment_id: c
+                            for item in raw
+                            if (c := Commitment.from_dict(item))
+                        }
+                except Exception as ex:
+                    logger.warning("Failed reading commitments during mutate: %s", ex)
+
+            updater(self._commitments)
+            data = [c.to_dict() for c in self._commitments.values()]
+            self._atomic_write_encrypted(
+                com_file, data, entity_type="commitments", record_id="commitments", account_id="global"
+            )
+            return dict(self._commitments)
+
+    def mutate_contacts(self, updater: Callable[[dict[str, PersonContact]], None]) -> dict[str, PersonContact]:
+        """Atomically reload contacts from disk under category lock, apply updater, and save."""
+        with self.lock_category("contacts"), self._lock:
+            con_file = self.root / "contacts.json"
+            if con_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        con_file, expected_entity_type="contacts", expected_record_id="contacts"
+                    )
+                    if isinstance(raw, list):
+                        self._contacts = {
+                            con.contact_id: con
+                            for item in raw
+                            if (con := PersonContact.from_dict(item))
+                        }
+                except Exception as ex:
+                    logger.warning("Failed reading contacts during mutate: %s", ex)
+
+            updater(self._contacts)
+            data = [c.to_dict() for c in self._contacts.values()]
+            self._atomic_write_encrypted(
+                con_file, data, entity_type="contacts", record_id="contacts", account_id="global"
+            )
+            return dict(self._contacts)
+
+    def mutate_sync_state(self, updater: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        """Atomically reload sync_state from disk under category lock, apply updater, and save."""
+        with self.lock_category("sync_state"), self._lock:
+            sync_file = self.root / "sync_state.json"
+            if sync_file.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        sync_file, expected_entity_type="sync_state", expected_record_id="sync_state"
+                    )
+                    if isinstance(raw, dict):
+                        self._sync_state = raw
+                except Exception as ex:
+                    logger.warning("Failed reading sync_state during mutate: %s", ex)
+
+            updater(self._sync_state)
+            self._atomic_write_encrypted(
+                sync_file,
+                self._sync_state,
+                entity_type="sync_state",
+                record_id="sync_state",
+                account_id="global",
+            )
+            return dict(self._sync_state)
 
     # ── Accounts ─────────────────────────────────────────────────────────────
 
     def save_account(self, account: Account) -> None:
-        """Persist or update an account record."""
-        with self._lock:
-            self._accounts[account.account_id] = account
-            data = [acc.to_dict() for acc in self._accounts.values()]
-            _atomic_write_json(self.root / "accounts.json", data)
+        """Persist or update an account record safely across processes."""
+        def _updater(accs: dict[str, Account]) -> None:
+            accs[account.account_id] = account
+
+        self.mutate_accounts(_updater)
 
     def get_account(self, account_id: str) -> Account | None:
         with self._lock:
@@ -210,19 +563,26 @@ class PersonalStore:
             return accs
 
     def delete_account(self, account_id: str) -> bool:
-        with self._lock:
-            if account_id in self._accounts:
-                del self._accounts[account_id]
-                data = [acc.to_dict() for acc in self._accounts.values()]
-                _atomic_write_json(self.root / "accounts.json", data)
-                # Purge cursor
-                if "accounts" in self._sync_state and account_id in self._sync_state["accounts"]:
-                    del self._sync_state["accounts"][account_id]
-                    _atomic_write_json(self.root / "sync_state.json", self._sync_state)
-                return True
-            return False
+        deleted = False
 
-    # ── Sync Cursors (Multi-Tenant, resolving HIGH-03) ────────────────────────
+        def _updater_acc(accs: dict[str, Account]) -> None:
+            nonlocal deleted
+            if account_id in accs:
+                del accs[account_id]
+                deleted = True
+
+        self.mutate_accounts(_updater_acc)
+
+        if deleted:
+            def _updater_sync(sync_st: dict[str, Any]) -> None:
+                if "accounts" in sync_st and account_id in sync_st["accounts"]:
+                    del sync_st["accounts"][account_id]
+
+            self.mutate_sync_state(_updater_sync)
+
+        return deleted
+
+    # ── Sync Cursors (Multi-Tenant) ──────────────────────────────────────────
 
     def get_stream_cursor(self, account_id: str, stream_key: str) -> dict[str, Any] | None:
         """Retrieve multi-tenant sync cursor for a specific stream."""
@@ -239,23 +599,24 @@ class PersonalStore:
         status: str = "SUCCESS",
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Atomically update multi-tenant stream cursor without touching accounts.json (resolving LOW-02)."""
-        with self._lock:
-            if "accounts" not in self._sync_state:
-                self._sync_state["accounts"] = {}
-            if account_id not in self._sync_state["accounts"]:
-                self._sync_state["accounts"][account_id] = {"streams": {}}
-            if "streams" not in self._sync_state["accounts"][account_id]:
-                self._sync_state["accounts"][account_id]["streams"] = {}
+        """Atomically update multi-tenant stream cursor under sync_state lock."""
+        def _updater(sync_st: dict[str, Any]) -> None:
+            if "accounts" not in sync_st:
+                sync_st["accounts"] = {}
+            if account_id not in sync_st["accounts"]:
+                sync_st["accounts"][account_id] = {"streams": {}}
+            if "streams" not in sync_st["accounts"][account_id]:
+                sync_st["accounts"][account_id]["streams"] = {}
 
-            self._sync_state["accounts"][account_id]["streams"][stream_key] = {
+            sync_st["accounts"][account_id]["streams"][stream_key] = {
                 "cursor": cursor,
                 "cursor_type": cursor_type,
                 "last_synced_at": time.time(),
                 "status": status,
                 "metadata": metadata or {},
             }
-            _atomic_write_json(self.root / "sync_state.json", self._sync_state)
+
+        self.mutate_sync_state(_updater)
 
     def get_sync_cursor(self, account_id: str, stream_key: str) -> str | None:
         """Convenience method returning raw string cursor."""
@@ -268,16 +629,16 @@ class PersonalStore:
         """Convenience method setting raw string cursor."""
         self.update_stream_cursor(account_id, stream_key, cursor, cursor_type=cursor_type)
 
-    def get_accounts(self, *args, **kwargs) -> list[Account]:
+    def get_accounts(self, *args: Any, **kwargs: Any) -> list[Account]:
         return self.list_accounts(*args, **kwargs)
 
-    def get_messages(self, *args, **kwargs) -> list[Message]:
+    def get_messages(self, *args: Any, **kwargs: Any) -> list[Message]:
         return self.list_messages(*args, **kwargs)
 
-    def get_tasks(self, *args, **kwargs) -> list[PersonalTask]:
+    def get_tasks(self, *args: Any, **kwargs: Any) -> list[PersonalTask]:
         return self.list_tasks(*args, **kwargs)
 
-    def get_events(self, *args, **kwargs) -> list[PersonalEvent]:
+    def get_events(self, *args: Any, **kwargs: Any) -> list[PersonalEvent]:
         return self.list_events(*args, **kwargs)
 
     def save_messages(self, messages: list[Message]) -> None:
@@ -285,24 +646,36 @@ class PersonalStore:
             self.save_message(m)
 
     def save_tasks(self, tasks: list[PersonalTask]) -> None:
-        for t in tasks:
-            self.save_task(t)
+        def _updater(task_dict: dict[str, PersonalTask]) -> None:
+            for t in tasks:
+                task_dict[t.task_id] = t
+
+        self.mutate_tasks(_updater)
 
     def save_events(self, events: list[PersonalEvent]) -> None:
-        for e in events:
-            self.save_event(e)
+        def _updater(evt_dict: dict[str, PersonalEvent]) -> None:
+            for e in events:
+                evt_dict[e.event_id] = e
+
+        self.mutate_events(_updater)
 
     # ── Messages ─────────────────────────────────────────────────────────────
 
     def save_message(self, message: Message) -> None:
-        """Persist normalized message record."""
-        with self._lock:
+        """Persist normalized message record encrypted under message lock."""
+        with self.lock_category("messages"), self._lock:
             self._messages[message.message_id] = message
             msg_path = self.messages_dir / f"{message.message_id}.json"
-            _atomic_write_json(msg_path, message.to_dict())
+            self._atomic_write_encrypted(
+                msg_path,
+                message.to_dict(),
+                entity_type="message",
+                record_id=message.message_id,
+                account_id=message.account_id or "global",
+            )
 
     def has_message(self, message_id: str) -> bool:
-        """Check if message exists in memory or on disk (idempotency check for MED-03)."""
+        """Check if message exists in memory or on disk."""
         with self._lock:
             if message_id in self._messages:
                 return True
@@ -310,7 +683,24 @@ class PersonalStore:
 
     def get_message(self, message_id: str) -> Message | None:
         with self._lock:
-            return self._messages.get(message_id)
+            if message_id in self._messages:
+                return self._messages[message_id]
+
+            msg_path = self.messages_dir / f"{message_id}.json"
+            if msg_path.is_file():
+                try:
+                    raw = self._read_encrypted_or_plaintext(
+                        msg_path,
+                        expected_entity_type="message",
+                        expected_record_id=message_id,
+                    )
+                    if isinstance(raw, dict):
+                        msg = Message.from_dict(raw)
+                        self._messages[msg.message_id] = msg
+                        return msg
+                except Exception as ex:
+                    logger.warning("Failed reading message %s: %s", message_id, ex)
+            return None
 
     def list_messages(
         self,
@@ -341,25 +731,24 @@ class PersonalStore:
             if search_query:
                 q = search_query.lower()
                 msgs = [m for m in msgs if q in m.subject.lower() or q in m.sender.lower() or q in m.body_snippet.lower()]
-            # Sort newest first
             msgs.sort(key=lambda m: m.timestamp, reverse=True)
             return msgs[:limit]
 
     # ── Tasks ────────────────────────────────────────────────────────────────
 
     def save_task(self, task: PersonalTask) -> None:
-        """Persist or update extracted task."""
-        with self._lock:
-            self._tasks[task.task_id] = task
-            data = [t.to_dict() for t in self._tasks.values()]
-            _atomic_write_json(self.root / "tasks.json", data)
+        """Persist or update extracted task safely across processes."""
+        def _updater(tasks: dict[str, PersonalTask]) -> None:
+            tasks[task.task_id] = task
+
+        self.mutate_tasks(_updater)
 
     def get_task(self, task_id: str) -> PersonalTask | None:
         with self._lock:
             return self._tasks.get(task_id)
 
     def find_duplicate_task(self, dedup_key: str) -> PersonalTask | None:
-        """Find active task matching dedup_key; completed/cancelled tasks ignored (resolving MED-01)."""
+        """Find active task matching dedup_key; completed/cancelled tasks ignored."""
         if not dedup_key:
             return None
         with self._lock:
@@ -387,22 +776,25 @@ class PersonalStore:
             return tasks
 
     def delete_task(self, task_id: str) -> bool:
-        with self._lock:
-            if task_id in self._tasks:
-                del self._tasks[task_id]
-                data = [t.to_dict() for t in self._tasks.values()]
-                _atomic_write_json(self.root / "tasks.json", data)
-                return True
-            return False
+        deleted = False
+
+        def _updater(tasks: dict[str, PersonalTask]) -> None:
+            nonlocal deleted
+            if task_id in tasks:
+                del tasks[task_id]
+                deleted = True
+
+        self.mutate_tasks(_updater)
+        return deleted
 
     # ── Events ───────────────────────────────────────────────────────────────
 
     def save_event(self, event: PersonalEvent) -> None:
-        """Persist or update calendar event."""
-        with self._lock:
-            self._events[event.event_id] = event
-            data = [e.to_dict() for e in self._events.values()]
-            _atomic_write_json(self.root / "events.json", data)
+        """Persist or update calendar event safely across processes."""
+        def _updater(evts: dict[str, PersonalEvent]) -> None:
+            evts[event.event_id] = event
+
+        self.mutate_events(_updater)
 
     def get_event(self, event_id: str) -> PersonalEvent | None:
         with self._lock:
@@ -438,21 +830,35 @@ class PersonalStore:
             return evts
 
     def delete_event(self, event_id: str) -> bool:
-        with self._lock:
-            if event_id in self._events:
-                del self._events[event_id]
-                data = [e.to_dict() for e in self._events.values()]
-                _atomic_write_json(self.root / "events.json", data)
-                return True
-            return False
+        deleted = False
+
+        def _updater(evts: dict[str, PersonalEvent]) -> None:
+            nonlocal deleted
+            if event_id in evts:
+                del evts[event_id]
+                deleted = True
+
+        self.mutate_events(_updater)
+        return deleted
 
     # ── Commitments ──────────────────────────────────────────────────────────
 
     def save_commitment(self, commitment: Commitment) -> None:
+        """Persist or update commitment record safely across processes."""
+        def _updater(comms: dict[str, Commitment]) -> None:
+            comms[commitment.commitment_id] = commitment
+
+        self.mutate_commitments(_updater)
+
+    def find_duplicate_commitment(self, dedup_key: str) -> Commitment | None:
+        """Find active commitment matching dedup_key."""
+        if not dedup_key:
+            return None
         with self._lock:
-            self._commitments[commitment.commitment_id] = commitment
-            data = [c.to_dict() for c in self._commitments.values()]
-            _atomic_write_json(self.root / "commitments.json", data)
+            for c in self._commitments.values():
+                if getattr(c, "dedup_key", "") == dedup_key:
+                    return c
+            return None
 
     def list_commitments(self, counterpart: str | None = None) -> list[Commitment]:
         with self._lock:
@@ -466,10 +872,11 @@ class PersonalStore:
     # ── Contacts ─────────────────────────────────────────────────────────────
 
     def save_contact(self, contact: PersonContact) -> None:
-        with self._lock:
-            self._contacts[contact.contact_id] = contact
-            data = [c.to_dict() for c in self._contacts.values()]
-            _atomic_write_json(self.root / "contacts.json", data)
+        """Persist or update contact record safely across processes."""
+        def _updater(contacts: dict[str, PersonContact]) -> None:
+            contacts[contact.contact_id] = contact
+
+        self.mutate_contacts(_updater)
 
     def get_contact_by_email(self, email: str) -> PersonContact | None:
         if not email:
@@ -485,43 +892,125 @@ class PersonalStore:
         with self._lock:
             return list(self._contacts.values())
 
+    # ── Migration to Encrypted Format ─────────────────────────────────────────
+
+    def migrate_plaintext_to_encrypted(self) -> dict[str, int]:
+        """Inspect all storage files; convert any plaintext JSON to authenticated encrypted envelopes."""
+        counts = {"accounts": 0, "tasks": 0, "events": 0, "commitments": 0, "contacts": 0, "sync_state": 0, "messages": 0}
+
+        # 1. Accounts
+        with self.lock_category("accounts"):
+            acc_file = self.root / "accounts.json"
+            if acc_file.is_file():
+                raw = json.loads(acc_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(acc_file, raw, "accounts", "accounts")
+                    counts["accounts"] += len(raw) if isinstance(raw, list) else 1
+
+        # 2. Tasks
+        with self.lock_category("tasks"):
+            task_file = self.root / "tasks.json"
+            if task_file.is_file():
+                raw = json.loads(task_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(task_file, raw, "tasks", "tasks")
+                    counts["tasks"] += len(raw) if isinstance(raw, list) else 1
+
+        # 3. Events
+        with self.lock_category("events"):
+            evt_file = self.root / "events.json"
+            if evt_file.is_file():
+                raw = json.loads(evt_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(evt_file, raw, "events", "events")
+                    counts["events"] += len(raw) if isinstance(raw, list) else 1
+
+        # 4. Commitments
+        with self.lock_category("commitments"):
+            com_file = self.root / "commitments.json"
+            if com_file.is_file():
+                raw = json.loads(com_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(com_file, raw, "commitments", "commitments")
+                    counts["commitments"] += len(raw) if isinstance(raw, list) else 1
+
+        # 5. Contacts
+        with self.lock_category("contacts"):
+            con_file = self.root / "contacts.json"
+            if con_file.is_file():
+                raw = json.loads(con_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(con_file, raw, "contacts", "contacts")
+                    counts["contacts"] += len(raw) if isinstance(raw, list) else 1
+
+        # 6. Sync State
+        with self.lock_category("sync_state"):
+            sync_file = self.root / "sync_state.json"
+            if sync_file.is_file():
+                raw = json.loads(sync_file.read_text(encoding="utf-8"))
+                if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                    self._atomic_write_encrypted(sync_file, raw, "sync_state", "sync_state")
+                    counts["sync_state"] += 1
+
+        # 7. Messages
+        with self.lock_category("messages"):
+            for m_path in self.messages_dir.glob("*.json"):
+                try:
+                    raw = json.loads(m_path.read_text(encoding="utf-8"))
+                    if not PersonalStoreCrypto.is_encrypted_envelope(raw):
+                        acc_id = raw.get("account_id", "global")
+                        self._atomic_write_encrypted(
+                            m_path, raw, "message", m_path.stem, account_id=acc_id
+                        )
+                        counts["messages"] += 1
+                except Exception as ex:
+                    logger.warning("Failed migrating message %s: %s", m_path.name, ex)
+
+        self.enforce_encryption()
+        logger.info("Migrated storage to encrypted format: %s", counts)
+        return counts
+
     # ── Data Purge & Wipe ────────────────────────────────────────────────────
 
     def delete_provider_data(self, provider: ProviderType) -> int:
         """Purge all cached messages, events, and tasks for a given provider."""
-        with self._lock:
-            deleted_count = 0
-            # 1. Accounts
-            for aid in [a.account_id for a in self._accounts.values() if a.provider == provider]:
-                self.delete_account(aid)
+        deleted_count = 0
+
+        # 1. Accounts
+        acc_ids_to_del = [a.account_id for a in self.list_accounts(provider)]
+        for aid in acc_ids_to_del:
+            if self.delete_account(aid):
                 deleted_count += 1
 
-            # 2. Messages
+        # 2. Messages
+        with self.lock_category("messages"), self._lock:
             for mid in [m.message_id for m in self._messages.values() if m.provider == provider]:
                 del self._messages[mid]
                 (self.messages_dir / f"{mid}.json").unlink(missing_ok=True)
                 deleted_count += 1
 
-            # 3. Tasks
-            t_ids = [t.task_id for t in self._tasks.values() if t.source_provider == provider]
-            for tid in t_ids:
-                del self._tasks[tid]
+        # 3. Tasks
+        def _task_purge(tasks: dict[str, PersonalTask]) -> None:
+            nonlocal deleted_count
+            for tid in [tid for tid, t in tasks.items() if t.source_provider == provider]:
+                del tasks[tid]
                 deleted_count += 1
-            if t_ids:
-                _atomic_write_json(self.root / "tasks.json", [t.to_dict() for t in self._tasks.values()])
 
-            # 4. Events
-            e_ids = [e.event_id for e in self._events.values() if e.provider == provider]
-            for eid in e_ids:
-                del self._events[eid]
+        self.mutate_tasks(_task_purge)
+
+        # 4. Events
+        def _evt_purge(evts: dict[str, PersonalEvent]) -> None:
+            nonlocal deleted_count
+            for eid in [eid for eid, e in evts.items() if e.provider == provider]:
+                del evts[eid]
                 deleted_count += 1
-            if e_ids:
-                _atomic_write_json(self.root / "events.json", [e.to_dict() for e in self._events.values()])
 
-            return deleted_count
+        self.mutate_events(_evt_purge)
 
-    def wipe_all_data(self) -> None:
-        """Complete local data purge deleting all cached personal intelligence entities."""
+        return deleted_count
+
+    def wipe_all_data(self, purge_master_key: bool = False) -> None:
+        """Complete local data purge deleting all cached entities and lockfiles."""
         with self._lock:
             self._accounts.clear()
             self._tasks.clear()
@@ -532,11 +1021,18 @@ class PersonalStore:
             self._conversations.clear()
             self._sync_state = {"accounts": {}}
 
-            # Clean directory
+            # Clean all directory contents
             for item in self.root.glob("*"):
                 if item.is_dir():
                     shutil.rmtree(item, ignore_errors=True)
                 else:
                     item.unlink(missing_ok=True)
+
             self.messages_dir.mkdir(parents=True, exist_ok=True)
+            self.locks_dir.mkdir(parents=True, exist_ok=True)
+
+            if purge_master_key:
+                self._crypto.purge_master_key()
+                logger.info("Purged PersonalStore master key.")
+
             logger.info("PersonalStore completely purged and wiped.")

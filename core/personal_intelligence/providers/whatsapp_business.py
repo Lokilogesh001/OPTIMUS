@@ -213,7 +213,7 @@ class WhatsAppBusinessAdapter(BaseProviderAdapter):
         return [], [], str(int(time.time()))
 
     def revoke(self) -> bool:
-        self.account.auth_status = AuthStatus.REVOKED
+        self.account.auth_status = AuthStatus.DISCONNECTED_LOCAL_ONLY
         store_credential(f"wabiz_{self.account.account_id}_token", "")
         store_credential(f"wabiz_{self.account.account_id}_secret", "")
         store_credential(f"wabiz_{self.account.account_id}_verify_token", "")

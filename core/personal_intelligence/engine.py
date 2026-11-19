@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import datetime
+import email.utils
 import hashlib
 import logging
 import re
@@ -72,6 +73,25 @@ _URGENT_KEYWORDS = {
     "urgent", "asap", "emergency", "deadline", "critical", "immediately",
     "action required", "priority", "important", "time sensitive", "past due"
 }
+
+
+def parse_retry_after(header_val: str | None) -> float:
+    """Parse HTTP Retry-After header as seconds or delta from HTTP date (RFC 7231)."""
+    if not header_val:
+        return 0.0
+    val = str(header_val).strip()
+    try:
+        return max(0.0, float(val))
+    except ValueError:
+        pass
+    try:
+        parsed_tuple = email.utils.parsedate_tz(val)
+        if parsed_tuple:
+            target_ts = email.utils.mktime_tz(parsed_tuple)
+            return max(0.0, target_ts - time.time())
+    except Exception:
+        pass
+    return 0.0
 
 
 class PersonalIntelligenceEngine:
@@ -173,6 +193,7 @@ class PersonalIntelligenceEngine:
                 self.store.save_task(task)
 
         # 3. Extract User Commitments ("I will...")
+        seen_promises_in_msg: set[str] = set()
         for pat in _USER_COMMITMENT_PATTERNS:
             for match in pat.finditer(text):
                 promise_text = match.group(1).strip()
@@ -180,6 +201,20 @@ class PersonalIntelligenceEngine:
                     continue
 
                 clean_promise = f"I will {promise_text}".capitalize()
+                norm_promise = re.sub(r"[^a-zA-Z0-9]", "", clean_promise.lower())
+                if any(norm_promise in sp or sp in norm_promise for sp in seen_promises_in_msg):
+                    continue
+                seen_promises_in_msg.add(norm_promise)
+
+                counterpart = message.sender.lower()
+                conv_id = message.conversation_id or message.message_id
+                dedup_key = hashlib.sha256(f"com:{norm_promise}:{counterpart}:{conv_id}".encode()).hexdigest()[:16]
+
+                # Check if duplicate commitment exists
+                existing_c = self.store.find_duplicate_commitment(dedup_key)
+                if existing_c:
+                    continue
+
                 s_ref = SourceReference(
                     provider=message.provider,
                     account_id=message.account_id,
@@ -198,6 +233,7 @@ class PersonalIntelligenceEngine:
                     status=CommitmentStatus.OPEN,
                     source_ref=s_ref,
                     created_at=time.time(),
+                    dedup_key=dedup_key,
                 )
                 commitments.append(commitment)
                 self.store.save_commitment(commitment)

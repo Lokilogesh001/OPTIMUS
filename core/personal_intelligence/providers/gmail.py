@@ -19,6 +19,7 @@ from typing import Any
 
 from core.personal_intelligence.providers.base import (
     BaseProviderAdapter,
+    oauth_refresh_lock,
     safe_parse_json,
 )
 from core.personal_intelligence.types import (
@@ -66,12 +67,40 @@ class GmailAdapter(BaseProviderAdapter):
         return True
 
     def refresh_token_if_needed(self) -> bool:
-        """Simulate or execute OAuth refresh token exchange."""
-        token = self._get_access_token()
-        if not token:
-            self.account.auth_status = AuthStatus.EXPIRED
-            return False
-        return True
+        """Execute OAuth refresh token exchange under exclusive inter-process lock."""
+        with oauth_refresh_lock(self.account.account_id):
+            token = self._get_access_token()
+            if not token:
+                self.account.auth_status = AuthStatus.EXPIRED
+                return False
+
+            refresh_token = get_credential(f"gmail_{self.account.account_id}_refresh")
+            if not refresh_token:
+                return True
+
+            # If an injected HTTP client is available, simulate or perform token refresh
+            if self.http_client and hasattr(self.http_client, "post"):
+                try:
+                    resp = self.http_client.post(
+                        "https://oauth2.googleapis.com/token",
+                        data={
+                            "client_id": self.account.oauth_client_id or "optimus_client",
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                        },
+                    )
+                    data = safe_parse_json(resp)
+                    new_access_token = data.get("access_token")
+                    if new_access_token:
+                        new_refresh = data.get("refresh_token", refresh_token)
+                        self._store_tokens(new_access_token, new_refresh)
+                        self.account.auth_status = AuthStatus.CONNECTED
+                        return True
+                except Exception as ex:
+                    logger.warning("Failed refreshing token for %s: %s", self.account.account_id, ex)
+                    self.account.auth_status = AuthStatus.EXPIRED
+                    return False
+            return True
 
     def check_health(self) -> dict[str, Any]:
         """Perform diagnostic health check."""
@@ -179,8 +208,26 @@ class GmailAdapter(BaseProviderAdapter):
         return [], [], cursor
 
     def revoke(self) -> bool:
-        """Revoke tokens and disconnect account."""
-        self.account.auth_status = AuthStatus.REVOKED
+        """Revoke tokens remotely if possible, purge credentials, and update AuthStatus honestly."""
+        remote_ok = False
+        token = self._get_access_token()
+
+        if token and self.http_client and hasattr(self.http_client, "post"):
+            try:
+                resp = self.http_client.post(
+                    "https://oauth2.googleapis.com/revoke",
+                    params={"token": token},
+                )
+                if getattr(resp, "status_code", 0) == 200:
+                    remote_ok = True
+            except Exception as ex:
+                logger.warning("Remote revocation network error for %s: %s", self.account.account_id, ex)
+
+        if remote_ok:
+            self.account.auth_status = AuthStatus.REVOKED_REMOTE_VERIFIED
+        else:
+            self.account.auth_status = AuthStatus.DISCONNECTED_LOCAL_ONLY
+
         store_credential(f"gmail_{self.account.account_id}_token", "")
         store_credential(f"gmail_{self.account.account_id}_refresh", "")
         return True
