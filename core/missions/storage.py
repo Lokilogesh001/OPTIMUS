@@ -26,6 +26,15 @@ from core.missions.types import MissionRecord, MissionState, SubtaskStatus
 
 logger = logging.getLogger(__name__)
 
+_thread_local = threading.local()
+
+
+def _get_held_locks() -> set[str]:
+    """Retrieve the set of mission lock IDs currently held by the active thread."""
+    if not hasattr(_thread_local, "held_locks"):
+        _thread_local.held_locks = set()
+    return _thread_local.held_locks
+
 
 class ConcurrencyConflictError(RuntimeError):
     """Raised when an update conflicts with a concurrent modification to the same mission."""
@@ -47,6 +56,11 @@ class MissionStore:
     @contextmanager
     def lock_mission(self, mission_id: str, timeout: float = 10.0) -> Generator[None, None, None]:
         """Acquire an exclusive OS-level inter-process lock on a mission file."""
+        held = _get_held_locks()
+        if mission_id in held:
+            yield
+            return
+
         lock_path = self.storage_dir / f".{mission_id}.lock"
         with open(lock_path, "a+b") as f:
             start = time.perf_counter()
@@ -62,6 +76,7 @@ class MissionStore:
                             import fcntl
                             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                         acquired = True
+                        held.add(mission_id)
                         break
                     except (OSError, PermissionError):
                         if (time.perf_counter() - start) >= timeout:
@@ -72,6 +87,7 @@ class MissionStore:
                 yield
             finally:
                 if acquired:
+                    held.discard(mission_id)
                     try:
                         if os.name == "nt":
                             import msvcrt
@@ -106,7 +122,7 @@ class MissionStore:
         max_retries: int = 6,
     ) -> None:
         """Atomically persist a MissionRecord to disk with version tracking and conflict resolution."""
-        with self._lock:
+        with self._lock, self.lock_mission(record.mission_id):
             self.storage_dir.mkdir(parents=True, exist_ok=True)
             target_path = self.storage_dir / f"{record.mission_id}.json"
 
@@ -346,9 +362,15 @@ class MissionStore:
                             for d in subtask.expected_deliverables
                             if ("." in d or "/" in d or "\\" in d)
                         ]
+                        started = subtask.started_at or 0.0
                         deliverables_verified = (
                             len(file_delivs) > 0
-                            and all(p.exists() and p.stat().st_size > 0 for p in file_delivs)
+                            and all(
+                                p.exists()
+                                and p.stat().st_size > 0
+                                and (started <= 0 or p.stat().st_mtime >= (started - 1.0))
+                                for p in file_delivs
+                            )
                         )
 
                         if deliverables_verified:

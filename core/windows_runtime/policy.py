@@ -115,6 +115,7 @@ class WindowsRuntimePolicy:
         operation: OperationType | Any,
         params: dict[str, Any] | None = None,
         is_pre_approved: bool = False,
+        approval_token: str | None = None,
     ) -> tuple[bool, bool, str]:
         """Evaluate operation request against the 2-tier authorization policy.
         
@@ -124,7 +125,10 @@ class WindowsRuntimePolicy:
         if hasattr(operation, "operation") and hasattr(operation, "params"):
             params = getattr(operation, "params", {})
             is_pre_approved = getattr(operation, "is_pre_approved", False)
+            approval_token = getattr(operation, "approval_token", None) or approval_token
             operation = operation.operation
+        else:
+            approval_token = approval_token or (params.get("approval_token") if params else None)
         params = params or {}
         # 1. Routine Operations -> Allowed immediately without repeated approval
         if operation in _ROUTINE_OPERATIONS:
@@ -135,8 +139,8 @@ class WindowsRuntimePolicy:
             target_path = params.get("path") or params.get("target_path", "")
             # Check if attempting to write into protected Windows System directory
             if cls.is_protected_path(target_path):
-                if is_pre_approved:
-                    return True, False, "Pre-approved mutation in protected system path."
+                if is_pre_approved and approval_token:
+                    return True, False, f"Pre-approved mutation in protected system path with token '{approval_token[:8]}...'."
                 return (
                     False,
                     True,
@@ -150,8 +154,8 @@ class WindowsRuntimePolicy:
             dst_path = params.get("dst_path") or params.get("target_path") or params.get("new_path", "")
             src_path = params.get("src_path") or params.get("path", "")
             if cls.is_protected_path(dst_path) or cls.is_protected_path(src_path):
-                if is_pre_approved:
-                    return True, False, "Pre-approved copy/move in system path."
+                if is_pre_approved and approval_token:
+                    return True, False, f"Pre-approved copy/move in system path with token '{approval_token[:8]}...'."
                 return (
                     False,
                     True,
@@ -162,8 +166,8 @@ class WindowsRuntimePolicy:
         # 4. Critical & Destructive Operation: Delete File or Directory
         if operation == OperationType.DELETE_FILE:
             target_path = params.get("path") or params.get("target_path", "")
-            if is_pre_approved:
-                return True, False, f"Pre-approved deletion of '{target_path}'."
+            if is_pre_approved and approval_token:
+                return True, False, f"Pre-approved deletion of '{target_path}' with token '{approval_token[:8]}...'."
             return (
                 False,
                 True,
@@ -175,8 +179,8 @@ class WindowsRuntimePolicy:
             pid = params.get("pid")
             process_name = params.get("process_name", "")
             if cls.is_protected_process(process_name):
-                if is_pre_approved:
-                    return True, False, f"Pre-approved termination of system process '{process_name}'."
+                if is_pre_approved and approval_token:
+                    return True, False, f"Pre-approved termination of system process '{process_name}' with token '{approval_token[:8]}...'."
                 return (
                     False,
                     True,

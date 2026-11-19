@@ -258,6 +258,20 @@ def test_policy_critical_system_protection():
     assert "critical" in reason_kill.lower() or "system process" in reason_kill.lower()
 
 
+def test_policy_naked_preapproval_without_token_rejected():
+    """Verify that claiming is_pre_approved=True without an approval_token fails authorization."""
+    broker = PrivilegedExecutionBroker()
+    req = OperationRequest(
+        operation=OperationType.DELETE_FILE,
+        params={"path": "C:\\test\\target.txt"},
+        is_pre_approved=True,
+        approval_token=None,
+    )
+    resp = broker.execute_request(req)
+    assert resp.success is False
+    assert resp.error_code == RuntimeErrorCode.APPROVAL_REQUIRED
+
+
 # ============================================================================
 # Test E: Named Pipe IPC Security & Replay Protection
 # ============================================================================

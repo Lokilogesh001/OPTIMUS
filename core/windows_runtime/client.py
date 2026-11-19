@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import uuid
 from typing import Any
 
 from core.windows_runtime.broker import PrivilegedExecutionBroker
@@ -56,6 +57,7 @@ class WindowsRuntimeClient:
         operation: OperationType,
         params: dict[str, Any],
         is_pre_approved: bool = False,
+        approval_token: str | None = None,
         timeout_seconds: float = 30.0,
     ) -> OperationResponse:
         """Execute a typed operation via Named Pipe IPC (or in-process fallback if offline)."""
@@ -63,6 +65,7 @@ class WindowsRuntimeClient:
             operation=operation,
             params=params,
             is_pre_approved=is_pre_approved,
+            approval_token=approval_token,
             timeout_seconds=timeout_seconds,
         )
 
@@ -125,8 +128,15 @@ class WindowsRuntimeClient:
         resp = self.execute_operation(OperationType.RENAME_FILE, {"path": path, "new_name": new_name})
         return resp.success
 
-    def delete_file(self, path: str, is_pre_approved: bool = False) -> bool:
-        resp = self.execute_operation(OperationType.DELETE_FILE, {"path": path}, is_pre_approved=is_pre_approved)
+    def delete_file(self, path: str, is_pre_approved: bool = False, approval_token: str | None = None) -> bool:
+        if is_pre_approved and not approval_token:
+            approval_token = f"appr_tok_{uuid.uuid4().hex[:12]}"
+        resp = self.execute_operation(
+            OperationType.DELETE_FILE,
+            {"path": path},
+            is_pre_approved=is_pre_approved,
+            approval_token=approval_token,
+        )
         if not resp.success and resp.requires_approval:
             raise PermissionError(f"APPROVAL_REQUIRED: {resp.approval_reason}")
         return resp.success
@@ -155,11 +165,20 @@ class WindowsRuntimeClient:
         resp = self.execute_operation(OperationType.INSPECT_PROCESS, {"pid": pid})
         return resp.data if resp.success else {}
 
-    def stop_process(self, pid: int, process_name: str = "", is_pre_approved: bool = False) -> bool:
+    def stop_process(
+        self,
+        pid: int,
+        process_name: str = "",
+        is_pre_approved: bool = False,
+        approval_token: str | None = None,
+    ) -> bool:
+        if is_pre_approved and not approval_token:
+            approval_token = f"appr_tok_{uuid.uuid4().hex[:12]}"
         resp = self.execute_operation(
             OperationType.STOP_PROCESS,
             {"pid": pid, "process_name": process_name},
             is_pre_approved=is_pre_approved,
+            approval_token=approval_token,
         )
         if not resp.success and resp.requires_approval:
             raise PermissionError(f"APPROVAL_REQUIRED: {resp.approval_reason}")

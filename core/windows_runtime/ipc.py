@@ -65,11 +65,27 @@ def get_or_create_shared_secret() -> str:
         if os.name == "nt":
             try:
                 import win32api
+                import win32file
                 import win32security
                 user, _domain, _ = win32security.LookupAccountName("", win32api.GetUserName())
                 sd = win32security.SECURITY_DESCRIPTOR()
                 dacl = win32security.ACL()
                 dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32security.FILE_ALL_ACCESS, user)
+                try:
+                    admin_sid, _, _ = win32security.LookupAccountName("", "Administrators")
+                    dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32security.FILE_ALL_ACCESS, admin_sid)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                try:
+                    system_sid, _, _ = win32security.LookupAccountName("", "SYSTEM")
+                    dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32security.FILE_ALL_ACCESS, system_sid)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                try:
+                    users_sid, _, _ = win32security.LookupAccountName("", "Users")
+                    dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32file.GENERIC_READ, users_sid)
+                except Exception:  # noqa: BLE001, S110
+                    pass
                 sd.SetSecurityDescriptorDacl(1, dacl, 0)
                 win32security.SetFileSecurity(str(key_file), win32security.DACL_SECURITY_INFORMATION, sd)
             except Exception:  # noqa: BLE001, S110
@@ -249,20 +265,53 @@ class NamedPipeServer:
         import win32file
         import win32pipe
 
+        is_first_instance = True
+
+        # Construct explicit security attributes to prevent rogue access while allowing local user & admin
+        sa = None
+        try:
+            import win32api
+            import win32security
+            sd = win32security.SECURITY_DESCRIPTOR()
+            dacl = win32security.ACL()
+            user, _, _ = win32security.LookupAccountName("", win32api.GetUserName())
+            dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32security.FILE_ALL_ACCESS, user)
+            try:
+                admin_sid, _, _ = win32security.LookupAccountName("", "Administrators")
+                dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32security.FILE_ALL_ACCESS, admin_sid)
+            except Exception:  # noqa: BLE001, S110
+                pass
+            try:
+                users_sid, _, _ = win32security.LookupAccountName("", "Users")
+                dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32file.GENERIC_READ | win32file.GENERIC_WRITE, users_sid)
+            except Exception:  # noqa: BLE001, S110
+                pass
+            sd.SetSecurityDescriptorDacl(1, dacl, 0)
+            sa = win32security.SECURITY_ATTRIBUTES()
+            sa.SECURITY_DESCRIPTOR = sd
+        except Exception:  # noqa: BLE001
+            sa = None
+
         while not self._stop_event.is_set():
             pipe = None
             try:
+                open_mode = win32pipe.PIPE_ACCESS_DUPLEX
+                if is_first_instance:
+                    flag_first = getattr(win32pipe, "FILE_FLAG_FIRST_PIPE_INSTANCE", 0x00080000)
+                    open_mode |= flag_first
+
                 # Create Named Pipe instance with duplex mode and byte stream boundaries
                 pipe = win32pipe.CreateNamedPipe(
                     self.pipe_name,
-                    win32pipe.PIPE_ACCESS_DUPLEX,
+                    open_mode,
                     win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT,
                     win32pipe.PIPE_UNLIMITED_INSTANCES,
                     65536,
                     65536,
                     0,
-                    None,
+                    sa,
                 )
+                is_first_instance = False
 
                 # Wait for client connection
                 win32pipe.ConnectNamedPipe(pipe, None)

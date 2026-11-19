@@ -103,9 +103,10 @@ class PrivilegedExecutionBroker:
             operation=request.operation,
             params=request.params,
             is_pre_approved=request.is_pre_approved,
+            approval_token=request.approval_token,
         )
 
-        if requires_approval and not request.is_pre_approved:
+        if requires_approval:
             resp = OperationResponse(
                 request_id=request.request_id,
                 success=False,
