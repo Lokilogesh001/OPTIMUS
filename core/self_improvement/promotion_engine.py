@@ -184,6 +184,8 @@ class PromotionEngine:
         try:
             dest_dir.parent.mkdir(parents=True, exist_ok=True)
             self._copy_tree_with_retry(staging_dir, dest_dir)
+            # Post-copy integrity check on destination (prevents TOCTOU or partial write)
+            self.verify_package_integrity(dest_dir, artifact.package_integrity_hash)
         except Exception as ex:
             # Phase 3 Rollback on failure
             logger.error("Promotion failed during file copy: %s. Reverting backup...", ex)
@@ -279,7 +281,7 @@ class PromotionEngine:
             logger.info("Rollback complete for proposal '%s'.", proposal_id)
             return True
 
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001  # SEC-10: Emergency circuit breaker must catch any failure
             # SEC-10: On rollback failure, transition to ROLLBACK_FAILED and disable in registry
             logger.critical("ROLLBACK_FAILURE for '%s': %s. Disabling in registry...", proposal_id, ex)
             self.skill_registry.set_enabled(skill_id, False)

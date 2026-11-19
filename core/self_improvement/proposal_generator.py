@@ -72,6 +72,13 @@ class ImprovementProposalGenerator:
                 "FORBIDDEN_SCOPE_VIOLATION: Self-improvement proposals cannot modify core runtime or security engines."
             )
 
+        ALLOWED_SCOPES = {"SKILL", "TOOL_WRAPPER", "WORKFLOW_TEMPLATE"}
+        clean_scope = scope.strip().upper()
+        if clean_scope not in ALLOWED_SCOPES:
+            raise ValueError(
+                f"INVALID_SCOPE: Scope '{scope}' is not permitted. Must be one of {sorted(ALLOWED_SCOPES)}."
+            )
+
         caps = required_capabilities or []
         perms = required_permissions or []
         risk = self.classify_risk(caps, perms, scope)

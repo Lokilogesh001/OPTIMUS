@@ -18,10 +18,18 @@ from typing import Any
 from core.security.policy_engine import ApprovalToken
 from core.self_improvement.gap_detector import CapabilityGapDetector
 from core.self_improvement.goldfish_reviewer import SelfImprovementGoldfishReviewer
-from core.self_improvement.promotion_engine import PromotionEngine
+from core.self_improvement.promotion_engine import (
+    PromotionEngine,
+    PromotionError,
+    SecurityViolationError,
+)
 from core.self_improvement.proposal_generator import ImprovementProposalGenerator
 from core.self_improvement.sandbox_evaluator import IsolatedSandboxEvaluator
-from core.self_improvement.staging_generator import StagingCodeGenerator
+from core.self_improvement.staging_generator import (
+    SecuritySanitizationError,
+    StagingCodeGenerator,
+    StagingPathEscapeError,
+)
 from core.self_improvement.storage import SelfImprovementStore
 from core.self_improvement.types import (
     CapabilityGap,
@@ -261,7 +269,7 @@ class SelfImprovementCoordinator:
                     entrypoint_content=generated_content,
                     artifact_type="SKILL_MD",
                 )
-            except Exception as ex:
+            except (SecuritySanitizationError, StagingPathEscapeError, OSError, ValueError, RuntimeError) as ex:
                 proposal.transition_to(LifecycleState.FAILED)
                 self.store.save_proposal(proposal)
                 return False, f"STAGING_FAILED: {ex}", None
@@ -285,5 +293,5 @@ class SelfImprovementCoordinator:
             try:
                 promotion_record = self.promote(proposal.proposal_id, approval_token=approval_token)
                 return True, f"PROMOTED_SUCCESSFULLY: {promotion_record.production_target}", promotion_record
-            except Exception as p_ex:
+            except (PromotionError, SecurityViolationError, OSError, ValueError, RuntimeError) as p_ex:
                 return False, f"PROMOTION_HALTED: {p_ex}", None

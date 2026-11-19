@@ -38,6 +38,8 @@ BANNED_MODULES = {
     "subprocess",
     "winreg",
     "ctypes",
+    "posix",
+    "nt",
 }
 
 BANNED_FUNCTIONS = {
@@ -46,6 +48,29 @@ BANNED_FUNCTIONS = {
     "__import__",
     "compile",
     "open",  # Raw open banned in pure declarative skills; tool-wrapped I/O preferred
+    "system",
+    "popen",
+    "spawnl",
+    "spawnv",
+    "spawnle",
+    "spawnve",
+    "spawnlp",
+    "spawnvp",
+    "spawnlpe",
+    "spawnvpe",
+    "execl",
+    "execv",
+    "execle",
+    "execve",
+    "execlp",
+    "execvp",
+    "execlpe",
+    "execvpe",
+    "fork",
+    "rmtree",
+    "remove",
+    "unlink",
+    "rmdir",
 }
 
 BANNED_ATTRIBUTES = {
@@ -53,6 +78,8 @@ BANNED_ATTRIBUTES = {
     "__globals__",
     "__builtins__",
     "__code__",
+    "system",
+    "popen",
 }
 
 
@@ -106,15 +133,20 @@ class StagingCodeGenerator:
                     if root_pkg in BANNED_MODULES:
                         raise SecuritySanitizationError(f"BANNED_IMPORT: Module '{node.module}' is prohibited in self-improvement code.")
 
-            # Check function calls
+            # Check function calls (both direct Name and qualified Attribute)
             elif isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name) and node.func.id in BANNED_FUNCTIONS:
-                    raise SecuritySanitizationError(f"BANNED_CALL: Direct call to '{node.func.id}' is prohibited.")
+                func_name = ""
+                if isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    func_name = node.func.attr
+
+                if func_name in BANNED_FUNCTIONS:
+                    raise SecuritySanitizationError(f"BANNED_CALL: Direct or qualified call to '{func_name}' is prohibited.")
 
             # Check sensitive attribute access
-            elif isinstance(node, ast.Attribute):
-                if node.attr in BANNED_ATTRIBUTES:
-                    raise SecuritySanitizationError(f"BANNED_ATTRIBUTE: Access to '{node.attr}' is strictly forbidden.")
+            elif isinstance(node, ast.Attribute) and node.attr in BANNED_ATTRIBUTES:
+                raise SecuritySanitizationError(f"BANNED_ATTRIBUTE: Access to '{node.attr}' is strictly forbidden.")
 
     def stage_artifact(
         self,
@@ -157,7 +189,7 @@ class StagingCodeGenerator:
             for rel_path, content in auxiliary_files.items():
                 # Disallow symlinks, path traversal, or absolute paths
                 clean_rel = rel_path.strip().replace("\\", "/")
-                if clean_rel.startswith("/") or clean_rel.startswith("\\") or ".." in clean_rel:
+                if clean_rel.startswith(("/", "\\")) or ".." in clean_rel or ":" in clean_rel:
                     raise StagingPathEscapeError(f"PATH_TRAVERSAL: Invalid relative path '{rel_path}' in auxiliary files.")
 
                 dest_file = (staging_dir / clean_rel).resolve()
@@ -204,6 +236,6 @@ class StagingCodeGenerator:
                 shutil.rmtree(staging_dir, ignore_errors=True)
                 logger.info("Cleaned staging directory for '%s'.", proposal_id)
                 return True
-        except Exception as ex:
+        except (OSError, ValueError) as ex:
             logger.warning("Failed cleaning staging directory for '%s': %s", proposal_id, ex)
         return False

@@ -261,7 +261,7 @@ class SectionSelfImprovement(QWidget):
 
             self.text_logs.setPlainText("\n".join(lines) if lines else "No evaluation or review logs recorded yet.")
 
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001  # Safe GUI guard against widget refresh errors
             logger.debug("Failed refreshing self-improvement section: %s", ex)
 
     def _on_rollback(self, proposal_id: str) -> None:
@@ -273,5 +273,5 @@ class SectionSelfImprovement(QWidget):
             self.refresh_data()
             if success:
                 logger.info("Rollback executed successfully for proposal '%s'", proposal_id)
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001  # Safe GUI guard against user-action exceptions
             logger.error("Rollback failed for proposal '%s': %s", proposal_id, ex)

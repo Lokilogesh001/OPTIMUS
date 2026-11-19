@@ -46,13 +46,13 @@ def kill_process_tree(pid: int) -> None:
     if os.name == "nt":
         try:
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
-        except Exception as ex:
+        except (OSError, subprocess.SubprocessError) as ex:
             logger.debug("taskkill failed for PID %d: %s", pid, ex)
     else:
         try:
             import signal
             os.killpg(os.getpgid(pid), signal.SIGKILL)
-        except Exception as ex:
+        except (OSError, ProcessLookupError) as ex:
             logger.debug("killpg failed for PID %d: %s", pid, ex)
 
 
@@ -68,8 +68,11 @@ class IsolatedSandboxEvaluator:
         clean_env = dict(os.environ)
 
         # 1. Scrub production credentials and master secrets
-        for var in STRIPPED_ENV_VARS:
-            clean_env.pop(var, None)
+        sensitive_patterns = ("KEY", "TOKEN", "SECRET", "PASSWORD", "VAULT", "AUTH", "CREDENTIAL", "DATABASE_URL")
+        for k in list(clean_env.keys()):
+            upper_k = k.upper()
+            if upper_k in STRIPPED_ENV_VARS or any(p in upper_k for p in sensitive_patterns):
+                clean_env.pop(k, None)
 
         # 2. Block external network access via dead-end proxies
         clean_env["HTTP_PROXY"] = "http://127.0.0.1:0"
@@ -122,7 +125,7 @@ class IsolatedSandboxEvaluator:
 
             passed_count += 1
             log_lines.append("  -> PASSED: Syntax and schema valid.")
-        except Exception as ex:
+        except (SyntaxError, ValueError, OSError) as ex:
             failed_count += 1
             test_results["syntax_and_schema"] = {"status": "FAILED", "error": str(ex)}
             log_lines.append(f"  -> FAILED: {ex}")
@@ -133,13 +136,28 @@ class IsolatedSandboxEvaluator:
             # Execute test script in isolated subprocess
             test_script = staging_dir / "test_run.py"
             if not test_script.exists():
-                # Synthesize deterministic validation script
-                test_script.write_text(
-                    "import sys\n"
-                    "print('SANDBOX_RUNNER: Initialized.')\n"
-                    "sys.exit(0)\n",
-                    encoding="utf-8",
-                )
+                entrypoint_py = staging_dir / "entrypoint.py"
+                if artifact.artifact_type == "TOOL_CODE" or entrypoint_py.is_file():
+                    # SEC-M14-02: Validate candidate entrypoint imports and executes cleanly
+                    test_script.write_text(
+                        "import sys\n"
+                        "try:\n"
+                        "    import entrypoint\n"
+                        "    print('SANDBOX_RUNNER: entrypoint loaded successfully.')\n"
+                        "    sys.exit(0)\n"
+                        "except Exception as e:\n"
+                        "    print(f'SANDBOX_RUNNER_ERROR: {e}', file=sys.stderr)\n"
+                        "    sys.exit(1)\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    # Synthesize deterministic validation script for declarative skills
+                    test_script.write_text(
+                        "import sys\n"
+                        "print('SANDBOX_RUNNER: Initialized.')\n"
+                        "sys.exit(0)\n",
+                        encoding="utf-8",
+                    )
 
             env = self.build_isolated_environment(staging_dir)
             proc = subprocess.Popen(
@@ -167,7 +185,7 @@ class IsolatedSandboxEvaluator:
                 failed_count += 1
                 test_results["functional_behavior"] = {"status": "FAILED", "error": f"Execution timed out ({timeout_seconds}s)"}
                 log_lines.append(f"  -> FAILED: Execution timed out ({timeout_seconds}s). Killed process tree.")
-        except Exception as ex:
+        except (OSError, subprocess.SubprocessError, RuntimeError) as ex:
             failed_count += 1
             test_results["functional_behavior"] = {"status": "FAILED", "error": str(ex)}
             log_lines.append(f"  -> FAILED: Functional error: {ex}")
@@ -181,7 +199,7 @@ class IsolatedSandboxEvaluator:
             passed_count += 1
             test_results["adversarial_resilience"] = {"status": "PASSED", "details": "Size ceiling and payload structure verified."}
             log_lines.append("  -> PASSED: Handled adversarial boundaries.")
-        except Exception as ex:
+        except (ValueError, TypeError) as ex:
             failed_count += 1
             test_results["adversarial_resilience"] = {"status": "FAILED", "error": str(ex)}
             log_lines.append(f"  -> FAILED: Adversarial check failed: {ex}")
@@ -196,7 +214,7 @@ class IsolatedSandboxEvaluator:
             passed_count += 1
             test_results["privilege_boundaries"] = {"status": "PASSED", "details": "No unauthorized path references detected."}
             log_lines.append("  -> PASSED: Privilege boundary verified.")
-        except Exception as ex:
+        except (PermissionError, ValueError) as ex:
             failed_count += 1
             test_results["privilege_boundaries"] = {"status": "FAILED", "error": str(ex)}
             log_lines.append(f"  -> FAILED: Privilege boundary failed: {ex}")

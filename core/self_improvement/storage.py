@@ -123,7 +123,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.gaps_file.read_text(encoding="utf-8"))
                     self._gaps = {item["gap_id"]: CapabilityGap.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading gaps: %s", ex)
 
             # Proposals
@@ -131,7 +131,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.proposals_file.read_text(encoding="utf-8"))
                     self._proposals = {item["proposal_id"]: ImprovementProposal.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading proposals: %s", ex)
 
             # Artifacts
@@ -139,7 +139,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.artifacts_file.read_text(encoding="utf-8"))
                     self._artifacts = {item["artifact_id"]: GeneratedArtifact.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading artifacts: %s", ex)
 
             # Evaluations
@@ -147,7 +147,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.evaluations_file.read_text(encoding="utf-8"))
                     self._evaluations = {item["evaluation_id"]: EvaluationResult.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading evaluations: %s", ex)
 
             # Reviews
@@ -155,7 +155,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.reviews_file.read_text(encoding="utf-8"))
                     self._reviews = {item["review_id"]: GoldfishReviewReport.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading reviews: %s", ex)
 
             # Promotions
@@ -163,7 +163,7 @@ class SelfImprovementStore:
                 try:
                     raw = json.loads(self.promotions_file.read_text(encoding="utf-8"))
                     self._promotions = {item["promotion_id"]: PromotionRecord.from_dict(item) for item in raw}
-                except Exception as ex:
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
                     logger.warning("Failed loading promotions: %s", ex)
 
     # ── Capability Gaps ───────────────────────────────────────────────────────
