@@ -11,10 +11,13 @@ Connects the PyQt presentation layer directly to:
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
 from typing import Any
+
+logger = logging.getLogger("optimus.gui.service_bridge")
 
 import psutil
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -1440,5 +1443,48 @@ class OptimusServiceBridge(QObject):
         except Exception as e:
             logger.error("Error routing task in bridge: %s", e)
             return {"error": str(e)}
+
+    # ── M14: Verified Self-Improvement ──────────────────────────────────────
+
+    def get_self_improvement_gaps(self) -> list[dict[str, Any]]:
+        """List detected capability gaps."""
+        try:
+            from core.self_improvement.storage import SelfImprovementStore
+            store = SelfImprovementStore.instance()
+            return [g.to_dict() for g in store.list_gaps()]
+        except Exception as e:
+            logger.error("Error getting self-improvement gaps: %s", e)
+            return []
+
+    def get_self_improvement_proposals(self) -> list[dict[str, Any]]:
+        """List generated improvement proposals."""
+        try:
+            from core.self_improvement.storage import SelfImprovementStore
+            store = SelfImprovementStore.instance()
+            return [p.to_dict() for p in store.list_proposals()]
+        except Exception as e:
+            logger.error("Error getting self-improvement proposals: %s", e)
+            return []
+
+    def get_self_improvement_promotions(self) -> list[dict[str, Any]]:
+        """List verified promotions."""
+        try:
+            from core.self_improvement.storage import SelfImprovementStore
+            store = SelfImprovementStore.instance()
+            return [pr.to_dict() for pr in store.list_promotions()]
+        except Exception as e:
+            logger.error("Error getting self-improvement promotions: %s", e)
+            return []
+
+    def rollback_self_improvement(self, proposal_id: str) -> bool:
+        """Trigger deterministic rollback for a proposal."""
+        try:
+            from core.self_improvement.coordinator import SelfImprovementCoordinator
+            coord = SelfImprovementCoordinator.instance()
+            return coord.rollback(proposal_id)
+        except Exception as e:
+            logger.error("Error executing rollback for %s: %s", proposal_id, e)
+            return False
+
 
 

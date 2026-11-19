@@ -118,6 +118,7 @@ class OptimusNavBar(QWidget):
         ("MISSIONS", "🎯"),
         ("PROACTIVE", "🔔"),
         ("PERSONAL", "👤"),
+        ("IMPROVE", "🚀"),
     ]
 
     def __init__(self, parent=None):

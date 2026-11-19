@@ -125,6 +125,7 @@ PRIVILEGED_APPROVAL_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Privilege escalation", re.compile(r"(sudo\s+|su\s+-|runas\s+/user:)", re.IGNORECASE)),
     ("Credential dump", re.compile(r"(dump_credentials|mimikatz|sekurlsa|samdump)", re.IGNORECASE)),
     ("Personal communication mutation", re.compile(r"^(send_email|delete_email|delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|send_whatsapp_message|purge_personal_store|wipe_personal_data|wipe_all_data|disconnect_account|revoke_account|delete_account)$", re.IGNORECASE)),
+    ("Self-improvement promotion", re.compile(r"^(promote_skill|install_skill|self_improvement_.*)$", re.IGNORECASE)),
 ]
 
 
@@ -163,10 +164,10 @@ class PolicyEngine:
                 logger.warning("Failed loading nonces journal: %s", ex)
 
     @classmethod
-    def instance(cls) -> PolicyEngine:
+    def instance(cls, journal_path: Path | str | None = None) -> PolicyEngine:
         """Singleton accessor."""
         if cls._instance is None:
-            cls._instance = cls()
+            cls._instance = cls(journal_path=journal_path)
         return cls._instance
 
     @classmethod
@@ -375,6 +376,11 @@ class PolicyEngine:
                 requires_approval=False,
                 reason="Authorized by PolicyEngine under active profile.",
             )
+
+    def evaluate(self, request: OperationRequest) -> PolicyVerdict:
+        """Convenience alias for evaluate_operation."""
+        return self.evaluate_operation(request)
+
 
 
 def get_policy_engine() -> PolicyEngine:

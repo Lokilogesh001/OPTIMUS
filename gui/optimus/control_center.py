@@ -33,6 +33,7 @@ from gui.optimus.section_missions import SectionMissions
 from gui.optimus.section_personal import SectionPersonal
 from gui.optimus.section_planning import SectionPlanning
 from gui.optimus.section_proactive import SectionProactive
+from gui.optimus.section_self_improvement import SectionSelfImprovement
 from gui.optimus.section_settings import SectionSettings
 from gui.optimus.section_skills import SectionSkills
 from gui.optimus.section_system import SectionSystem
@@ -80,6 +81,7 @@ class OptimusControlCenterWidget(QWidget):
         self.missions_view = SectionMissions(self.bridge, parent=self.stack)
         self.proactive_view = SectionProactive(self.bridge, parent=self.stack)
         self.personal_view = SectionPersonal(self.bridge, parent=self.stack)
+        self.self_improvement_view = SectionSelfImprovement(self.bridge, parent=self.stack)
 
         # Add to stack in index order matching OptimusNavBar.SECTIONS
         self.stack.addWidget(self.dashboard_view)      # 0: DASHBOARD
@@ -98,6 +100,7 @@ class OptimusControlCenterWidget(QWidget):
         self.stack.addWidget(self.missions_view)       # 13: MISSIONS
         self.stack.addWidget(self.proactive_view)      # 14: PROACTIVE
         self.stack.addWidget(self.personal_view)       # 15: PERSONAL
+        self.stack.addWidget(self.self_improvement_view) # 16: IMPROVE
 
         layout.addWidget(self.stack, stretch=1)
 
@@ -135,6 +138,8 @@ class OptimusControlCenterWidget(QWidget):
             w.refresh_approvals()
         elif hasattr(w, "refresh_processes"):
             w.refresh_processes()
+        elif hasattr(w, "refresh_data"):
+            w.refresh_data()
 
     def _update_approval_badge(self, _) -> None:
         pending = self.bridge.get_pending_approvals()
