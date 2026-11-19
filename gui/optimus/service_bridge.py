@@ -1398,3 +1398,47 @@ class OptimusServiceBridge(QObject):
         except Exception:
             return False
 
+    # ── M13: Personal Intelligence Refinement & Task Routing ───────────────
+
+    def list_personal_preferences(self) -> list[dict[str, Any]]:
+        """List learned explicit personal preferences from PersonalizationEngine."""
+        try:
+            from core.memory.personalization import PersonalizationEngine
+            engine = PersonalizationEngine()
+            return [p.to_dict() for p in engine.list_preferences()]
+        except Exception as e:
+            logger.error("Error listing preferences in bridge: %s", e)
+            return []
+
+    def correct_personal_preference(self, key: str, value: Any) -> bool:
+        """Apply an explicit user correction to a preference."""
+        try:
+            from core.memory.personalization import PersonalizationEngine
+            engine = PersonalizationEngine()
+            return engine.correct_preference(key, value)
+        except Exception as e:
+            logger.error("Error correcting preference in bridge: %s", e)
+            return False
+
+    def forget_personal_preference(self, key: str) -> bool:
+        """Explicitly purge a preference per privacy rights."""
+        try:
+            from core.memory.personalization import PersonalizationEngine
+            engine = PersonalizationEngine()
+            return engine.forget_preference(key)
+        except Exception as e:
+            logger.error("Error forgetting preference in bridge: %s", e)
+            return False
+
+    def route_task_to_model(self, task_description: str, tools_required: list[str] | None = None) -> dict[str, Any]:
+        """Route a task using the M13 TaskAwareModelRouter."""
+        try:
+            from core.intelligence.task_router import TaskAwareModelRouter
+            router = TaskAwareModelRouter()
+            decision = router.route_task(task_description, tools_required=tools_required)
+            return decision.to_dict()
+        except Exception as e:
+            logger.error("Error routing task in bridge: %s", e)
+            return {"error": str(e)}
+
+

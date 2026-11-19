@@ -661,8 +661,11 @@ class PersonalStore:
 
     # ── Messages ─────────────────────────────────────────────────────────────
 
-    def save_message(self, message: Message) -> None:
+    def save_message(self, message: Message | dict[str, Any]) -> None:
         """Persist normalized message record encrypted under message lock."""
+        if isinstance(message, dict):
+            from core.personal_intelligence.types import Message
+            message = Message.from_dict(message)
         with self.lock_category("messages"), self._lock:
             self._messages[message.message_id] = message
             msg_path = self.messages_dir / f"{message.message_id}.json"

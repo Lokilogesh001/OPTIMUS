@@ -62,7 +62,15 @@ class MissionStore:
             return
 
         lock_path = self.storage_dir / f".{mission_id}.lock"
-        with open(lock_path, "a+b") as f:
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            f = open(lock_path, "a+b")
+        except OSError:
+            # If storage dir was purged during shutdown, proceed without OS lock
+            yield
+            return
+
+        with f:
             start = time.perf_counter()
             acquired = False
             try:

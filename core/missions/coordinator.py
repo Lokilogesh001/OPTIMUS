@@ -69,12 +69,13 @@ class MissionCoordinator:
 
         # Context payload prepared for agent execution
         shared_ctx = memory.get_all()
+        sealed_expected_deliverables = list(subtask.expected_deliverables)
         execution_context = {
             "mission_id": record.mission_id,
             "subtask_id": subtask.subtask_id,
             "allowed_roots": self.allowed_roots,
             "shared_context": shared_ctx,
-            "expected_deliverables": subtask.expected_deliverables,
+            "expected_deliverables": list(sealed_expected_deliverables),
         }
 
         evidence: list[dict[str, Any]] = []
@@ -171,13 +172,53 @@ class MissionCoordinator:
                 success = True
 
         except Exception as e:
-            logger.exception("Exception executing subtask '%s': %s", subtask.title, e)
+            logger.exception("Exception executing subtask '%s'", subtask.title)
             output = f"Execution error: {e}"
             success = False
 
+        # Restore sealed contract to prevent runtime tampering by workers or tools
+        subtask.expected_deliverables = list(sealed_expected_deliverables)
         subtask.completed_at = time.time()
         subtask.result_output = output
         subtask.evidence = evidence
+
+        # Independent Verification Gate: Mandatory verification if physical deliverables or postconditions declared
+        import re
+        has_physical_deliverables = any(
+            ("/" in str(d)) or ("\\" in str(d)) or bool(re.search(r"\.[a-zA-Z0-9]{1,6}$", str(d)))
+            for d in sealed_expected_deliverables
+        )
+        has_physical_postconditions = any(
+            isinstance(pc, dict) and pc.get("type") in ("file_exists", "filesystem", "command", "FILESYSTEM", "COMMAND")
+            for pc in subtask.postconditions
+        ) if subtask.postconditions else False
+
+        if success and (has_physical_deliverables or has_physical_postconditions):
+            try:
+                from core.verification.engine import VerificationEngine
+                verifier_engine = VerificationEngine()
+                is_verified, verdict_summary, v_records, evidence_map = verifier_engine.verify_subtask(
+                    subtask=subtask,
+                    side_effects=evidence,
+                    output_summary=output,
+                    context=execution_context,
+                )
+                evidence.append({
+                    "verifier": "VerificationEngine",
+                    "is_verified": is_verified,
+                    "verdict_summary": verdict_summary,
+                    "records": [r.to_dict() for r in v_records],
+                    "evidence_map": evidence_map,
+                    "timestamp": time.time(),
+                })
+                if not is_verified:
+                    success = False
+                    output = f"INDEPENDENT_VERIFICATION_FAILED: {verdict_summary}"
+            except Exception as ve:
+                logger.error("Verification engine failed during subtask execution: %s", ve)
+                if has_physical_deliverables:
+                    success = False
+                    output = f"VERIFICATION_ERROR: Deliverables could not be verified: {ve}"
 
         if success:
             subtask.status = SubtaskStatus.COMPLETED

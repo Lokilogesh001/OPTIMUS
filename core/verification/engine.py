@@ -89,21 +89,23 @@ class VerificationEngine:
         expected_deliverables = getattr(subtask, "expected_deliverables", None) or []
         for item in expected_deliverables:
             path_str = str(item)
-            key = f"fs_exist:{path_str}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                postconditions.append(
-                    Postcondition(
-                        postcondition_type=PostconditionType.FILESYSTEM,
-                        spec={
-                            "path": path_str,
-                            "must_exist": True,
-                            "non_empty": True,
-                        },
-                        description=f"Deliverable artifact '{Path(path_str).name}' must physically exist and be non-empty",
-                        critical=True,
+            is_file_path = ("/" in path_str) or ("\\" in path_str) or bool(re.search(r"\.[a-zA-Z0-9]{1,6}$", path_str))
+            if is_file_path:
+                key = f"fs_exist:{path_str}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    postconditions.append(
+                        Postcondition(
+                            postcondition_type=PostconditionType.FILESYSTEM,
+                            spec={
+                                "path": path_str,
+                                "must_exist": True,
+                                "non_empty": True,
+                            },
+                            description=f"Deliverable artifact '{Path(path_str).name}' must physically exist and be non-empty",
+                            critical=True,
+                        )
                     )
-                )
 
         # Fallback: Check subtask description/title if deliverables were not explicitly registered
         if not expected_deliverables and getattr(subtask, "assigned_agent", "") == "filesystem":

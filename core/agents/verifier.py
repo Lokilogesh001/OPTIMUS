@@ -67,8 +67,19 @@ class VerificationAgent(SpecializedAgent):
         """Independently verify deliverables and postconditions."""
         start_time = time.perf_counter()
         context = contract.context_data or {}
-        expected_files: list[dict[str, Any]] = context.get("expected_files", [])
-        expected_commands: list[dict[str, Any]] = context.get("expected_commands", [])
+        expected_files: list[dict[str, Any]] = list(context.get("expected_files", []))
+        expected_commands: list[dict[str, Any]] = list(context.get("expected_commands", []))
+
+        # Sealed deliverables check: Normalize expected_deliverables into file verification specs
+        expected_deliverables: list[Any] = context.get("expected_deliverables", [])
+        for item in expected_deliverables:
+            if isinstance(item, str):
+                import re
+                is_file_path = ("/" in item) or ("\\" in item) or bool(re.search(r"\.[a-zA-Z0-9]{1,6}$", item))
+                if is_file_path and not any(f.get("path") == item for f in expected_files):
+                    expected_files.append({"path": item, "min_size": 1})
+            elif isinstance(item, dict) and "path" in item and not any(f.get("path") == item["path"] for f in expected_files):
+                expected_files.append(item)
 
         records = []
         overall_success = True
