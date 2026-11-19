@@ -122,6 +122,7 @@ IMMUTABLE_DENY_PATTERNS: list[tuple[str, re.Pattern]] = [
 PRIVILEGED_APPROVAL_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Privilege escalation", re.compile(r"(sudo\s+|su\s+-|runas\s+/user:)", re.IGNORECASE)),
     ("Credential dump", re.compile(r"(dump_credentials|mimikatz|sekurlsa|samdump)", re.IGNORECASE)),
+    ("Personal communication mutation", re.compile(r"^(send_email|delete_email|delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|send_whatsapp_message|purge_personal_store)$", re.IGNORECASE)),
 ]
 
 

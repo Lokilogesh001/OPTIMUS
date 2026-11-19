@@ -745,12 +745,25 @@ class DashboardServer:
         self._device_sessions: dict[str, dict] = {}  # device_token → {session_key}
         self._phone_audio_queue: asyncio.Queue    = asyncio.Queue(maxsize=200)
         self._uploads_dir                 = UPLOADS_DIR
+        self._personal_engine             = None
         # Set by serve() when the port could not be taken, so the UI can say
         # why the QR code leads nowhere instead of showing it regardless.
         self._bind_error: str = ""
         self._login_html                  = _read("login.html")
         self._app_html                    = _read("app.html")
         self.app                          = self._build_app()
+
+    def set_personal_engine(self, engine) -> None:
+        self._personal_engine = engine
+
+    def _get_personal_engine(self):
+        if self._personal_engine is None:
+            try:
+                from core.personal_intelligence.engine import PersonalIntelligenceEngine
+                self._personal_engine = PersonalIntelligenceEngine()
+            except Exception:
+                pass
+        return self._personal_engine
 
     # ── one-time key management ───────────────────────────────────────────
 
@@ -1192,6 +1205,103 @@ class DashboardServer:
                 pass
             finally:
                 self._clients.discard(websocket)
+
+        # ── Personal Intelligence Endpoints ──────────────────────────────────
+        @app.get("/api/personal/dashboard")
+        async def personal_dashboard(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            store = engine.store
+            unread_msgs = [m for m in store.get_messages(limit=100) if not m.is_read]
+            pending_tasks = [t for t in store.get_tasks() if t.status in ("pending", "in_progress")]
+            upcoming_events = store.get_events()
+            accounts = store.get_accounts()
+            return JSONResponse({
+                "ok": True,
+                "summary": {
+                    "unread_messages": len(unread_msgs),
+                    "pending_tasks": len(pending_tasks),
+                    "upcoming_events": len(upcoming_events),
+                    "connected_accounts": len(accounts),
+                },
+                "recent_messages": [m.to_dict() for m in store.get_messages(limit=5)],
+                "pending_tasks": [t.to_dict() for t in pending_tasks[:5]],
+                "upcoming_events": [e.to_dict() for e in upcoming_events[:5]],
+                "accounts": [a.to_dict(safe=True) for a in accounts],
+            })
+
+        @app.get("/api/personal/inbox")
+        async def personal_inbox(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            category = req.query_params.get("category")
+            unread_only = req.query_params.get("unread_only", "").lower() in ("true", "1")
+            limit = int(req.query_params.get("limit", 50))
+            messages = engine.store.get_messages(category=category, unread_only=unread_only, limit=limit)
+            return JSONResponse({"ok": True, "messages": [m.to_dict() for m in messages]})
+
+        @app.get("/api/personal/tasks")
+        async def personal_tasks(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            status = req.query_params.get("status")
+            tasks = engine.store.get_tasks(status=status)
+            return JSONResponse({"ok": True, "tasks": [t.to_dict() for t in tasks]})
+
+        @app.get("/api/personal/calendar")
+        async def personal_calendar(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            start = req.query_params.get("start") or req.query_params.get("start_time")
+            end = req.query_params.get("end") or req.query_params.get("end_time")
+            events = engine.store.get_events(start_time=start, end_time=end)
+            return JSONResponse({"ok": True, "events": [e.to_dict() for e in events]})
+
+        @app.get("/api/personal/accounts")
+        async def personal_accounts(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            accounts = engine.store.get_accounts()
+            return JSONResponse({"ok": True, "accounts": [a.to_dict(safe=True) for a in accounts]})
+
+        @app.post("/api/personal/sync")
+        async def personal_sync(req: Request):
+            if not _auth(req):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            engine = self._get_personal_engine()
+            if not engine:
+                return JSONResponse({"error": "Personal intelligence engine unavailable"}, status_code=503)
+            body = {}
+            try:
+                body = await req.json()
+            except Exception:
+                pass
+            account_id = body.get("account_id")
+            if account_id:
+                acc = engine.store.get_account(account_id)
+                if acc:
+                    res = engine.sync_account(acc)
+                    results = [res]
+                else:
+                    results = [{"success": False, "error": f"Account '{account_id}' not found"}]
+            else:
+                results = engine.sync_all_connected_accounts()
+            return JSONResponse({"ok": True, "results": results})
 
         return app
 

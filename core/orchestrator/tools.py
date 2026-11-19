@@ -216,6 +216,11 @@ class ToolRegistry:
             register_windows_runtime_tools(self)
         except ImportError:
             pass
+        try:
+            from core.personal_intelligence.tools import register_personal_tools
+            register_personal_tools(self)
+        except ImportError:
+            pass
 
     def set_event_bus(self, event_bus: Any) -> None:
         """Attach or update the EventBus for audit events."""
@@ -554,7 +559,35 @@ class ToolRegistry:
                 self._emit_audit(tool_name, caller_agent, res, arguments)
                 return res
 
-        # 3.5 Central Permission Profile & Approval Gate Enforcement
+        # 3.5 Central PolicyEngine & Permission Profile Enforcement
+        try:
+            from core.security.policy_engine import OperationRequest, PolicyEngine
+            pe = PolicyEngine.instance()
+            pe_verdict = pe.evaluate_operation(OperationRequest(
+                tool_name=tool_name,
+                agent_name=caller_agent,
+                arguments=arguments,
+                approval_token=(context or {}).get("approval_token"),
+            ))
+            if not pe_verdict.is_authorized:
+                if pe_verdict.requires_approval:
+                    res = ToolResult(
+                        status="unverified",
+                        error=f"APPROVAL_REQUIRED: {pe_verdict.reason}",
+                        evidence={"requires_approval": True, "challenge": pe_verdict.approval_challenge},
+                        duration_ms=(time.perf_counter() - start) * 1000.0,
+                    )
+                else:
+                    res = ToolResult(
+                        status="failed",
+                        error=f"PERMISSION_DENIED: {pe_verdict.reason}",
+                        duration_ms=(time.perf_counter() - start) * 1000.0,
+                    )
+                self._emit_audit(tool_name, caller_agent, res, arguments)
+                return res
+        except ImportError:
+            pass
+
         try:
             from core.security.permissions import get_permission_manager
             perm_mgr = get_permission_manager()
