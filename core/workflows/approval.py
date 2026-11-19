@@ -61,8 +61,8 @@ class ApprovalManager:
     ) -> ApprovalDecision:
         """Grant human authorization for a pending approval gate."""
         with self._lock:
-            # Enforce non-empty human approver identity
-            if not approver or approver.lower() in ("llm", "ai", "model", "assistant", "agent"):
+            # Enforce non-empty human approver identity (no automated agent approvals)
+            if not approver or any(k in approver.lower() for k in ("llm", "ai", "model", "assistant", "agent")):
                 raise ValueError("SECURITY_VIOLATION: Automated LLM output cannot provide human approval.")
 
             decision = self._approvals.get(approval_id)
@@ -107,6 +107,35 @@ class ApprovalManager:
         """Retrieve an approval record by identifier."""
         with self._lock:
             return self._approvals.get(approval_id)
+
+    def create_approval_token(
+        self,
+        approval_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        ttl_seconds: float = 300.0,
+    ) -> Any:
+        """Generate a cryptographically-bound ApprovalToken for an approved request."""
+        with self._lock:
+            decision = self._approvals.get(approval_id)
+            if not decision:
+                raise KeyError(f"Approval request '{approval_id}' not found.")
+            if decision.status != ApprovalStatus.APPROVED:
+                raise ValueError(
+                    f"Approval request '{approval_id}' is not in APPROVED status (status: {decision.status.value})."
+                )
+            if not decision.approver:
+                raise ValueError(f"Approval request '{approval_id}' lacks valid approver identity.")
+
+            from core.security.policy_engine import PolicyEngine
+            return PolicyEngine.instance().create_approval_token(
+                mission_id=decision.execution_id or decision.workflow_id,
+                subtask_id=decision.step_id,
+                operator_id=decision.approver,
+                tool_name=tool_name,
+                arguments=arguments,
+                ttl_seconds=ttl_seconds,
+            )
 
     def list_approvals(self, execution_id: str | None = None) -> list[ApprovalDecision]:
         """List all approvals, optionally filtered by execution ID."""

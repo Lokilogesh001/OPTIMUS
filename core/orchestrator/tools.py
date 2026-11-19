@@ -527,7 +527,9 @@ class ToolRegistry:
             return res
 
         # 2. Verification of tool permission
-        if tool_name not in allowed_tools:
+        allowed_set = {t.lower() for t in allowed_tools}
+        canonical_allowed = {_TOOL_ALIASES.get(t, t) for t in allowed_set}
+        if tool_name.lower() not in allowed_set and resolved_name.lower() not in canonical_allowed:
             res = ToolResult(
                 status="failed",
                 error=f"TOOL_NOT_PERMITTED: UNAUTHORIZED_TOOL: Agent '{caller_agent}' is not permitted to use '{tool_name}'. Allowed: {allowed_tools}",

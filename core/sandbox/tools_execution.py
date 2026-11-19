@@ -29,13 +29,23 @@ def execute_command_handler(params: dict[str, Any], context: dict[str, Any] | No
     """Execute a shell command with strict safety rules, timeout, and workspace confinement."""
     cmd = str(params.get("command") or "").strip()
     timeout = float(params.get("timeout") or 15.0)
-    allowed_roots = (context or {}).get("allowed_roots")
+    ctx = context or {}
+    allowed_roots = ctx.get("allowed_roots")
     cwd = Path(allowed_roots[0]) if allowed_roots else Path.cwd()
+    approval_token = ctx.get("approval_token") or params.get("approval_token")
+    caller_agent = str(ctx.get("caller_agent") or "general")
 
     if not cmd:
         return ToolResult(status="failed", error="Command string is required.")
 
-    return execute_sandboxed_command(cmd, cwd=cwd, timeout=timeout, allowed_roots=allowed_roots)
+    return execute_sandboxed_command(
+        cmd,
+        cwd=cwd,
+        timeout=timeout,
+        allowed_roots=allowed_roots,
+        approval_token=approval_token,
+        caller_agent=caller_agent,
+    )
 
 
 def script_runner_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:

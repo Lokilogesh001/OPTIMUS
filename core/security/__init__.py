@@ -22,16 +22,28 @@ from core.security.permissions import (
     PermissionVerdict,
     get_permission_manager,
 )
+from core.security.policy_engine import (
+    ApprovalToken,
+    OperationRequest,
+    PolicyEngine,
+    compute_canonical_hash,
+    get_policy_engine,
+)
 
 __all__ = [
     "PROVIDER_METADATA",
+    "ApprovalToken",
+    "OperationRequest",
     "PermissionManager",
     "PermissionProfile",
     "PermissionVerdict",
+    "PolicyEngine",
+    "compute_canonical_hash",
     "delete_credential",
     "get_credential",
     "get_onboarding_config",
     "get_permission_manager",
+    "get_policy_engine",
     "is_onboarded",
     "list_configured_providers",
     "mask_credential",

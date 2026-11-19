@@ -143,12 +143,26 @@ class MissionExecutionEngine:
             self._transition(record, MissionState.PAUSED, "Mission paused by user request.")
             return True
 
+    def reconcile_interrupted_missions(self, workspace_root: Path | str | None = None) -> list[MissionRecord]:
+        """Reconcile in-flight or interrupted missions stored on disk after process termination."""
+        with self._lock:
+            reconciled = self.store.reconcile_interrupted_missions(workspace_root=workspace_root)
+            for r in reconciled:
+                self._active_records[r.mission_id] = r
+            return reconciled
+
     def resume_mission(self, mission_id: str) -> MissionRecord:
         """Resume a paused, interrupted, or waiting mission."""
         with self._lock:
             record = self._get_or_load_record(mission_id)
             if not record:
                 raise ValueError(f"Mission '{mission_id}' not found.")
+
+            # If mission has stranded RUNNING subtasks from a crash, reconcile them first
+            if any(s.status == SubtaskStatus.RUNNING for s in record.plan.subtasks):
+                self.reconcile_interrupted_missions()
+                record = self.store.get(mission_id) or record
+                self._active_records[mission_id] = record
 
             # Ensure event flags exist
             if mission_id not in self._pause_events:

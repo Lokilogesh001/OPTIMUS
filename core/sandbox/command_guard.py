@@ -14,6 +14,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 from core.orchestrator.tools import ToolResult
 
@@ -30,14 +31,47 @@ PROHIBITED_COMMAND_PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 
-def check_command_safety(command: str) -> tuple[bool, str]:
-    """Check if a shell command contains prohibited or destructive execution patterns."""
+def check_command_safety(
+    command: str,
+    approval_token: Any | None = None,
+    caller_agent: str = "general",
+) -> tuple[bool, str]:
+    """Check if a shell command contains prohibited or destructive execution patterns.
+
+    Enforces:
+    1. Immutable deny rules (format, diskpart, raw device overwrite, fork bomb, defender tamper)
+       which CAN NEVER be bypassed, even with human approval tokens.
+    2. Privileged operations (sudo, su -, runas) which require a valid, non-expired,
+       single-use ApprovalToken verified by PolicyEngine.
+    """
     cmd = str(command or "").strip()
     if not cmd:
         return False, "Command string is empty"
 
     for rule_name, pattern in PROHIBITED_COMMAND_PATTERNS:
         if pattern.search(cmd):
+            # If this is privilege escalation and an approval token is provided, evaluate via PolicyEngine
+            if rule_name == "Privilege escalation" and approval_token is not None:
+                try:
+                    from core.security.policy_engine import (
+                        OperationRequest,
+                        PolicyEngine,
+                    )
+                    req = OperationRequest(
+                        tool_name="execute_command",
+                        agent_name=caller_agent,
+                        arguments={"command": cmd},
+                        approval_token=approval_token,
+                    )
+                    verdict = PolicyEngine.instance().evaluate_operation(req)
+                    if verdict.is_authorized:
+                        # Privileged execution authorized by token.
+                        # Continue inspecting remaining rules to ensure no immutable deny rules are violated!
+                        continue
+                    return False, f"Command matches restricted security rule: '{rule_name}' ({verdict.reason})"
+                except Exception as e:
+                    return False, f"Command matches restricted security rule: '{rule_name}' (Evaluation error: {e})"
+
             return False, f"Command matches restricted security rule: '{rule_name}'"
 
     return True, ""
@@ -65,12 +99,14 @@ def execute_sandboxed_command(
     timeout: float = 15.0,
     allowed_roots: list[str] | None = None,
     env: dict[str, str] | None = None,
+    approval_token: Any | None = None,
+    caller_agent: str = "general",
 ) -> ToolResult:
     """Execute a shell command with strict timeout, directory confinement, and safety checking."""
     start = time.perf_counter()
 
-    # 1. Prohibited command check
-    is_safe, reason = check_command_safety(command)
+    # 1. Prohibited command check with approval token pass-through
+    is_safe, reason = check_command_safety(command, approval_token=approval_token, caller_agent=caller_agent)
     if not is_safe:
         return ToolResult(
             status="failed",

@@ -186,6 +186,7 @@ class MissionRecord:
     completed_at: float | None = None
     failure_reason: str | None = None
     recovery_attempts: int = 0
+    version: int = 1
     context: dict[str, Any] = field(default_factory=dict)
 
     def add_timeline_event(self, event_type: str, details: str, data: dict[str, Any] | None = None) -> None:
@@ -213,6 +214,7 @@ class MissionRecord:
             "completed_at": self.completed_at,
             "failure_reason": self.failure_reason,
             "recovery_attempts": self.recovery_attempts,
+            "version": self.version,
             "context": dict(self.context),
         }
 
@@ -240,5 +242,6 @@ class MissionRecord:
             completed_at=data.get("completed_at"),
             failure_reason=data.get("failure_reason"),
             recovery_attempts=int(data.get("recovery_attempts", 0)),
+            version=int(data.get("version", 1)),
             context=dict(data.get("context", {})),
         )

@@ -91,11 +91,43 @@ class MissionCoordinator:
                     agent_prof = self.agent_registry.get(assigned_agent_name)
                     allowed_tools = list(agent_prof.allowed_tools) if agent_prof else None
                     allowed_tiers = list(agent_prof.allowed_tiers) if agent_prof else None
-                    if allowed_tools and tool_name not in allowed_tools:
-                        allowed_tools.append(tool_name)
 
                     # Build arguments intelligently from subtask / shared context
                     tool_args = self._resolve_tool_arguments(tool_name, subtask, shared_ctx)
+
+                    # Enforce Authoritative PolicyEngine verification (Resolves DEF-03)
+                    try:
+                        from core.security.policy_engine import (
+                            OperationRequest,
+                            PolicyEngine,
+                        )
+                        pol_req = OperationRequest(
+                            tool_name=tool_name,
+                            agent_name=assigned_agent_name,
+                            arguments=tool_args,
+                            allowed_tools=allowed_tools,
+                            allowed_tiers=allowed_tiers,
+                            approval_token=execution_context.get("approval_token"),
+                            context=execution_context,
+                        )
+                        pol_verdict = PolicyEngine.instance().evaluate_operation(pol_req)
+                        if not pol_verdict.is_authorized:
+                            all_tools_ok = False
+                            err_reason = f"POLICY_VIOLATION: {pol_verdict.reason}"
+                            evidence.append({
+                                "tool_name": tool_name,
+                                "arguments": tool_args,
+                                "status": "failed",
+                                "output_preview": "",
+                                "evidence": {},
+                                "error": err_reason,
+                                "timestamp": time.time(),
+                            })
+                            tool_outputs.append(f"Tool {tool_name} error: {err_reason}")
+                            continue
+                    except ImportError:
+                        pass
+
                     tool_res: ToolResult = self.tool_registry.execute(
                         tool_name=tool_name,
                         arguments=tool_args,
