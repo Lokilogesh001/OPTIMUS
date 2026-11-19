@@ -150,54 +150,17 @@ class PolicyEngine:
         self._load_journal()
 
     def _load_journal(self) -> None:
-        """Hydrate consumed nonces from append-only journal on disk and compact expired entries."""
-        if not self.journal_path.is_file():
-            return
-        try:
-            now = time.time()
-            cutoff = now - 86400.0  # Retain 24 hours of nonces
-            active_lines = []
-            for line in self.journal_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    parts = line.split(":")
-                    nonce = parts[0]
-                    self._consumed_nonces.add(nonce)
-                    if len(parts) >= 3:
-                        try:
-                            ts = float(parts[2])
-                            if ts >= cutoff:
-                                active_lines.append(line)
-                        except ValueError:
-                            active_lines.append(line)
-                    else:
-                        active_lines.append(line)
-
-            # Compact if journal contains accumulated stale records
-            if len(self._consumed_nonces) > 200 and len(active_lines) < len(self._consumed_nonces) // 2:
-                with open(self.journal_lock_path, "a+b") as lf:
-                    try:
-                        if os.name == "nt":
-                            import msvcrt
-                            lf.seek(0)
-                            msvcrt.locking(lf.fileno(), msvcrt.LK_LOCK, 1)
-                        else:
-                            import fcntl
-                            fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
-                        self.journal_path.write_text("\n".join(active_lines) + "\n", encoding="utf-8")
-                    finally:
-                        try:
-                            if os.name == "nt":
-                                import msvcrt
-                                lf.seek(0)
-                                msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
-                            else:
-                                import fcntl
-                                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
-                        except OSError:
-                            pass
-        except Exception as ex:
-            logger.warning("Failed loading nonces journal: %s", ex)
+        """Hydrate consumed nonces from append-only journal on disk."""
+        if self.journal_path.is_file():
+            try:
+                for line in self.journal_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        parts = line.split(":", 1)
+                        if parts:
+                            self._consumed_nonces.add(parts[0])
+            except Exception as ex:
+                logger.warning("Failed loading nonces journal: %s", ex)
 
     @classmethod
     def instance(cls) -> PolicyEngine:

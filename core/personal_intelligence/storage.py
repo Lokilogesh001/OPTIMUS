@@ -255,7 +255,7 @@ class PersonalStore:
         for s_dir in search_dirs:
             if not s_dir.exists():
                 continue
-            for item in list(s_dir.glob("*.tmp")) + list(s_dir.glob(".*.tmp")):
+            for item in s_dir.glob("*.tmp"):
                 try:
                     mtime = item.stat().st_mtime
                     if (now - mtime) > max_age_seconds:

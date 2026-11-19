@@ -84,50 +84,12 @@ class PersonalStoreCrypto:
             except Exception as e:
                 logger.warning("Corrupted master key in credential store: %s", e)
 
-        # 3. Generate high-entropy 256-bit master key under cross-process bootstrap lock
-        lock_dir = Path.cwd() / "memory" / "personal" / ".locks"
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        lock_file = lock_dir / "master_key.lock"
-
-        with open(lock_file, "a+b") as lf:
-            acquired = False
-            try:
-                if os.name == "nt":
-                    import msvcrt
-                    lf.seek(0)
-                    msvcrt.locking(lf.fileno(), msvcrt.LK_LOCK, 1)
-                else:
-                    import fcntl
-                    fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
-                acquired = True
-
-                # Double-check after acquiring lock in case peer process just wrote it
-                rechecked = get_credential(MASTER_KEY_ID)
-                if rechecked:
-                    try:
-                        raw = base64.b64decode(rechecked)
-                        if len(raw) == 32:
-                            return raw
-                    except Exception:
-                        pass
-
-                new_key = secrets.token_bytes(32)
-                b64_key = base64.b64encode(new_key).decode("utf-8")
-                store_credential(MASTER_KEY_ID, b64_key)
-                logger.info("Generated new 256-bit AES-GCM master key and stored in CredentialVault.")
-                return new_key
-            finally:
-                if acquired:
-                    try:
-                        if os.name == "nt":
-                            import msvcrt
-                            lf.seek(0)
-                            msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
-                        else:
-                            import fcntl
-                            fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
-                    except OSError:
-                        pass
+        # 3. Generate high-entropy 256-bit master key and store
+        new_key = secrets.token_bytes(32)
+        b64_key = base64.b64encode(new_key).decode("utf-8")
+        store_credential(MASTER_KEY_ID, b64_key)
+        logger.info("Generated new 256-bit AES-GCM master key and stored in CredentialVault.")
+        return new_key
 
     def purge_master_key(self) -> bool:
         """Cryptographically shred master key from CredentialVault."""
