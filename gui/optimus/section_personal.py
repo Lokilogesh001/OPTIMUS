@@ -122,11 +122,15 @@ class GoogleCredentialsDialog(QDialog):
 
         self.btn_cancel = QPushButton("CANCEL")
         self.btn_cancel.setStyleSheet(btn_css("secondary"))
+        self.btn_cancel.setFixedHeight(28)
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.clicked.connect(self.reject)
         btn_box.addWidget(self.btn_cancel)
 
         self.btn_save = QPushButton("SAVE & PROCEED")
         self.btn_save.setStyleSheet(btn_css("primary"))
+        self.btn_save.setFixedHeight(28)
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.clicked.connect(self._save_and_accept)
         btn_box.addWidget(self.btn_save)
 
@@ -267,24 +271,20 @@ class SectionPersonal(QWidget):
 
         # Panel Left: Today's Schedule
         panel_left = HoloPanel("TODAY'S TIMELINE & APPOINTMENTS")
-        pl_box = QVBoxLayout(panel_left)
-        pl_box.setContentsMargins(8, 8, 8, 8)
         self.tbl_today_events = QTableWidget(0, 3)
         self.tbl_today_events.setHorizontalHeaderLabels(["TIME", "EVENT TITLE", "LOCATION / LINK"])
         self.tbl_today_events.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._style_table(self.tbl_today_events)
-        pl_box.addWidget(self.tbl_today_events)
+        panel_left.body.addWidget(self.tbl_today_events)
         split.addWidget(panel_left)
 
         # Panel Right: Actionable Tasks & Commitments
         panel_right = HoloPanel("PENDING OBLIGATIONS & DEADLINES")
-        pr_box = QVBoxLayout(panel_right)
-        pr_box.setContentsMargins(8, 8, 8, 8)
         self.tbl_top_tasks = QTableWidget(0, 3)
         self.tbl_top_tasks.setHorizontalHeaderLabels(["PRIORITY", "TASK TITLE", "DUE DATE"])
         self.tbl_top_tasks.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._style_table(self.tbl_top_tasks)
-        pr_box.addWidget(self.tbl_top_tasks)
+        panel_right.body.addWidget(self.tbl_top_tasks)
         split.addWidget(panel_right)
 
         vbox.addWidget(split, stretch=1)
@@ -293,18 +293,15 @@ class SectionPersonal(QWidget):
     def _create_metric_card(self, title: str, val: str, color: str, parent_layout: QHBoxLayout) -> QLabel:
         p = HoloPanel()
         p.setFixedHeight(64)
-        vb = QVBoxLayout(p)
-        vb.setContentsMargins(10, 6, 10, 6)
-        vb.setSpacing(2)
         t = QLabel(title)
         t.setFont(px_font(9, QFont.Weight.DemiBold, spacing=1.2))
         t.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
-        vb.addWidget(t)
+        p.body.addWidget(t)
 
         v = QLabel(val)
         v.setFont(px_font(18, QFont.Weight.Bold))
         v.setStyleSheet(f"color: {color}; background: transparent;")
-        vb.addWidget(v)
+        p.body.addWidget(v)
         parent_layout.addWidget(p)
         return v
 
@@ -394,9 +391,6 @@ class SectionPersonal(QWidget):
         vbox.setSpacing(8)
 
         panel = HoloPanel("CONNECTED COMMUNICATION & CALENDAR PROVIDERS")
-        p_box = QVBoxLayout(panel)
-        p_box.setContentsMargins(10, 10, 10, 10)
-        p_box.setSpacing(10)
 
         # Action Toolbar
         tb_layout = QHBoxLayout()
@@ -405,18 +399,24 @@ class SectionPersonal(QWidget):
         self.btn_oauth_connect_gmail = QPushButton("+ CONNECT GMAIL")
         self.btn_oauth_connect_gmail.setFont(px_font(9, QFont.Weight.Bold))
         self.btn_oauth_connect_gmail.setStyleSheet(btn_css("primary"))
+        self.btn_oauth_connect_gmail.setFixedHeight(28)
+        self.btn_oauth_connect_gmail.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_oauth_connect_gmail.clicked.connect(lambda: self._start_google_oauth(ProviderType.GMAIL))
         tb_layout.addWidget(self.btn_oauth_connect_gmail)
 
         self.btn_oauth_connect_gcal = QPushButton("+ CONNECT GOOGLE CALENDAR")
         self.btn_oauth_connect_gcal.setFont(px_font(9, QFont.Weight.Bold))
         self.btn_oauth_connect_gcal.setStyleSheet(btn_css("secondary"))
+        self.btn_oauth_connect_gcal.setFixedHeight(28)
+        self.btn_oauth_connect_gcal.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_oauth_connect_gcal.clicked.connect(lambda: self._start_google_oauth(ProviderType.GOOGLE_CALENDAR))
         tb_layout.addWidget(self.btn_oauth_connect_gcal)
 
         self.btn_oauth_help = QPushButton("OAUTH SETUP GUIDE")
         self.btn_oauth_help.setFont(px_font(9, QFont.Weight.DemiBold))
         self.btn_oauth_help.setStyleSheet(btn_css("secondary"))
+        self.btn_oauth_help.setFixedHeight(28)
+        self.btn_oauth_help.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_oauth_help.clicked.connect(self._show_oauth_guidance_dialog)
         tb_layout.addWidget(self.btn_oauth_help)
 
@@ -427,7 +427,7 @@ class SectionPersonal(QWidget):
         self.lbl_accounts_status.setStyleSheet(f"color: {C.TEXT_DIM};")
         tb_layout.addWidget(self.lbl_accounts_status)
 
-        p_box.addLayout(tb_layout)
+        panel.body.addLayout(tb_layout)
 
         # Accounts Table
         self.tbl_accounts = QTableWidget(0, 6)
@@ -439,13 +439,13 @@ class SectionPersonal(QWidget):
         self.tbl_accounts.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.tbl_accounts.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self._style_table(self.tbl_accounts)
-        p_box.addWidget(self.tbl_accounts)
+        panel.body.addWidget(self.tbl_accounts)
 
         # Footnote
         lbl_footnote = QLabel("Official Google OAuth 2.0 PKCE is used. Tokens are stored in the local encrypted OS CredentialVault / Keyring. Redirect callback port: 8484.")
         lbl_footnote.setFont(px_font(8))
         lbl_footnote.setStyleSheet(f"color: {C.TEXT_DIM}; padding-top: 4px;")
-        p_box.addWidget(lbl_footnote)
+        panel.body.addWidget(lbl_footnote)
 
         vbox.addWidget(panel, stretch=1)
         self.stack.addWidget(w)
@@ -462,54 +462,50 @@ class SectionPersonal(QWidget):
 
         # Left: Business Cloud API
         p_biz = HoloPanel("META WHATSAPP BUSINESS CLOUD API")
-        vb_biz = QVBoxLayout(p_biz)
-        vb_biz.setContentsMargins(8, 8, 8, 8)
         lbl_biz_desc = QLabel(
             "Official Meta Business API.\nRequires Meta Cloud API credentials & Internet-accessible Webhook Tunnel."
         )
         lbl_biz_desc.setFont(px_font(9))
         lbl_biz_desc.setStyleSheet(f"color: {C.TEXT_DIM};")
-        vb_biz.addWidget(lbl_biz_desc)
+        p_biz.body.addWidget(lbl_biz_desc)
 
         self.txt_wa_phone_id = QLineEdit()
         self.txt_wa_phone_id.setPlaceholderText("Phone Number ID")
         self.txt_wa_phone_id.setStyleSheet(self._input_css())
-        vb_biz.addWidget(self.txt_wa_phone_id)
+        p_biz.body.addWidget(self.txt_wa_phone_id)
 
         self.txt_wa_token = QLineEdit()
         self.txt_wa_token.setPlaceholderText("System User Access Token")
         self.txt_wa_token.setEchoMode(QLineEdit.EchoMode.Password)
         self.txt_wa_token.setStyleSheet(self._input_css())
-        vb_biz.addWidget(self.txt_wa_token)
+        p_biz.body.addWidget(self.txt_wa_token)
 
         self.btn_save_biz = QPushButton("CONNECT BUSINESS API")
         self.btn_save_biz.setStyleSheet(btn_css("primary"))
         self.btn_save_biz.clicked.connect(self._connect_wa_business)
-        vb_biz.addWidget(self.btn_save_biz)
-        vb_biz.addStretch()
+        p_biz.body.addWidget(self.btn_save_biz)
+        p_biz.body.addStretch()
         split.addWidget(p_biz)
 
         # Right: Personal Safe Handoff
         p_pers = HoloPanel("WHATSAPP PERSONAL SAFE INTEGRATION")
-        vb_pers = QVBoxLayout(p_pers)
-        vb_pers.setContentsMargins(8, 8, 8, 8)
         lbl_pers_desc = QLabel(
             "Architecturally honest local mode.\nNo unofficial scrapers or session hijacking.\n"
             "Supported: Chat Export file import (.txt) & one-click wa.me handoffs."
         )
         lbl_pers_desc.setFont(px_font(9))
         lbl_pers_desc.setStyleSheet(f"color: {C.TEXT_DIM};")
-        vb_pers.addWidget(lbl_pers_desc)
+        p_pers.body.addWidget(lbl_pers_desc)
 
         self.txt_chat_export = QTextEdit()
         self.txt_chat_export.setPlaceholderText("Paste exported WhatsApp chat text here to extract tasks & commitments...")
         self.txt_chat_export.setStyleSheet(self._input_css())
-        vb_pers.addWidget(self.txt_chat_export)
+        p_pers.body.addWidget(self.txt_chat_export)
 
         self.btn_import_chat = QPushButton("INGEST CHAT EXPORT")
         self.btn_import_chat.setStyleSheet(btn_css("secondary"))
         self.btn_import_chat.clicked.connect(self._import_personal_chat)
-        vb_pers.addWidget(self.btn_import_chat)
+        p_pers.body.addWidget(self.btn_import_chat)
         split.addWidget(p_pers)
 
         vbox.addWidget(split, stretch=1)
@@ -524,8 +520,6 @@ class SectionPersonal(QWidget):
         vbox.setSpacing(8)
 
         panel = HoloPanel("PERSONAL PROACTIVE AUTOMATION RULES")
-        p_box = QVBoxLayout(panel)
-        p_box.setContentsMargins(10, 10, 10, 10)
 
         rules_info = QLabel(
             "• Auto-Triage: Rank incoming messages by importance and VIP contact status.\n"
@@ -535,8 +529,8 @@ class SectionPersonal(QWidget):
         )
         rules_info.setFont(px_font(10))
         rules_info.setStyleSheet(f"color: {C.WHITE}; background: transparent; line-height: 1.6;")
-        p_box.addWidget(rules_info)
-        p_box.addStretch()
+        panel.body.addWidget(rules_info)
+        panel.body.addStretch()
 
         vbox.addWidget(panel, stretch=1)
         self.stack.addWidget(w)
@@ -550,9 +544,6 @@ class SectionPersonal(QWidget):
         vbox.setSpacing(8)
 
         panel = HoloPanel("LOCAL DATA RETENTION & SECURITY CONTROL")
-        p_box = QVBoxLayout(panel)
-        p_box.setContentsMargins(10, 10, 10, 10)
-        p_box.setSpacing(12)
 
         info = QLabel(
             "Local-First Guarantee:\n"
@@ -561,23 +552,23 @@ class SectionPersonal(QWidget):
         )
         info.setFont(px_font(10))
         info.setStyleSheet(f"color: {C.TEXT_DIM};")
-        p_box.addWidget(info)
+        panel.body.addWidget(info)
 
         self.btn_purge_gmail = QPushButton("PURGE GMAIL CACHE")
         self.btn_purge_gmail.setStyleSheet(btn_css("secondary"))
         self.btn_purge_gmail.clicked.connect(lambda: self._purge_provider(ProviderType.GMAIL))
-        p_box.addWidget(self.btn_purge_gmail)
+        panel.body.addWidget(self.btn_purge_gmail)
 
         self.btn_purge_outlook = QPushButton("PURGE OUTLOOK CACHE")
         self.btn_purge_outlook.setStyleSheet(btn_css("secondary"))
         self.btn_purge_outlook.clicked.connect(lambda: self._purge_provider(ProviderType.OUTLOOK))
-        p_box.addWidget(self.btn_purge_outlook)
+        panel.body.addWidget(self.btn_purge_outlook)
 
         self.btn_wipe_all = QPushButton("WIPE ALL LOCAL PERSONAL INTELLIGENCE DATA")
         self.btn_wipe_all.setStyleSheet(btn_css("danger"))
         self.btn_wipe_all.clicked.connect(self._wipe_all)
-        p_box.addWidget(self.btn_wipe_all)
-        p_box.addStretch()
+        panel.body.addWidget(self.btn_wipe_all)
+        panel.body.addStretch()
 
         vbox.addWidget(panel, stretch=1)
         self.stack.addWidget(w)
@@ -735,24 +726,32 @@ class SectionPersonal(QWidget):
                 btn_sync = QPushButton("SYNC")
                 btn_sync.setFont(px_font(8, QFont.Weight.Bold))
                 btn_sync.setStyleSheet(btn_css("secondary"))
+                btn_sync.setFixedHeight(26)
+                btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_sync.clicked.connect(lambda checked=False, aid=a.account_id: self._sync_single_account(aid))
                 act_box.addWidget(btn_sync)
 
                 btn_disc = QPushButton("DISCONNECT")
                 btn_disc.setFont(px_font(8, QFont.Weight.Bold))
                 btn_disc.setStyleSheet(btn_css("danger"))
+                btn_disc.setFixedHeight(26)
+                btn_disc.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_disc.clicked.connect(lambda checked=False, aid=a.account_id: self._disconnect_account(aid))
                 act_box.addWidget(btn_disc)
             else:
                 btn_reconn = QPushButton("CONNECT / REAUTH")
                 btn_reconn.setFont(px_font(8, QFont.Weight.Bold))
                 btn_reconn.setStyleSheet(btn_css("primary"))
+                btn_reconn.setFixedHeight(26)
+                btn_reconn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_reconn.clicked.connect(lambda checked=False, p=a.provider: self._connect_provider(p))
                 act_box.addWidget(btn_reconn)
 
                 btn_del = QPushButton("REMOVE")
                 btn_del.setFont(px_font(8))
                 btn_del.setStyleSheet(btn_css("secondary"))
+                btn_del.setFixedHeight(26)
+                btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_del.clicked.connect(lambda checked=False, aid=a.account_id: self._delete_account(aid))
                 act_box.addWidget(btn_del)
 
@@ -787,6 +786,8 @@ class SectionPersonal(QWidget):
                 btn_conn = QPushButton(f"CONNECT {prov_type.value}")
                 btn_conn.setFont(px_font(8, QFont.Weight.Bold))
                 btn_conn.setStyleSheet(btn_css("primary"))
+                btn_conn.setFixedHeight(26)
+                btn_conn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_conn.clicked.connect(lambda checked=False, p=prov_type: self._connect_provider(p))
                 act_box.addWidget(btn_conn)
 
@@ -923,6 +924,15 @@ class SectionPersonal(QWidget):
         self.refresh_all()
 
     def _delete_account(self, account_id: str) -> None:
+        ret = QMessageBox.question(
+            self,
+            "Confirm Account Removal",
+            f"Are you sure you want to remove account '{account_id}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return
         self.store.delete_account(account_id)
         self.lbl_accounts_status.setText(f"Removed {account_id}.")
         self._refresh_accounts()
