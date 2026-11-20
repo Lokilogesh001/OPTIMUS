@@ -1486,5 +1486,106 @@ class OptimusServiceBridge(QObject):
             logger.error("Error executing rollback for %s: %s", proposal_id, e)
             return False
 
+    # ── M12: Personal Connected Accounts & OAuth Bridge ──────────────────────
+
+    def get_supported_personal_providers(self) -> list[dict[str, Any]]:
+        """List all supported external providers and their current connection status."""
+        try:
+            from core.personal_intelligence.storage import (
+                PersonalStore,
+                mask_pii_string,
+            )
+            from core.personal_intelligence.types import AuthStatus, ProviderType
+            store = PersonalStore.instance()
+            accounts = store.list_accounts()
+            accounts_by_provider = {a.provider: a for a in accounts}
+
+            supported = [
+                {
+                    "provider": ProviderType.GMAIL.value,
+                    "name": "Google Gmail",
+                    "description": "Email triage, action item detection, and secure reply drafting.",
+                    "auth_status": accounts_by_provider[ProviderType.GMAIL].auth_status.value if ProviderType.GMAIL in accounts_by_provider else AuthStatus.DISCONNECTED.value,
+                    "account_id": accounts_by_provider[ProviderType.GMAIL].account_id if ProviderType.GMAIL in accounts_by_provider else "",
+                    "identity": mask_pii_string(accounts_by_provider[ProviderType.GMAIL].email_or_id) if ProviderType.GMAIL in accounts_by_provider else "",
+                    "last_synced_at": accounts_by_provider[ProviderType.GMAIL].last_synced_at if ProviderType.GMAIL in accounts_by_provider else 0.0,
+                },
+                {
+                    "provider": ProviderType.GOOGLE_CALENDAR.value,
+                    "name": "Google Calendar",
+                    "description": "Schedule aggregation, conflict detection, and event management.",
+                    "auth_status": accounts_by_provider[ProviderType.GOOGLE_CALENDAR].auth_status.value if ProviderType.GOOGLE_CALENDAR in accounts_by_provider else AuthStatus.DISCONNECTED.value,
+                    "account_id": accounts_by_provider[ProviderType.GOOGLE_CALENDAR].account_id if ProviderType.GOOGLE_CALENDAR in accounts_by_provider else "",
+                    "identity": mask_pii_string(accounts_by_provider[ProviderType.GOOGLE_CALENDAR].email_or_id) if ProviderType.GOOGLE_CALENDAR in accounts_by_provider else "",
+                    "last_synced_at": accounts_by_provider[ProviderType.GOOGLE_CALENDAR].last_synced_at if ProviderType.GOOGLE_CALENDAR in accounts_by_provider else 0.0,
+                },
+                {
+                    "provider": ProviderType.OUTLOOK.value,
+                    "name": "Microsoft Outlook & Calendar",
+                    "description": "Microsoft Graph mail and calendar synchronization.",
+                    "auth_status": accounts_by_provider[ProviderType.OUTLOOK].auth_status.value if ProviderType.OUTLOOK in accounts_by_provider else AuthStatus.DISCONNECTED.value,
+                    "account_id": accounts_by_provider[ProviderType.OUTLOOK].account_id if ProviderType.OUTLOOK in accounts_by_provider else "",
+                    "identity": mask_pii_string(accounts_by_provider[ProviderType.OUTLOOK].email_or_id) if ProviderType.OUTLOOK in accounts_by_provider else "",
+                    "last_synced_at": accounts_by_provider[ProviderType.OUTLOOK].last_synced_at if ProviderType.OUTLOOK in accounts_by_provider else 0.0,
+                },
+                {
+                    "provider": ProviderType.WHATSAPP_BUSINESS.value,
+                    "name": "Meta WhatsApp Business API",
+                    "description": "Official Meta Business Cloud API with webhook ingestion.",
+                    "auth_status": accounts_by_provider[ProviderType.WHATSAPP_BUSINESS].auth_status.value if ProviderType.WHATSAPP_BUSINESS in accounts_by_provider else AuthStatus.DISCONNECTED.value,
+                    "account_id": accounts_by_provider[ProviderType.WHATSAPP_BUSINESS].account_id if ProviderType.WHATSAPP_BUSINESS in accounts_by_provider else "",
+                    "identity": mask_pii_string(accounts_by_provider[ProviderType.WHATSAPP_BUSINESS].email_or_id) if ProviderType.WHATSAPP_BUSINESS in accounts_by_provider else "",
+                    "last_synced_at": accounts_by_provider[ProviderType.WHATSAPP_BUSINESS].last_synced_at if ProviderType.WHATSAPP_BUSINESS in accounts_by_provider else 0.0,
+                },
+            ]
+            return supported
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error listing supported personal providers: %s", e)
+            return []
+
+    def check_google_oauth_credentials(self) -> dict[str, Any]:
+        """Check whether Google OAuth client credentials are configured."""
+        try:
+            from core.personal_intelligence.oauth import (
+                get_google_client_id,
+                get_google_client_secret,
+                get_google_credentials_guidance,
+            )
+            cid = get_google_client_id()
+            sec = get_google_client_secret()
+            return {
+                "configured": bool(cid and sec),
+                "client_id_present": bool(cid),
+                "client_secret_present": bool(sec),
+                "guidance": get_google_credentials_guidance(),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"configured": False, "error": str(e), "guidance": ""}
+
+    def disconnect_personal_account(self, account_id: str) -> bool:
+        """Disconnect and revoke a personal provider account."""
+        try:
+            from core.personal_intelligence.oauth import GoogleOAuthManager
+            mgr = GoogleOAuthManager()
+            return mgr.disconnect_account(account_id)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error disconnecting account %s: %s", account_id, e)
+            return False
+
+    def sync_personal_account(self, account_id: str) -> dict[str, Any]:
+        """Trigger synchronization for a specific account."""
+        try:
+            from core.personal_intelligence.engine import PersonalIntelligenceEngine
+            from core.personal_intelligence.storage import PersonalStore
+            store = PersonalStore.instance()
+            account = store.get_account(account_id)
+            if not account:
+                return {"success": False, "error": f"Account '{account_id}' not found"}
+            engine = PersonalIntelligenceEngine(store=store)
+            return engine.sync_account(account)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error syncing account %s: %s", account_id, e)
+            return {"success": False, "error": str(e)}
+
 
 

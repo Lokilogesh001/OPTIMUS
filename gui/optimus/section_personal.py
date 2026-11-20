@@ -14,16 +14,21 @@ Implements the 8 dedicated views specified in Milestone 12:
 from __future__ import annotations
 
 import datetime
+import logging
+import threading
 import time
+import webbrowser
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
@@ -48,10 +53,95 @@ from core.personal_intelligence.types import (
     ProviderType,
     TaskStatus,
 )
+from core.security.credentials import store_credential
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import btn_css, px_font
 from gui.theme import C
 from gui.widgets import HoloPanel
+
+logger = logging.getLogger("optimus.gui.personal")
+
+
+class GoogleCredentialsDialog(QDialog):
+    """Dialog to configure Google Client ID and Secret."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Google OAuth Credentials Setup")
+        self.setFixedWidth(520)
+        self.setStyleSheet(f"background: {C.BG}; color: {C.WHITE};")
+
+        vbox = QVBoxLayout(self)
+        vbox.setSpacing(10)
+        vbox.setContentsMargins(16, 16, 16, 16)
+
+        title = QLabel("CONFIGURE GOOGLE OAUTH CREDENTIALS")
+        title.setFont(px_font(11, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.PRI};")
+        vbox.addWidget(title)
+
+        desc = QLabel(
+            "To connect Gmail or Google Calendar, configure your Google Cloud Desktop Client credentials.\n\n"
+            "• Redirect URI: http://localhost:8484/oauth/callback\n"
+            "• Scopes: Least privilege (gmail.readonly, calendar.readonly)\n"
+            "• Security: Tokens encrypted locally in OS CredentialVault / Keyring"
+        )
+        desc.setFont(px_font(9))
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {C.TEXT_DIM};")
+        vbox.addWidget(desc)
+
+        lbl_cid = QLabel("GOOGLE CLIENT ID:")
+        lbl_cid.setFont(px_font(9, QFont.Weight.DemiBold))
+        vbox.addWidget(lbl_cid)
+
+        from core.personal_intelligence.oauth import (
+            get_google_client_id,
+            get_google_client_secret,
+        )
+        self.txt_client_id = QLineEdit()
+        self.txt_client_id.setPlaceholderText("e.g. 123456789-xxxx.apps.googleusercontent.com")
+        self.txt_client_id.setText(get_google_client_id() or "")
+        self.txt_client_id.setStyleSheet(f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;")
+        vbox.addWidget(self.txt_client_id)
+
+        lbl_sec = QLabel("GOOGLE CLIENT SECRET:")
+        lbl_sec.setFont(px_font(9, QFont.Weight.DemiBold))
+        vbox.addWidget(lbl_sec)
+
+        self.txt_client_secret = QLineEdit()
+        self.txt_client_secret.setPlaceholderText("e.g. GOCSPX-xxxx")
+        self.txt_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.txt_client_secret.setText(get_google_client_secret() or "")
+        self.txt_client_secret.setStyleSheet(f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;")
+        vbox.addWidget(self.txt_client_secret)
+
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(8)
+        btn_box.addStretch()
+
+        self.btn_cancel = QPushButton("CANCEL")
+        self.btn_cancel.setStyleSheet(btn_css("secondary"))
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(self.btn_cancel)
+
+        self.btn_save = QPushButton("SAVE & PROCEED")
+        self.btn_save.setStyleSheet(btn_css("primary"))
+        self.btn_save.clicked.connect(self._save_and_accept)
+        btn_box.addWidget(self.btn_save)
+
+        vbox.addLayout(btn_box)
+
+    def _save_and_accept(self) -> None:
+        cid = self.txt_client_id.text().strip()
+        sec = self.txt_client_secret.text().strip()
+        if not cid or not sec:
+            QMessageBox.warning(self, "Input Error", "Both Client ID and Client Secret are required.")
+            return
+
+        store_credential("google_client_id", cid)
+        store_credential("google_client_secret", sec)
+        self.accept()
 
 
 class SectionPersonal(QWidget):
@@ -306,12 +396,56 @@ class SectionPersonal(QWidget):
         panel = HoloPanel("CONNECTED COMMUNICATION & CALENDAR PROVIDERS")
         p_box = QVBoxLayout(panel)
         p_box.setContentsMargins(10, 10, 10, 10)
+        p_box.setSpacing(10)
 
+        # Action Toolbar
+        tb_layout = QHBoxLayout()
+        tb_layout.setSpacing(8)
+
+        self.btn_oauth_connect_gmail = QPushButton("+ CONNECT GMAIL")
+        self.btn_oauth_connect_gmail.setFont(px_font(9, QFont.Weight.Bold))
+        self.btn_oauth_connect_gmail.setStyleSheet(btn_css("primary"))
+        self.btn_oauth_connect_gmail.clicked.connect(lambda: self._start_google_oauth(ProviderType.GMAIL))
+        tb_layout.addWidget(self.btn_oauth_connect_gmail)
+
+        self.btn_oauth_connect_gcal = QPushButton("+ CONNECT GOOGLE CALENDAR")
+        self.btn_oauth_connect_gcal.setFont(px_font(9, QFont.Weight.Bold))
+        self.btn_oauth_connect_gcal.setStyleSheet(btn_css("secondary"))
+        self.btn_oauth_connect_gcal.clicked.connect(lambda: self._start_google_oauth(ProviderType.GOOGLE_CALENDAR))
+        tb_layout.addWidget(self.btn_oauth_connect_gcal)
+
+        self.btn_oauth_help = QPushButton("OAUTH SETUP GUIDE")
+        self.btn_oauth_help.setFont(px_font(9, QFont.Weight.DemiBold))
+        self.btn_oauth_help.setStyleSheet(btn_css("secondary"))
+        self.btn_oauth_help.clicked.connect(self._show_oauth_guidance_dialog)
+        tb_layout.addWidget(self.btn_oauth_help)
+
+        tb_layout.addStretch()
+
+        self.lbl_accounts_status = QLabel("Ready")
+        self.lbl_accounts_status.setFont(px_font(9))
+        self.lbl_accounts_status.setStyleSheet(f"color: {C.TEXT_DIM};")
+        tb_layout.addWidget(self.lbl_accounts_status)
+
+        p_box.addLayout(tb_layout)
+
+        # Accounts Table
         self.tbl_accounts = QTableWidget(0, 6)
-        self.tbl_accounts.setHorizontalHeaderLabels(["ACCOUNT ID", "PROVIDER", "IDENTITY", "AUTH STATUS", "LAST SYNC", "ACTIONS"])
+        self.tbl_accounts.setHorizontalHeaderLabels(["PROVIDER", "ACCOUNT ID", "IDENTITY", "AUTH STATUS", "LAST SYNC", "ACTIONS"])
+        self.tbl_accounts.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_accounts.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.tbl_accounts.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.tbl_accounts.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_accounts.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_accounts.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self._style_table(self.tbl_accounts)
         p_box.addWidget(self.tbl_accounts)
+
+        # Footnote
+        lbl_footnote = QLabel("Official Google OAuth 2.0 PKCE is used. Tokens are stored in the local encrypted OS CredentialVault / Keyring. Redirect callback port: 8484.")
+        lbl_footnote.setFont(px_font(8))
+        lbl_footnote.setStyleSheet(f"color: {C.TEXT_DIM}; padding-top: 4px;")
+        p_box.addWidget(lbl_footnote)
 
         vbox.addWidget(panel, stretch=1)
         self.stack.addWidget(w)
@@ -552,16 +686,246 @@ class SectionPersonal(QWidget):
     def _refresh_accounts(self) -> None:
         accounts = self.store.list_accounts()
         self.tbl_accounts.setRowCount(0)
+        rendered_providers = set()
+
+        # 1. Render all configured accounts
         for a in accounts:
             row = self.tbl_accounts.rowCount()
             self.tbl_accounts.insertRow(row)
-            sync_time = datetime.datetime.fromtimestamp(a.last_synced_at).strftime("%b %d %H:%M") if a.last_synced_at else "Never"
-            self.tbl_accounts.setItem(row, 0, QTableWidgetItem(a.account_id))
-            self.tbl_accounts.setItem(row, 1, QTableWidgetItem(a.provider.value))
+            rendered_providers.add(a.provider)
+
+            sync_time = (
+                datetime.datetime.fromtimestamp(a.last_synced_at).strftime("%b %d %H:%M")
+                if a.last_synced_at
+                else "Never"
+            )
+            prov_name = a.provider.value
+            if a.provider == ProviderType.GMAIL:
+                prov_name = "Google Gmail"
+            elif a.provider == ProviderType.GOOGLE_CALENDAR:
+                prov_name = "Google Calendar"
+            elif a.provider == ProviderType.OUTLOOK:
+                prov_name = "Microsoft Outlook"
+            elif a.provider == ProviderType.WHATSAPP_BUSINESS:
+                prov_name = "WhatsApp Business"
+            elif a.provider == ProviderType.WHATSAPP_PERSONAL:
+                prov_name = "WhatsApp Personal"
+
+            self.tbl_accounts.setItem(row, 0, QTableWidgetItem(prov_name))
+            self.tbl_accounts.setItem(row, 1, QTableWidgetItem(a.account_id))
             self.tbl_accounts.setItem(row, 2, QTableWidgetItem(mask_pii_string(a.email_or_id)))
-            self.tbl_accounts.setItem(row, 3, QTableWidgetItem(a.auth_status.value))
+
+            st_item = QTableWidgetItem(a.auth_status.value)
+            if a.auth_status == AuthStatus.CONNECTED:
+                st_item.setForeground(Qt.GlobalColor.green)
+            elif a.auth_status in (AuthStatus.EXPIRED, AuthStatus.ERROR):
+                st_item.setForeground(Qt.GlobalColor.red)
+            else:
+                st_item.setForeground(Qt.GlobalColor.gray)
+            self.tbl_accounts.setItem(row, 3, st_item)
             self.tbl_accounts.setItem(row, 4, QTableWidgetItem(sync_time))
-            self.tbl_accounts.setItem(row, 5, QTableWidgetItem("DISCONNECT"))
+
+            # Action widget with buttons
+            act_w = QWidget()
+            act_box = QHBoxLayout(act_w)
+            act_box.setContentsMargins(4, 2, 4, 2)
+            act_box.setSpacing(6)
+
+            if a.auth_status == AuthStatus.CONNECTED:
+                btn_sync = QPushButton("SYNC")
+                btn_sync.setFont(px_font(8, QFont.Weight.Bold))
+                btn_sync.setStyleSheet(btn_css("secondary"))
+                btn_sync.clicked.connect(lambda checked=False, aid=a.account_id: self._sync_single_account(aid))
+                act_box.addWidget(btn_sync)
+
+                btn_disc = QPushButton("DISCONNECT")
+                btn_disc.setFont(px_font(8, QFont.Weight.Bold))
+                btn_disc.setStyleSheet(btn_css("danger"))
+                btn_disc.clicked.connect(lambda checked=False, aid=a.account_id: self._disconnect_account(aid))
+                act_box.addWidget(btn_disc)
+            else:
+                btn_reconn = QPushButton("CONNECT / REAUTH")
+                btn_reconn.setFont(px_font(8, QFont.Weight.Bold))
+                btn_reconn.setStyleSheet(btn_css("primary"))
+                btn_reconn.clicked.connect(lambda checked=False, p=a.provider: self._connect_provider(p))
+                act_box.addWidget(btn_reconn)
+
+                btn_del = QPushButton("REMOVE")
+                btn_del.setFont(px_font(8))
+                btn_del.setStyleSheet(btn_css("secondary"))
+                btn_del.clicked.connect(lambda checked=False, aid=a.account_id: self._delete_account(aid))
+                act_box.addWidget(btn_del)
+
+            self.tbl_accounts.setCellWidget(row, 5, act_w)
+
+        # 2. Render catalog rows for unconnected supported providers so panel is never empty
+        catalog = [
+            (ProviderType.GMAIL, "Google Gmail", "Official Google OAuth 2.0 PKCE"),
+            (ProviderType.GOOGLE_CALENDAR, "Google Calendar", "Google Calendar API v3"),
+            (ProviderType.OUTLOOK, "Microsoft Outlook", "Microsoft Graph API"),
+            (ProviderType.WHATSAPP_BUSINESS, "WhatsApp Business", "Meta Business Cloud API"),
+        ]
+        for prov_type, prov_label, prov_desc in catalog:
+            if prov_type not in rendered_providers:
+                row = self.tbl_accounts.rowCount()
+                self.tbl_accounts.insertRow(row)
+
+                self.tbl_accounts.setItem(row, 0, QTableWidgetItem(prov_label))
+                self.tbl_accounts.setItem(row, 1, QTableWidgetItem("Not Connected"))
+                self.tbl_accounts.setItem(row, 2, QTableWidgetItem(f"Available ({prov_desc})"))
+
+                st_item = QTableWidgetItem("DISCONNECTED")
+                st_item.setForeground(Qt.GlobalColor.gray)
+                self.tbl_accounts.setItem(row, 3, st_item)
+                self.tbl_accounts.setItem(row, 4, QTableWidgetItem("Never"))
+
+                act_w = QWidget()
+                act_box = QHBoxLayout(act_w)
+                act_box.setContentsMargins(4, 2, 4, 2)
+                act_box.setSpacing(6)
+
+                btn_conn = QPushButton(f"CONNECT {prov_type.value}")
+                btn_conn.setFont(px_font(8, QFont.Weight.Bold))
+                btn_conn.setStyleSheet(btn_css("primary"))
+                btn_conn.clicked.connect(lambda checked=False, p=prov_type: self._connect_provider(p))
+                act_box.addWidget(btn_conn)
+
+                self.tbl_accounts.setCellWidget(row, 5, act_w)
+
+    def _show_oauth_guidance_dialog(self) -> None:
+        from core.personal_intelligence.oauth import get_google_credentials_guidance
+        guidance = get_google_credentials_guidance()
+        QMessageBox.information(self, "Google OAuth Setup Guide", guidance)
+
+    def _connect_provider(self, provider: ProviderType) -> None:
+        if provider in (ProviderType.GMAIL, ProviderType.GOOGLE_CALENDAR):
+            self._start_google_oauth(provider)
+        elif provider == ProviderType.WHATSAPP_BUSINESS:
+            self._switch_sub_view(5)
+        elif provider == ProviderType.OUTLOOK:
+            QMessageBox.information(
+                self,
+                "Microsoft Outlook Setup",
+                "Microsoft Graph OAuth 2.0:\n\n"
+                "1. Register OPTIMUS in Microsoft Entra ID (Azure Portal).\n"
+                "2. Redirect URI: http://localhost:8484/oauth/callback\n"
+                "3. Set OUTLOOK_CLIENT_ID and OUTLOOK_CLIENT_SECRET in environment or vault.",
+            )
+
+    def _start_google_oauth(self, provider: ProviderType = ProviderType.GMAIL) -> None:
+        from core.personal_intelligence.oauth import (
+            GoogleOAuthManager,
+            has_google_credentials,
+        )
+
+        if not has_google_credentials():
+            dlg = GoogleCredentialsDialog(parent=self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+
+        mgr = GoogleOAuthManager(store=self.store)
+        try:
+            session = mgr.build_auth_session(provider=provider, port=8484)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(self, "OAuth Initialization Error", f"Failed to initialize Google OAuth session:\n{e}")
+            return
+
+        self.lbl_accounts_status.setText(f"Waiting for {provider.value} authorization in browser (port 8484)...")
+        self.btn_oauth_connect_gmail.setEnabled(False)
+        self.btn_oauth_connect_gcal.setEnabled(False)
+
+        def _worker() -> None:
+            server = mgr.start_loopback_listener(expected_state=session["state"], port=8484)
+            cb_result = mgr.wait_for_callback(server, timeout=120.0)
+            mgr.stop_loopback_listener()
+
+            if not cb_result.get("success"):
+                err = cb_result.get("error", "OAuth timeout or rejection.")
+                QTimer.singleShot(0, lambda msg=err: self._on_oauth_failed(msg))
+                return
+
+            try:
+                token_data = mgr.exchange_code(
+                    code=cb_result["code"],
+                    code_verifier=session["code_verifier"],
+                    redirect_uri=session["redirect_uri"],
+                    client_id=session["client_id"],
+                )
+                account = mgr.complete_connection(
+                    token_data=token_data,
+                    provider=provider,
+                    scopes=session["scopes"],
+                )
+                try:
+                    self.engine.sync_account(account)
+                except Exception as sync_ex:  # noqa: BLE001
+                    logger.warning("Initial sync exception: %s", sync_ex)
+
+                QTimer.singleShot(0, lambda acc=account: self._on_oauth_success(acc))
+            except Exception as ex:  # noqa: BLE001
+                err_str = str(ex)
+                logger.error("OAuth token exchange failure: %s", err_str)
+                QTimer.singleShot(0, lambda msg=err_str: self._on_oauth_failed(msg))
+
+        threading.Thread(target=_worker, daemon=True).start()
+        webbrowser.open(session["auth_url"])
+
+    def _on_oauth_success(self, account: Account) -> None:
+        self.lbl_accounts_status.setText(f"Connected {account.display_name} successfully.")
+        self.btn_oauth_connect_gmail.setEnabled(True)
+        self.btn_oauth_connect_gcal.setEnabled(True)
+        self._refresh_accounts()
+        QMessageBox.information(
+            self,
+            "Google Account Connected",
+            f"Successfully connected {account.provider.value} account:\n{account.email_or_id}\n\n"
+            "Initial synchronization has been initiated.",
+        )
+
+    def _on_oauth_failed(self, error_message: str) -> None:
+        self.lbl_accounts_status.setText("OAuth connection failed or cancelled.")
+        self.btn_oauth_connect_gmail.setEnabled(True)
+        self.btn_oauth_connect_gcal.setEnabled(True)
+        self._refresh_accounts()
+        QMessageBox.warning(
+            self,
+            "OAuth Connection Failed",
+            f"Could not connect Google account:\n{error_message}\n\n"
+            "Please check that your client ID, secret, and redirect URI (http://localhost:8484/oauth/callback) are valid in Google Cloud Console.",
+        )
+
+    def _disconnect_account(self, account_id: str) -> None:
+        confirm = QMessageBox.question(
+            self,
+            "Disconnect Provider Account",
+            f"Are you sure you want to disconnect account '{account_id}'?\n\n"
+            "This will revoke access tokens remotely if possible and purge stored credentials locally.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            success = self.engine.disconnect_account(account_id)
+            if success:
+                self.lbl_accounts_status.setText(f"Account {account_id} disconnected.")
+            else:
+                self.lbl_accounts_status.setText(f"Failed disconnecting account {account_id}.")
+            self._refresh_accounts()
+
+    def _sync_single_account(self, account_id: str) -> None:
+        account = self.store.get_account(account_id)
+        if not account:
+            return
+        self.lbl_accounts_status.setText(f"Syncing {account_id}...")
+        res = self.engine.sync_account(account)
+        if res.get("success"):
+            self.lbl_accounts_status.setText(f"Sync complete for {account_id}.")
+        else:
+            self.lbl_accounts_status.setText(f"Sync failed for {account_id}: {res.get('error')}")
+        self.refresh_all()
+
+    def _delete_account(self, account_id: str) -> None:
+        self.store.delete_account(account_id)
+        self.lbl_accounts_status.setText(f"Removed {account_id}.")
+        self._refresh_accounts()
 
     def _trigger_sync(self) -> None:
         self.engine.sync_all_connected_accounts()

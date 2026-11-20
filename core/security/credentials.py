@@ -29,6 +29,8 @@ ENV_FALLBACKS: dict[str, list[str]] = {
     "groq": ["GROQ_API_KEY"],
     "openrouter": ["OPENROUTER_API_KEY"],
     "custom": ["CUSTOM_API_KEY", "OPENAI_API_KEY"],
+    "google_client_id": ["GOOGLE_CLIENT_ID", "GMAIL_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID"],
+    "google_client_secret": ["GOOGLE_CLIENT_SECRET", "GMAIL_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET"],
 }
 
 
@@ -158,6 +160,8 @@ def get_credential(provider: str) -> str | None:
             cfg_data = json.loads(cfg_path.read_text(encoding="utf-8"))
             if provider_clean == "gemini" and cfg_data.get("gemini_api_key"):
                 return cfg_data["gemini_api_key"]
+            if cfg_data.get(provider_clean):
+                return cfg_data[provider_clean]
             if cfg_data.get(f"{provider_clean}_api_key"):
                 return cfg_data[f"{provider_clean}_api_key"]
     except Exception:

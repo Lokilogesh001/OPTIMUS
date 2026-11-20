@@ -440,3 +440,21 @@ class PersonalIntelligenceEngine:
                 results.append({"success": False, "error": str(ex)})
 
         return results
+
+    def disconnect_account(self, account_id: str, http_client: Any | None = None) -> bool:
+        """Disconnect and revoke an account, purging credentials honestly."""
+        account = self.store.get_account(account_id)
+        if not account:
+            logger.warning("Account %s not found for disconnect.", account_id)
+            return False
+
+        try:
+            adapter = self.get_adapter_for_account(account, http_client=http_client)
+            adapter.revoke()
+        except Exception as ex:  # noqa: BLE001
+            logger.warning("Error during adapter revoke for %s: %s", account_id, ex)
+            account.auth_status = AuthStatus.DISCONNECTED_LOCAL_ONLY
+
+        self.store.save_account(account)
+        logger.info("Account %s disconnected with status: %s", account_id, account.auth_status.value)
+        return True
