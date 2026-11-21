@@ -99,6 +99,7 @@ class CentralOrchestrator:
         verification_engine: Any | None = None,
         intelligence_gateway: Any | None = None,
         workflow_engine: Any | None = None,
+        vision_service: Any | None = None,
     ) -> None:
         self.agent_registry = agent_registry or AgentRegistry()
         self.tool_registry = tool_registry or ToolRegistry()
@@ -124,6 +125,14 @@ class CentralOrchestrator:
         from core.verification.engine import get_verification_engine
         self.verification_engine = verification_engine or get_verification_engine()
         self.workflow_engine = workflow_engine
+        if vision_service:
+            self.vision_service = vision_service
+        else:
+            try:
+                from core.vision.service import UnifiedVisionService
+                self.vision_service = UnifiedVisionService.instance()
+            except Exception:
+                self.vision_service = None
         self.mre_pipeline = MREPipeline(tool_registry=self.tool_registry)
         self._lock = threading.RLock()
         self._active_workers: dict[str, threading.Thread] = {}

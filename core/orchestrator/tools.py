@@ -444,6 +444,184 @@ class ToolRegistry:
             is_mutating=False,
         ))
 
+        # ── Milestone 16: Visual Awareness, Window & Browser Tab Intelligence ──
+
+        # 1. Enumerate Windows
+        def _enum_windows_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.vision.service import UnifiedVisionService
+            include_min = bool(params.get("include_minimized", True))
+            windows = UnifiedVisionService.instance().enumerate_windows(include_minimized=include_min)
+            lines = [
+                f"HWND: {w.hwnd:8} | PID: {w.pid:6} | App: {w.app_name:18} | "
+                f"State: {'[ACTIVE]' if w.is_active else ('[MIN]' if w.is_minimized else '[NORMAL]')} | "
+                f"Title: '{w.title}'"
+                for w in windows
+            ]
+            return ToolResult(
+                status="done",
+                output="\n".join(lines) if lines else "No open application windows discovered.",
+                evidence={"count": len(windows), "windows": [w.to_dict() for w in windows[:25]]},
+            )
+
+        self.register(ToolDefinition(
+            name="enumerate_windows",
+            description="Enumerate all open desktop windows with title, process name, PID, monitor, and state (active/minimized).",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "include_minimized": {"type": "BOOLEAN", "description": "Whether to include minimized windows (default: true)"}
+                },
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_enum_windows_handler,
+            is_mutating=False,
+        ))
+
+        # 2. Focus Window
+        def _focus_window_handler(params: dict, context: dict | None = None) -> ToolResult:
+            target = params.get("target")
+            if target is None:
+                return ToolResult(status="failed", error="Target parameter (HWND or title/app string) is required.")
+            restore_min = bool(params.get("restore_minimized", True))
+            from core.vision.service import UnifiedVisionService
+            ok, msg = UnifiedVisionService.instance().focus_window(target, restore_minimized=restore_min)
+            return ToolResult(
+                status="done" if ok else "failed",
+                output=msg,
+                evidence={"target": target, "focused": ok},
+                error=None if ok else msg,
+            )
+
+        self.register(ToolDefinition(
+            name="focus_window",
+            description="Activate, restore from minimized, and bring an application window to the foreground by HWND, title, or app name.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "target": {"type": "STRING", "description": "HWND integer, window title substring, or application name"},
+                    "restore_minimized": {"type": "BOOLEAN", "description": "Whether to restore window if minimized (default: true)"},
+                },
+                "required": ["target"],
+            },
+            capability_tier=CapabilityTier.EXECUTION,
+            handler=_focus_window_handler,
+            is_mutating=True,
+        ))
+
+        # 3. Enumerate Browser Tabs
+        def _enum_tabs_handler(params: dict, context: dict | None = None) -> ToolResult:
+            browser = params.get("browser")
+            from core.vision.service import UnifiedVisionService
+            tabs = UnifiedVisionService.instance().enumerate_browser_tabs(browser=browser)
+            lines = [
+                f"[{t.browser.upper()}] TabID: {t.tab_id} | "
+                f"State: {'[ACTIVE]' if t.is_active else ('[PINNED]' if t.is_pinned else '[BG]')} | "
+                f"Domain: {t.domain_hint or t.domain or 'unknown'} | "
+                f"Title: '{t.title}'"
+                for t in tabs
+            ]
+            return ToolResult(
+                status="done",
+                output="\n".join(lines) if lines else "No browser tabs discovered.",
+                evidence={"count": len(tabs), "tabs": [t.to_dict() for t in tabs[:30]]},
+            )
+
+        self.register(ToolDefinition(
+            name="enumerate_browser_tabs",
+            description="Discover and list open tabs across Chrome, Edge, and Firefox with title, domain hints, and active/pinned state.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "browser": {"type": "STRING", "description": "Optional browser filter: 'chrome', 'msedge', or 'firefox'"}
+                },
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_enum_tabs_handler,
+            is_mutating=False,
+        ))
+
+        # 4. Switch Browser Tab
+        def _switch_tab_handler(params: dict, context: dict | None = None) -> ToolResult:
+            query = params.get("query_or_id") or params.get("query")
+            if not query:
+                return ToolResult(status="failed", error="Parameter 'query_or_id' is required.")
+            from core.vision.service import UnifiedVisionService
+            ok, msg = UnifiedVisionService.instance().switch_browser_tab(str(query))
+            return ToolResult(
+                status="done" if ok else "failed",
+                output=msg,
+                evidence={"query": query, "switched": ok},
+                error=None if ok else msg,
+            )
+
+        self.register(ToolDefinition(
+            name="switch_browser_tab",
+            description="Switch to an open browser tab by tab_id, title substring, or domain, restoring the browser window if minimized.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "query_or_id": {"type": "STRING", "description": "Tab ID, title keyword, or domain"}
+                },
+                "required": ["query_or_id"],
+            },
+            capability_tier=CapabilityTier.EXECUTION,
+            handler=_switch_tab_handler,
+            is_mutating=True,
+        ))
+
+        # 5. Capture Visual State
+        def _capture_visual_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.vision.service import UnifiedVisionService
+            state = UnifiedVisionService.instance().get_desktop_state(force_scan=True)
+            active_title = state.active_window.title if state.active_window else "None"
+            return ToolResult(
+                status="done",
+                output=(
+                    f"Desktop Visual State:\n"
+                    f"- Active Window: {active_title}\n"
+                    f"- Open Windows: {len(state.windows)}\n"
+                    f"- Open Tabs: {len(state.browser_tabs)}\n"
+                    f"- Visual dHash: {state.dhash}\n"
+                    f"- Elements: {state.ui_elements_count}\n"
+                    f"- Privacy Redacted: {state.privacy_redacted}"
+                ),
+                evidence=state.to_dict(),
+            )
+
+        self.register(ToolDefinition(
+            name="capture_visual_state",
+            description="Capture current desktop visual state, active window, dhash, and open application/tab counts.",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_capture_visual_handler,
+            is_mutating=False,
+        ))
+
+        # 6. Explain Desktop State
+        def _explain_desktop_handler(params: dict, context: dict | None = None) -> ToolResult:
+            question = params.get("question")
+            from core.vision.service import UnifiedVisionService
+            explanation = UnifiedVisionService.instance().explain_desktop_state(question=question)
+            return ToolResult(
+                status="done",
+                output=explanation,
+                evidence={"question": question},
+            )
+
+        self.register(ToolDefinition(
+            name="explain_desktop_state",
+            description="Explain the current desktop state, active window, and visible UI context in natural language.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "question": {"type": "STRING", "description": "Optional specific question about the screen"}
+                },
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_explain_desktop_handler,
+            is_mutating=False,
+        ))
+
     def register(self, tool_def: ToolDefinition) -> None:
         """Register or update a tool definition in the registry."""
         self._tools[tool_def.name] = tool_def

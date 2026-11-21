@@ -41,6 +41,12 @@ def create_researcher_profile() -> AgentProfile:
                 "open_in_explorer",
                 "open_directory",
                 "open_folder",
+                "enumerate_windows",
+                "focus_window",
+                "enumerate_browser_tabs",
+                "switch_browser_tab",
+                "capture_visual_state",
+                "explain_desktop_state",
             ],
             allowed_tiers=[
                 CapabilityTier.READ_ONLY,

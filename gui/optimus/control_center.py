@@ -38,6 +38,7 @@ from gui.optimus.section_settings import SectionSettings
 from gui.optimus.section_skills import SectionSkills
 from gui.optimus.section_system import SectionSystem
 from gui.optimus.section_verification import SectionVerification
+from gui.optimus.section_vision import SectionVision
 from gui.optimus.section_workflows import SectionWorkflows
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.theme import C
@@ -82,6 +83,7 @@ class OptimusControlCenterWidget(QWidget):
         self.proactive_view = SectionProactive(self.bridge, parent=self.stack)
         self.personal_view = SectionPersonal(self.bridge, parent=self.stack)
         self.self_improvement_view = SectionSelfImprovement(self.bridge, parent=self.stack)
+        self.vision_view = SectionVision(self.bridge, parent=self.stack)
 
         # Add to stack in index order matching OptimusNavBar.SECTIONS
         self.stack.addWidget(self.dashboard_view)      # 0: DASHBOARD
@@ -101,6 +103,7 @@ class OptimusControlCenterWidget(QWidget):
         self.stack.addWidget(self.proactive_view)      # 14: PROACTIVE
         self.stack.addWidget(self.personal_view)       # 15: PERSONAL
         self.stack.addWidget(self.self_improvement_view) # 16: IMPROVE
+        self.stack.addWidget(self.vision_view)         # 17: VISION
 
         layout.addWidget(self.stack, stretch=1)
 
@@ -120,6 +123,8 @@ class OptimusControlCenterWidget(QWidget):
         w = self.stack.currentWidget()
         if hasattr(w, "refresh_all"):
             w.refresh_all()
+        elif hasattr(w, "refresh_vision"):
+            w.refresh_vision()
         elif hasattr(w, "refresh_missions"):
             w.refresh_missions()
         elif hasattr(w, "refresh_tasks"):

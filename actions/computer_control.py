@@ -283,15 +283,22 @@ def _focus_window(title: str) -> str:
 
     if os_name == "windows":
         try:
-            script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True, timeout=5, **_WIN_HIDE,
-            )
-            time.sleep(0.3)
-            return f"Focused window: {title}"
-        except Exception as e:
-            return f"focus_window (Windows) failed: {e}"
+            from core.vision.window_intelligence import focus_window as _win_focus
+            ok, msg = _win_focus(title, restore_minimized=True)
+            if ok:
+                return f"Focused window: {title}"
+            return f"focus_window (Windows): {msg}"
+        except Exception:
+            try:
+                script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                    capture_output=True, timeout=5, **_WIN_HIDE,
+                )
+                time.sleep(0.3)
+                return f"Focused window: {title}"
+            except Exception as e:
+                return f"focus_window (Windows) failed: {e}"
 
     if os_name == "mac":
         script = (

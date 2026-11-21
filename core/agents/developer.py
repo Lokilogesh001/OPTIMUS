@@ -53,6 +53,12 @@ def create_developer_profile() -> AgentProfile:
                 "open_directory",
                 "open_folder",
                 "calculator",
+                "enumerate_windows",
+                "focus_window",
+                "enumerate_browser_tabs",
+                "switch_browser_tab",
+                "capture_visual_state",
+                "explain_desktop_state",
             ],
             allowed_tiers=[
                 CapabilityTier.READ_ONLY,

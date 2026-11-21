@@ -166,6 +166,47 @@ class MREClassifier:
         re.IGNORECASE,
     )
 
+    # ── M16 Visual Awareness & Window Intelligence Patterns ─────────────────
+    _WINDOW_FOCUS_PATTERN = re.compile(
+        r"^(?:focus|switch\s+to|bring\s+to\s+front|activate|restore)(?:\s+(?:the|window))?\s+(?:window\s+)?(.*?)(?:\s+window)?\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _WINDOW_LIST_PATTERN = re.compile(
+        r"^(?:list|enumerate|show|what)\s+(?:all\s+)?(?:open\s+)?windows(?:\s+are\s+open)?\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TAB_LIST_PATTERN = re.compile(
+        r"^(?:list|enumerate|show|what)\s+(?:all\s+)?(?:open\s+)?(?:browser\s+)?tabs(?:\s+are\s+open)?\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TAB_SWITCH_PATTERN = re.compile(
+        r"^(?:switch\s+to|activate|open)\s+(?:browser\s+)?tab\s+(.*?)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _EXPLAIN_DESKTOP_PATTERN = re.compile(
+        r"^(?:why\s+isn't\s+the\s+application\s+working|why\s+is\s+the\s+app\s+not\s+working|explain\s+desktop|what\s+is\s+on\s+my\s+screen|inspect\s+desktop|explain\s+screen)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TASK_RESUME_CODING_PATTERN = re.compile(
+        r"^(?:continue|resume)\s+(?:my\s+)?coding(?:\s+task)?\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TASK_FIND_DOCS_PATTERN = re.compile(
+        r"^(?:find|show|locate)\s+(?:the\s+)?documentation(?:\s+i\s+opened(?:\s+earlier)?)?\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TASK_RESUME_RESEARCH_PATTERN = re.compile(
+        r"^(?:continue|resume)\s+(?:the\s+)?research\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
     def classify(self, text: str) -> MREDecision:
         """Classify user text and return the minimal reliable execution decision."""
         clean = text.strip()
@@ -326,6 +367,108 @@ class MREClassifier:
                 explanation="Native desktop application execution via Windows runtime broker.",
             )
 
+        # 11. Visual State Explanation / Anomaly Diagnosis
+        if self._EXPLAIN_DESKTOP_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.SYSTEM_ADMINISTRATION,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="explain_desktop_state",
+                arguments={"question": clean},
+                caller_agent="general",
+                outcome_contract=OutcomeContract(contract_type="desktop_explained", target="desktop"),
+                explanation="Desktop visual awareness inspection and active anomaly explanation.",
+            )
+
+        # 12. List Browser Tabs
+        if self._TAB_LIST_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.APPLICATION_MANAGEMENT,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="enumerate_browser_tabs",
+                arguments={},
+                caller_agent="general",
+                outcome_contract=OutcomeContract(contract_type="tabs_listed", target="tabs"),
+                explanation="Browser tab inventory discovery across open windows.",
+            )
+
+        # 13. Switch Browser Tab
+        tab_sw_match = self._TAB_SWITCH_PATTERN.match(clean)
+        if tab_sw_match:
+            target_tab = tab_sw_match.group(1).strip().strip("'\"")
+            return MREDecision(
+                category=TaskCategory.APPLICATION_MANAGEMENT,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="switch_browser_tab",
+                arguments={"query_or_id": target_tab},
+                caller_agent="general",
+                outcome_contract=OutcomeContract(contract_type="tab_switched", target=target_tab),
+                explanation="Browser tab focus and selection via accessibility navigation.",
+            )
+
+        # 14. List Desktop Windows
+        if self._WINDOW_LIST_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.APPLICATION_MANAGEMENT,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="enumerate_windows",
+                arguments={"include_minimized": True},
+                caller_agent="general",
+                outcome_contract=OutcomeContract(contract_type="windows_listed", target="windows"),
+                explanation="Desktop application window inventory enumeration.",
+            )
+
+        # 15. Focus / Restore Desktop Window
+        win_f_match = self._WINDOW_FOCUS_PATTERN.match(clean)
+        if win_f_match:
+            target_win = win_f_match.group(1).strip().strip("'\"")
+            low_tw = target_win.lower()
+            if target_win and not low_tw.startswith("tab ") and low_tw not in ("notepad", "calc", "calculator", "explorer", "cmd"):
+                return MREDecision(
+                    category=TaskCategory.APPLICATION_MANAGEMENT,
+                    priority=MethodPriority.P3_REGISTERED_TOOL,
+                    tool_name="focus_window",
+                    arguments={"target": target_win, "restore_minimized": True},
+                    caller_agent="general",
+                    outcome_contract=OutcomeContract(contract_type="window_focused", target=target_win),
+                    explanation="Native Win32 window focus and geometry restoration.",
+                )
+
+        # 16. Intelligent Task Desktop Navigation: Coding Task
+        if self._TASK_RESUME_CODING_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.SOFTWARE_DEVELOPMENT,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="focus_window",
+                arguments={"target": "code", "restore_minimized": True},
+                caller_agent="developer",
+                outcome_contract=OutcomeContract(contract_type="window_focused", target="code"),
+                explanation="Locates and activates existing IDE window for continued coding.",
+            )
+
+        # 17. Intelligent Task Desktop Navigation: Documentation Search
+        if self._TASK_FIND_DOCS_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.DATA_RETRIEVAL_ANALYSIS,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="switch_browser_tab",
+                arguments={"query_or_id": "docs"},
+                caller_agent="researcher",
+                outcome_contract=OutcomeContract(contract_type="tab_switched", target="docs"),
+                explanation="Locates and activates open browser documentation tab.",
+            )
+
+        # 18. Intelligent Task Desktop Navigation: Research Task
+        if self._TASK_RESUME_RESEARCH_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.DATA_RETRIEVAL_ANALYSIS,
+                priority=MethodPriority.P3_REGISTERED_TOOL,
+                tool_name="switch_browser_tab",
+                arguments={"query_or_id": "research"},
+                caller_agent="researcher",
+                outcome_contract=OutcomeContract(contract_type="tab_switched", target="research"),
+                explanation="Locates and activates research browser tab or window.",
+            )
+
         # Default fallback: Yield to CentralOrchestrator general planner
         return MREDecision(
             category=TaskCategory.DATA_RETRIEVAL_ANALYSIS,
@@ -377,6 +520,21 @@ class MREOutcomeVerifier:
 
         if ctype == "process_running":
             return True, f"Application launch validated for target '{contract.target}'."
+
+        if ctype == "window_focused":
+            return tool_result.is_success, f"Window focus/restore validated for '{contract.target}'."
+
+        if ctype == "windows_listed":
+            return tool_result.is_success, "Window inventory retrieved successfully."
+
+        if ctype == "tabs_listed":
+            return tool_result.is_success, "Browser tab inventory retrieved successfully."
+
+        if ctype == "tab_switched":
+            return tool_result.is_success, f"Browser tab selection validated for '{contract.target}'."
+
+        if ctype == "desktop_explained":
+            return tool_result.is_success, "Desktop visual state explanation retrieved."
 
         return tool_result.is_success, "Generic postcondition satisfied."
 
@@ -454,10 +612,13 @@ class MREPipeline:
                 }]
 
         if allowed_tiers is None:
-            if caller_agent == "personal_intelligence":
+            prof = self.tool_registry.agent_registry.get(caller_agent) if hasattr(self.tool_registry, "agent_registry") and self.tool_registry.agent_registry else None
+            if prof and hasattr(prof, "allowed_tiers"):
+                allowed_tiers = prof.allowed_tiers
+            elif caller_agent in ("windows_runtime", "general", "developer", "execution_agent"):
+                allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE, CapabilityTier.EXECUTION, CapabilityTier.NETWORK_EXTERNAL]
+            elif caller_agent == "personal_intelligence":
                 allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.NETWORK_EXTERNAL]
-            elif caller_agent == "windows_runtime":
-                allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE, CapabilityTier.EXECUTION]
             else:
                 allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE, CapabilityTier.NETWORK_EXTERNAL]
 
