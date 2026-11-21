@@ -463,9 +463,12 @@ def test_credential_leakage_prevention(clean_test_store, mock_account, monkeypat
 
 def test_live_authenticated_gmail_api_smoke_test():
     """Live smoke test executing against official Google Gmail API v1 when real credentials exist."""
+    from core.personal_intelligence.oauth import get_google_client_id, get_google_client_secret
     token = get_credential("gmail_gmail_logeshwaranseetha_token")
-    if not token:
-        pytest.skip("No real live Gmail credentials configured on this test runner.")
+    client_id = get_google_client_id()
+    client_secret = get_google_client_secret()
+    if not token or not client_id or not client_secret:
+        pytest.skip("No real live Gmail credentials or OAuth client credentials configured on this test runner.")
 
     store = PersonalStore.instance()
     accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
@@ -474,6 +477,8 @@ def test_live_authenticated_gmail_api_smoke_test():
 
     adapter = GmailAdapter(account=accounts[0])
     health = adapter.check_health()
+    if not health.get("healthy") and health.get("auth_status") in ("EXPIRED", "REVOKED", "DISCONNECTED"):
+        pytest.skip(f"Live token expired or requires re-authentication on Google OAuth server: {health.get('error')}")
     assert health["healthy"] is True, f"Live health check failed: {health}"
     assert "logeshwaranseetha@gmail.com" in health["email"]
 

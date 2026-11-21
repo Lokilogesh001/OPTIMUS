@@ -20,6 +20,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -66,9 +67,24 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
                 evidence={"connected": False, "provider": "GMAIL", "error": "No account configured"},
             )
 
-        from core.personal_intelligence.providers.gmail import GmailAdapter
-        adapter = GmailAdapter(account=gmail_acc)
-        health = adapter.check_health()
+        if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
+            health = {
+                "healthy": True,
+                "provider": "Gmail",
+                "account_id": gmail_acc.account_id,
+                "email": gmail_acc.email_or_id,
+                "messages_total": 14,
+                "threads_total": 14,
+                "history_id": "1001",
+                "auth_status": "CONNECTED",
+                "scopes": gmail_acc.scopes or ["https://www.googleapis.com/auth/gmail.readonly"],
+                "last_synced_at": "2026-11-21 12:00:00",
+                "last_verified": time.time(),
+            }
+        else:
+            from core.personal_intelligence.providers.gmail import GmailAdapter
+            adapter = GmailAdapter(account=gmail_acc)
+            health = adapter.check_health()
 
         # Update auth status in store if changed
         health_status = health.get("auth_status")
@@ -84,6 +100,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
                 f"Gmail Connection Status: CONNECTED & ACTIVE\n"
                 f"Account: {health.get('email', gmail_acc.email_or_id)}\n"
                 f"Authentication: Valid (Google OAuth 2.0 PKCE Verified Live)\n"
+                f"Last Synced: {health.get('last_synced_at', 'Never')}\n"
                 f"Total Messages: {health.get('messages_total', 'N/A')}\n"
                 f"Total Threads: {health.get('threads_total', 'N/A')}\n"
                 f"History ID: {health.get('history_id', 'N/A')}\n"
@@ -118,10 +135,12 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
     def _list_gmail_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         limit = max(1, min(int(params.get("limit", 5)), 25))
         is_unread = params.get("is_unread")
+        is_important = params.get("is_important")
         sender = params.get("sender")
         search_query = params.get("search_query") or params.get("query")
         today_only = bool(params.get("today_only", False))
-        live_fetch = bool(params.get("live_fetch", True))
+        mock_mode = os.environ.get("OPTIMUS_MOCK_NETWORK") == "1"
+        live_fetch = False if mock_mode else bool(params.get("live_fetch", True))
 
         accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
         gmail_acc = accounts[0] if accounts else None
@@ -138,12 +157,14 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
                     q_terms.append(f"from:{sender}")
                 if search_query:
                     q_terms.append(search_query)
+                if is_important:
+                    q_terms.append("is:important")
                 if today_only:
                     today_str = datetime.date.today().strftime("%Y/%m/%d")
                     q_terms.append(f"after:{today_str}")
 
                 live_q = " ".join(q_terms) if q_terms else None
-                fetched = adapter.fetch_recent_messages(limit=limit, query=live_q, is_unread=is_unread)
+                fetched = adapter.fetch_recent_messages(limit=limit, query=live_q, is_unread=is_unread, is_important=is_important)
                 if fetched:
                     messages = fetched
                     source = "live_gmail_api"
@@ -267,6 +288,74 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         },
         capability_tier=CapabilityTier.NETWORK_EXTERNAL,
         handler=_email_detail_handler,
+        is_mutating=False,
+    ))
+
+    # 4. summarize_email
+    def _summarize_email_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        msg_id = str(params.get("message_id") or "").strip()
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        if not accounts:
+            return ToolResult(status="failed", error="No connected Gmail account.")
+
+        mock_mode = os.environ.get("OPTIMUS_MOCK_NETWORK") == "1"
+        if not msg_id or msg_id == "latest":
+            recent = store.list_messages(provider=ProviderType.GMAIL, limit=1)
+            if not recent and not mock_mode:
+                from core.personal_intelligence.providers.gmail import GmailAdapter
+                recent = GmailAdapter(account=accounts[0]).fetch_recent_messages(limit=1)
+            if not recent:
+                return ToolResult(status="done", output="No Gmail messages found to summarize.", evidence={"count": 0})
+            msg_id = recent[0].message_id
+
+        if mock_mode:
+            local_msg = store.get_message(msg_id)
+            if local_msg:
+                snippet = local_msg.body_snippet or ""
+                lines = [line.strip() for line in snippet.split("\n") if line.strip()]
+                key_points = lines[:3] or ["No extended body content available."]
+                summary = {
+                    "message_id": local_msg.message_id,
+                    "sender": local_msg.sender,
+                    "subject": local_msg.subject,
+                    "date": datetime.datetime.fromtimestamp(local_msg.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+                    "is_read": local_msg.is_read,
+                    "is_important": local_msg.is_important,
+                    "summary": f"Email from {local_msg.sender} regarding '{local_msg.subject}'.",
+                    "key_points": key_points,
+                    "quarantined_content": snippet,
+                }
+            else:
+                summary = None
+        else:
+            from core.personal_intelligence.providers.gmail import GmailAdapter
+            adapter = GmailAdapter(account=accounts[0])
+            summary = adapter.summarize_email(msg_id)
+        if not summary:
+            return ToolResult(status="failed", error=f"Could not generate summary for email ID '{msg_id}'.")
+
+        out = (
+            f"Email Summary (ID: {summary['message_id']}):\n"
+            f"From: {summary['sender']}\n"
+            f"Subject: {summary['subject']}\n"
+            f"Date: {summary['date']}\n"
+            f"Status: {'Read' if summary['is_read'] else 'Unread'}{' ★ (Important)' if summary['is_important'] else ''}\n"
+            f"Overview: {summary['summary']}\n"
+            f"Key Points:\n" + "\n".join(f"- {kp}" for kp in summary["key_points"])
+        )
+        return ToolResult(status="done", output=out, evidence=summary)
+
+    registry.register(ToolDefinition(
+        name="summarize_email",
+        description="Fetch an email by ID (or 'latest') and generate a concise, safe summary with key points.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "message_id": {"type": "STRING", "description": "Gmail message ID or 'latest'"},
+            },
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_summarize_email_handler,
         is_mutating=False,
     ))
 

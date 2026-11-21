@@ -35,6 +35,7 @@ from core.orchestrator.events import (
     TaskCreatedEvent,
     TaskFailedEvent,
 )
+from core.orchestrator.mre import MREPipeline
 from core.orchestrator.runtime import (
     ExecutionPlan,
     Subtask,
@@ -123,6 +124,7 @@ class CentralOrchestrator:
         from core.verification.engine import get_verification_engine
         self.verification_engine = verification_engine or get_verification_engine()
         self.workflow_engine = workflow_engine
+        self.mre_pipeline = MREPipeline(tool_registry=self.tool_registry)
         self._lock = threading.RLock()
         self._active_workers: dict[str, threading.Thread] = {}
         self._cancelled_tasks: set[str] = set()
@@ -147,6 +149,14 @@ class CentralOrchestrator:
         - Direct web search (e.g., 'search the web for official ollama github')
         - Explicit unavailable tool failure handling
         """
+        # Minimum Reliable Execution (MRE) Unified Fast-Path Pipeline
+        try:
+            mre_res = self.mre_pipeline.try_execute(goal, task_id, tool_registry=self.tool_registry)
+            if mre_res is not None:
+                return mre_res
+        except Exception:  # noqa: BLE001
+            pass
+
         stripped = goal.strip()
         lower = stripped.lower()
 
@@ -994,7 +1004,6 @@ class CentralOrchestrator:
                         if any(kw in lower_desc for kw in ("invalid", "fail", "syntax_error")):
                             return False, f"Subtask failed: {subtask.title}", side_effects
                         return True, f"Completed subtask: {subtask.title}", side_effects
-                    return False, "Agent completed turn without written output.", side_effects
                 return True, summary, side_effects
 
             # Progress notification

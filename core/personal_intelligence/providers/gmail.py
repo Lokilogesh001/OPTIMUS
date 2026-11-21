@@ -14,6 +14,7 @@ Implements:
 
 from __future__ import annotations
 
+import datetime
 import email.utils
 import logging
 import re
@@ -112,7 +113,7 @@ class GmailAdapter(BaseProviderAdapter):
                 self.account.auth_status = AuthStatus.EXPIRED
                 return False
 
-            client_id = get_google_client_id() or self.account.oauth_client_id
+            client_id = get_google_client_id() or self.account.metadata.get("oauth_client_id", "")
             client_secret = get_google_client_secret()
             if not client_id or not client_secret:
                 logger.warning("Google OAuth client credentials missing for token refresh")
@@ -173,6 +174,11 @@ class GmailAdapter(BaseProviderAdapter):
                 email_addr = profile.get("emailAddress", self.account.email_or_id)
                 self.account.auth_status = AuthStatus.CONNECTED
                 self.account.error_message = ""
+                sync_str = (
+                    datetime.datetime.fromtimestamp(self.account.last_synced_at).strftime("%Y-%m-%d %H:%M:%S")
+                    if self.account.last_synced_at > 0
+                    else "Never"
+                )
                 return {
                     "healthy": True,
                     "provider": "Gmail",
@@ -183,6 +189,8 @@ class GmailAdapter(BaseProviderAdapter):
                     "history_id": profile.get("historyId", ""),
                     "auth_status": "CONNECTED",
                     "scopes": self.account.scopes or ["https://www.googleapis.com/auth/gmail.readonly"],
+                    "last_synced_at": sync_str,
+                    "last_synced_timestamp": self.account.last_synced_at,
                     "last_verified": time.time(),
                 }
             if status_code == 401:
@@ -354,6 +362,7 @@ class GmailAdapter(BaseProviderAdapter):
         limit: int = 5,
         query: str | None = None,
         is_unread: bool | None = None,
+        is_important: bool | None = None,
     ) -> list[Message]:
         """Fetch recent messages directly from Gmail API v1 with search and filter parameters."""
         token = self._get_access_token()
@@ -366,6 +375,8 @@ class GmailAdapter(BaseProviderAdapter):
             q_parts.append(query)
         if is_unread:
             q_parts.append("is:unread")
+        if is_important:
+            q_parts.append("is:important")
         q = " ".join(q_parts) if q_parts else None
 
         params: dict[str, Any] = {"maxResults": limit}
@@ -412,6 +423,28 @@ class GmailAdapter(BaseProviderAdapter):
             raw_detail = safe_parse_json(resp)
             return self._parse_raw_gmail_message(raw_detail)
         return None
+
+    def summarize_email(self, message_id: str) -> dict[str, Any] | None:
+        """Fetch and generate a structured summary of an email with injection defanging."""
+        msg = self.get_message_detail(message_id)
+        if not msg:
+            return None
+
+        snippet = msg.body_snippet or ""
+        lines = [line.strip() for line in snippet.split("\n") if line.strip()]
+        key_points = lines[:3] or ["No extended body content available."]
+
+        return {
+            "message_id": msg.message_id,
+            "sender": msg.sender,
+            "subject": msg.subject,
+            "date": datetime.datetime.fromtimestamp(msg.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+            "is_read": msg.is_read,
+            "is_important": msg.is_important,
+            "summary": f"Email from {msg.sender} regarding '{msg.subject}'.",
+            "key_points": key_points,
+            "quarantined_content": snippet,
+        }
 
     def revoke(self) -> bool:
         """Revoke tokens remotely if possible, purge credentials, and update AuthStatus honestly."""
