@@ -118,7 +118,7 @@ class CentralOrchestrator:
                     self.brain_fn = self.intelligence_gateway.get_brain_fn()
                 except Exception:
                     pass
-        self.allowed_roots = allowed_roots or [str(Path.cwd())]
+        self.allowed_roots = allowed_roots or [str(Path.cwd()), "ALL_DRIVES"]
         from core.memory.manager import ensure as ensure_memory_mgr
         self.memory_manager = memory_manager or ensure_memory_mgr()
         from core.verification.engine import get_verification_engine
@@ -811,7 +811,12 @@ class CentralOrchestrator:
                                 caller_agent=agent.name,
                                 allowed_tools=subtask.allowed_tools,
                                 allowed_tiers=agent.allowed_tiers,
-                                context={"allowed_roots": self.allowed_roots},
+                                context={
+                        "allowed_roots": self.allowed_roots,
+                        "cross_drive": "ALL_DRIVES" in self.allowed_roots or "*" in self.allowed_roots,
+                        "workspace_root": self.allowed_roots[0] if ("dev" in agent.name.lower() and self.allowed_roots) else None,
+                        "caller_agent": agent.name,
+                    },
                             )
                             side_effects.append({
                                 "tool_name": tool_alias,
@@ -851,7 +856,12 @@ class CentralOrchestrator:
                         caller_agent=agent.name,
                         allowed_tools=subtask.allowed_tools,
                         allowed_tiers=agent.allowed_tiers,
-                        context={"allowed_roots": self.allowed_roots},
+                        context={
+                        "allowed_roots": self.allowed_roots,
+                        "cross_drive": "ALL_DRIVES" in self.allowed_roots or "*" in self.allowed_roots,
+                        "workspace_root": self.allowed_roots[0] if ("dev" in agent.name.lower() and self.allowed_roots) else None,
+                        "caller_agent": agent.name,
+                    },
                     )
                     if dw_res.is_success:
                         side_effects.append({
@@ -987,7 +997,12 @@ class CentralOrchestrator:
                             caller_agent=agent.name,
                             allowed_tools=subtask.allowed_tools,
                             allowed_tiers=agent.allowed_tiers,
-                            context={"allowed_roots": self.allowed_roots},
+                            context={
+                        "allowed_roots": self.allowed_roots,
+                        "cross_drive": "ALL_DRIVES" in self.allowed_roots or "*" in self.allowed_roots,
+                        "workspace_root": self.allowed_roots[0] if ("dev" in agent.name.lower() and self.allowed_roots) else None,
+                        "caller_agent": agent.name,
+                    },
                         )
                         if write_res.is_success:
                             side_effects.append({
@@ -1038,7 +1053,12 @@ class CentralOrchestrator:
                     caller_agent=agent.name,
                     allowed_tools=subtask.allowed_tools,
                     allowed_tiers=agent.allowed_tiers,
-                    context={"allowed_roots": self.allowed_roots},
+                    context={
+                        "allowed_roots": self.allowed_roots,
+                        "cross_drive": "ALL_DRIVES" in self.allowed_roots or "*" in self.allowed_roots,
+                        "workspace_root": self.allowed_roots[0] if ("dev" in agent.name.lower() and self.allowed_roots) else None,
+                        "caller_agent": agent.name,
+                    },
                 )
 
                 side_effects.append({

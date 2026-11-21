@@ -1,7 +1,6 @@
 import os
 import platform
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -90,18 +89,12 @@ def _restore_from_trash(original: Path) -> str:
             f"automatically, but it is there and can be restored by hand.")
 
 
-_SAFE_ROOTS: list[Path] = [
-    Path.home(),
-]
-
-def _is_safe_path(target: Path) -> bool:
-    """Is the given path inside _SAFE_ROOTS? If not, reject the operation."""
+def _is_safe_path(target: Path, operation: str = "read") -> bool:
+    """Check if the given path is authorized by UnifiedFilesystemService."""
     try:
-        resolved = target.resolve()
-        return any(
-            resolved == root.resolve() or resolved.is_relative_to(root.resolve())
-            for root in _SAFE_ROOTS
-        )
+        from core.filesystem.service import UnifiedFilesystemService
+        auth, _req_appr, _ = UnifiedFilesystemService.instance().check_access(target, operation)
+        return auth
     except Exception:
         return False
 
@@ -149,32 +142,8 @@ def _get_videos() -> Path:
 
 
 def _resolve_path(raw: str) -> Path:
-    shortcuts: dict[str, Path] = {
-        "desktop":   _get_desktop(),
-        "downloads": _get_downloads(),
-        "documents": _get_documents(),
-        "pictures":  _get_pictures(),
-        "music":     _get_music(),
-        "videos":    _get_videos(),
-        "home":      Path.home(),
-    }
-    raw   = raw.strip().strip('"').strip("'")
-    lower = raw.lower()
-    if lower in shortcuts:
-        return shortcuts[lower]
-
-    # "desktop/notes/a.md" and "desktop\notes\a.md" — a shortcut followed by a
-    # sub-path.  Without this branch the whole string falls through to the
-    # relative-path return below and is resolved against the process CWD instead
-    # of the real Desktop: an "Access denied" when the project lives outside the
-    # home directory, or — worse — a silent write into a stray "desktop" folder
-    # inside the project when it lives inside it.
-    head, sep, rest = raw.replace("\\", "/").partition("/")
-    if sep and head.lower() in shortcuts:
-        rest = rest.strip("/")
-        return shortcuts[head.lower()] / rest if rest else shortcuts[head.lower()]
-
-    return Path(raw).expanduser()
+    from core.filesystem.service import UnifiedFilesystemService
+    return UnifiedFilesystemService.instance().resolve_path(raw)
 
 def _format_size(b: int) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -196,43 +165,23 @@ def _safe_trash(target: Path) -> str:
 
 
 def list_files(path: str = "desktop", show_hidden: bool = False) -> str:
-    try:
-        target = _resolve_path(path)
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
-        if not target.exists():
-            return f"Path not found: {target}"
-        if not target.is_dir():
-            return f"Not a directory: {target}"
-
-        items = []
-        for item in sorted(target.iterdir()):
-            if not show_hidden and item.name.startswith("."):
-                continue
-            if item.is_dir():
-                items.append(f"📁 {item.name}/")
-            else:
-                size = _format_size(item.stat().st_size)
-                items.append(f"📄 {item.name} ({size})")
-
-        if not items:
-            return f"Directory is empty: {target.name}/"
-
-        return f"Contents of {target.name}/ ({len(items)} items):\n" + "\n".join(items)
-
-    except PermissionError:
-        return f"Permission denied: {path}"
-    except Exception as e:
-        return f"Error listing files: {e}"
+    from core.filesystem.service import UnifiedFilesystemService
+    res = UnifiedFilesystemService.instance().list_directory(path, show_hidden=show_hidden)
+    if res.is_success:
+        return res.output
+    err = res.error or ""
+    if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "Access denied" in err:
+        return f"Access denied: {path}"
+    if "PATH_NOT_FOUND" in err:
+        return f"Path not found: {path}"
+    return res.output or err or f"Error listing files: {path}"
 
 
 def create_file(path: str, name: str = "", content: str = "") -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
-        target.parent.mkdir(parents=True, exist_ok=True)
         existed = target.exists()
         previous = None
         if existed:
@@ -240,7 +189,14 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
                 previous = target.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 previous = None
-        target.write_text(content, encoding="utf-8")
+
+        res = UnifiedFilesystemService.instance().write_file(target, content, append=False)
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "ACCESS_DENIED" in err:
+                return f"Access denied: {target}"
+            return res.output or err or f"Could not create file: {target}"
+
         push_undo(f"created {target.name}",
                   _undo_write(target, previous) if existed else _undo_create(target))
         return f"File created: {target.name}"
@@ -250,12 +206,17 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
 
 def create_folder(path: str, name: str = "") -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
         already = target.exists()
-        target.mkdir(parents=True, exist_ok=True)
+        res = UnifiedFilesystemService.instance().create_directory(target)
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "ACCESS_DENIED" in err:
+                return f"Access denied: {target}"
+            return res.output or err or f"Could not create folder: {target}"
+
         # Only offer to undo a folder we actually made. "mkdir -p" on something
         # that was already there is not a change, and undoing it would delete a
         # directory the user has had for years.
@@ -268,9 +229,10 @@ def create_folder(path: str, name: str = "") -> str:
 
 def delete_file(path: str, name: str = "") -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, "delete"):
             return f"Access denied: {target}"
         if not target.exists():
             return f"Not found: {target.name}"
@@ -298,6 +260,7 @@ def delete_file(path: str, name: str = "") -> str:
 
 def move_file(path: str, name: str = "", destination: str = "") -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         src    = (base / name) if name else base
         dst    = _resolve_path(destination) if destination else None
@@ -306,17 +269,22 @@ def move_file(path: str, name: str = "", destination: str = "") -> str:
             return f"Source not found: {src.name}"
         if dst is None:
             return "No destination specified."
-        if not _is_safe_path(src):
+        if not _is_safe_path(src, "move"):
             return f"Access denied (source): {src}"
-        if not _is_safe_path(dst):
+        if not _is_safe_path(dst, "write"):
             return f"Access denied (destination): {dst}"
 
         if dst.is_dir():
             dst = dst / src.name
 
-        dst.parent.mkdir(parents=True, exist_ok=True)
         origin = src.resolve()
-        shutil.move(str(src), str(dst))
+        res = UnifiedFilesystemService.instance().move_file(src, dst)
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "ACCESS_DENIED" in err:
+                return f"Access denied: {src}"
+            return res.output or err or f"Could not move: {src}"
+
         push_undo(f"moved {origin.name} to {dst.parent.name}/",
                   _undo_move(origin, dst.resolve()))
         return f"Moved: {src.name} → {dst.parent.name}/"
@@ -327,6 +295,7 @@ def move_file(path: str, name: str = "", destination: str = "") -> str:
 
 def copy_file(path: str, name: str = "", destination: str = "") -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base = _resolve_path(path)
         src  = (base / name) if name else base
         dst  = _resolve_path(destination) if destination else None
@@ -335,20 +304,20 @@ def copy_file(path: str, name: str = "", destination: str = "") -> str:
             return f"Source not found: {src.name}"
         if dst is None:
             return "No destination specified."
-        if not _is_safe_path(src):
+        if not _is_safe_path(src, "read"):
             return f"Access denied (source): {src}"
-        if not _is_safe_path(dst):
+        if not _is_safe_path(dst, "write"):
             return f"Access denied (destination): {dst}"
 
         if dst.is_dir():
             dst = dst / src.name
 
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        if src.is_dir():
-            shutil.copytree(str(src), str(dst))
-        else:
-            shutil.copy2(str(src), str(dst))
+        res = UnifiedFilesystemService.instance().copy_file(src, dst)
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "ACCESS_DENIED" in err:
+                return f"Access denied: {src}"
+            return res.output or err or f"Could not copy: {src}"
 
         # The undo for a copy is deleting the copy — never the original.
         _copy = dst.resolve()
@@ -395,20 +364,20 @@ def rename_file(path: str, name: str = "", new_name: str = "") -> str:
 
 def read_file(path: str, name: str = "", max_chars: int = 4000) -> str:
     try:
-        base   = _resolve_path(path)
-        target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
-        if not target.exists():
-            return f"File not found: {target.name}"
-        if not target.is_file():
-            return f"Not a file: {target.name}"
-
-        content = target.read_text(encoding="utf-8", errors="ignore")
-        if len(content) > max_chars:
-            content = content[:max_chars] + f"\n\n[Truncated — {len(content)} total chars]"
-        return content
-
+        from core.filesystem.service import UnifiedFilesystemService
+        full_path = f"{path}/{name}" if name else path
+        res = UnifiedFilesystemService.instance().read_file(full_path, max_bytes=max_chars * 4)
+        if res.is_success:
+            content = res.output
+            if len(content) > max_chars:
+                content = content[:max_chars] + f"\n\n[Truncated — {len(content)} total chars]"
+            return content
+        err = res.error or ""
+        if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err:
+            return f"Access denied: {full_path}"
+        if "PATH_NOT_FOUND" in err:
+            return f"File not found: {Path(full_path).name}"
+        return res.output or err or f"Could not read file: {full_path}"
     except Exception as e:
         return f"Could not read file: {e}"
 
@@ -416,11 +385,9 @@ def read_file(path: str, name: str = "", max_chars: int = 4000) -> str:
 def write_file(path: str, name: str = "", content: str = "",
                append: bool = False) -> str:
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
-        target.parent.mkdir(parents=True, exist_ok=True)
 
         # Snapshot before writing. None means "did not exist", which is a
         # different undo (delete it) from "existed and had this in it".
@@ -435,9 +402,12 @@ def write_file(path: str, name: str = "", content: str = "",
             except Exception:
                 undoable = False           # binary, locked, unreadable
 
-        mode = "a" if append else "w"
-        with open(target, mode, encoding="utf-8") as f:
-            f.write(content)
+        res = UnifiedFilesystemService.instance().write_file(target, content, append=append)
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err or "ACCESS_DENIED" in err:
+                return f"Access denied: {target}"
+            return res.output or err or f"Could not write file: {target}"
 
         action = "Appended to" if append else "Written to"
         if undoable:
@@ -453,39 +423,20 @@ def write_file(path: str, name: str = "", content: str = "",
 def find_files(name: str = "", extension: str = "",
                path: str = "home", max_results: int = 20) -> str:
     try:
-        search_path = _resolve_path(path)
-        if not _is_safe_path(search_path):
-            return f"Access denied: {search_path}"
-        if not search_path.exists():
-            return f"Search path not found: {path}"
-
-        results    = []
-        dir_count  = 0
-        max_dirs   = 500  # performance + safety limit
-
-        for item in search_path.rglob("*"):
-            if item.is_dir():
-                dir_count += 1
-                if dir_count > max_dirs:
-                    break
-                continue
-            if not item.is_file():
-                continue
-            if extension and item.suffix.lower() != extension.lower():
-                continue
-            if name and name.lower() not in item.name.lower():
-                continue
-            size = _format_size(item.stat().st_size)
-            results.append(f"📄 {item.name} ({size}) — {item.parent}")
-            if len(results) >= max_results:
-                break
-
-        if not results:
-            query = name or extension or "files"
-            return f"No {query} found in {search_path.name}/"
-
-        return f"Found {len(results)} file(s):\n" + "\n".join(results)
-
+        from core.filesystem.service import UnifiedFilesystemService
+        pattern = f"*{name}*{extension}" if (name or extension) else "*"
+        res = UnifiedFilesystemService.instance().search_files(
+            root_path=path,
+            pattern=pattern,
+            recursive=True,
+            max_results=max_results,
+        )
+        if res.is_success:
+            return res.output
+        err = res.error or ""
+        if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err:
+            return f"Access denied: {path}"
+        return res.output or err or f"Search error: {path}"
     except Exception as e:
         return f"Search error: {e}"
 
@@ -493,19 +444,31 @@ def find_files(name: str = "", extension: str = "",
 def get_largest_files(path: str = "downloads", count: int = 10) -> str:
     count = min(count, 50)  # maksimum 50
     try:
+        from core.filesystem.service import UnifiedFilesystemService
         search_path = _resolve_path(path)
-        if not _is_safe_path(search_path):
+        if not _is_safe_path(search_path, "read"):
             return f"Access denied: {search_path}"
         if not search_path.exists():
             return f"Path not found: {path}"
 
+        res = UnifiedFilesystemService.instance().search_files(
+            root_path=search_path,
+            pattern="*",
+            recursive=True,
+            max_results=500,
+        )
+        if not res.is_success:
+            err = res.error or ""
+            if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err:
+                return f"Access denied: {path}"
+            return res.output or err or f"Search error: {path}"
+
+        items = res.evidence.get("items", []) if res.evidence else []
         files = []
-        for item in search_path.rglob("*"):
-            if item.is_file():
-                try:
-                    files.append((item.stat().st_size, item))
-                except Exception:
-                    continue
+        for it in items:
+            if not it.get("is_dir"):
+                p_item = Path(it.get("path"))
+                files.append((it.get("size_bytes", 0), p_item))
 
         files.sort(reverse=True)
         top = files[:count]
@@ -623,25 +586,17 @@ def organize_desktop() -> str:
 
 def get_file_info(path: str, name: str = "") -> str:
     try:
-        base   = _resolve_path(path)
-        target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
-        if not target.exists():
-            return f"Not found: {target.name}"
-
-        stat = target.stat()
-        info = {
-            "Name":      target.name,
-            "Type":      "Folder" if target.is_dir() else "File",
-            "Size":      _format_size(stat.st_size),
-            "Location":  str(target.parent),
-            "Created":   datetime.fromtimestamp(stat.st_ctime).strftime("%Y-%m-%d %H:%M"),
-            "Modified":  datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            "Extension": target.suffix or "—",
-        }
-        return "\n".join(f"  {k}: {v}" for k, v in info.items())
-
+        from core.filesystem.service import UnifiedFilesystemService
+        full_path = f"{path}/{name}" if name else path
+        res = UnifiedFilesystemService.instance().get_file_info(full_path)
+        if res.is_success:
+            return res.output
+        err = res.error or ""
+        if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err:
+            return f"Access denied: {full_path}"
+        if "PATH_NOT_FOUND" in err:
+            return f"Not found: {Path(full_path).name}"
+        return res.output or err or f"Could not get file info: {full_path}"
     except Exception as e:
         return f"Could not get file info: {e}"
 
@@ -663,7 +618,7 @@ def file_controller(
         if action == "list":
             return list_files(path)
 
-        elif action == "create_file":
+        elif action in ("create_file", "create"):
             return create_file(path, name=name, content=params.get("content", ""))
 
         elif action == "create_folder":

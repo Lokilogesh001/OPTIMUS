@@ -9,7 +9,6 @@ Enforces:
 from __future__ import annotations
 
 import ast
-import hashlib
 import logging
 import operator
 import re
@@ -159,35 +158,32 @@ def _resolve_safe_path(
     allow_cross_drive: bool = False,
 ) -> Path:
     """Canonicalize path and verify it does not traverse outside allowed roots."""
-    p = Path(raw_path)
+    from core.filesystem.service import UnifiedFilesystemService
+    p_resolved = UnifiedFilesystemService.instance().resolve_path(raw_path)
+
     if allowed_roots:
         canonical_roots = [Path(r).resolve() for r in allowed_roots]
         # 1. If path is already inside an allowed root (e.g. absolute or normalized relative), use it directly
-        p_resolved = p.resolve()
         if any(p_resolved == r or r in p_resolved.parents for r in canonical_roots):
             return p_resolved
 
         # 2. If relative, resolve relative to allowed_roots[0]
-        if not p.is_absolute():
-            p_under_root = (canonical_roots[0] / p).resolve()
+        p_raw = Path(raw_path)
+        if not p_raw.is_absolute():
+            p_under_root = (canonical_roots[0] / p_raw).resolve()
             if any(p_under_root == r or r in p_under_root.parents for r in canonical_roots):
                 return p_under_root
 
         # 3. Cross-drive / system path permission: if allowed or wildcard is present
-        if allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots):
-            try:
-                from core.windows_runtime.policy import WindowsRuntimePolicy
-                if p_resolved.is_absolute() and p_resolved.drive:
-                    mounted = WindowsRuntimePolicy.discover_mounted_drives()
-                    drive_prefix = p_resolved.drive.upper()
-                    if any(m.upper().startswith(drive_prefix) for m in mounted):
-                        return p_resolved
-            except Exception:  # noqa: BLE001, S110
-                pass
+        if (allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)) and p_resolved.is_absolute() and p_resolved.drive:
+            mounted = UnifiedFilesystemService.instance().discover_mounted_drives()
+            drive_prefix = p_resolved.drive.upper()
+            if any(m.upper().startswith(drive_prefix) for m in mounted):
+                return p_resolved
 
-        raise PermissionError(f"PATH_VIOLATION: Access denied: path '{p}' is outside permitted directories (allowed roots: {allowed_roots})")
+        raise PermissionError(f"PATH_VIOLATION: Access denied: path '{raw_path}' is outside permitted directories (allowed roots: {allowed_roots})")
 
-    return p.resolve()
+    return p_resolved
 
 
 # ── Central Tool Registry ────────────────────────────────────────────────────
@@ -313,24 +309,13 @@ class ToolRegistry:
             ctx = context or {}
             allowed_roots = ctx.get("allowed_roots")
             allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
-            try:
-                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
-                if not target.is_file():
-                    return ToolResult(status="failed", error=f"File not found: '{target}'", output="File not found")
+            if allowed_roots and not (allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)):
                 try:
-                    content = target.read_text(encoding="utf-8", errors="replace")
-                except PermissionError:
-                    from core.windows_runtime.client import get_windows_runtime_client
-                    client = get_windows_runtime_client()
-                    content = client.read_file(str(target))
-                digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-                return ToolResult(
-                    status="done",
-                    output=content[:20000],
-                    evidence={"path": str(target), "bytes": len(content), "sha256": digest}
-                )
-            except Exception as e:
-                return ToolResult(status="failed", error=str(e), output=f"Read error: {e}")
+                    _ = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=False)
+                except Exception as e:
+                    return ToolResult(status="failed", error=str(e), output=f"Read error: {e}")
+            from core.filesystem.service import UnifiedFilesystemService
+            return UnifiedFilesystemService.instance().read_file(raw_path, context=ctx)
 
         self.register(ToolDefinition(
             name="read_file",
@@ -354,28 +339,13 @@ class ToolRegistry:
             ctx = context or {}
             allowed_roots = ctx.get("allowed_roots")
             allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
-            try:
-                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
-                raw_bytes = content.encode("utf-8")
+            if allowed_roots and not (allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)):
                 try:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(raw_bytes)
-                except PermissionError:
-                    from core.windows_runtime.client import get_windows_runtime_client
-                    client = get_windows_runtime_client()
-                    client.write_file(str(target), content)
-                digest = hashlib.sha256(raw_bytes).hexdigest()
-                return ToolResult(
-                    status="done",
-                    output=f"Successfully wrote {len(raw_bytes)} bytes to '{target}' (sha256={digest[:8]}).",
-                    evidence={
-                        "path": str(target),
-                        "bytes": len(raw_bytes),
-                        "sha256": digest,
-                    }
-                )
-            except Exception as e:
-                return ToolResult(status="failed", error=str(e), output=f"Write error: {e}")
+                    _ = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=False)
+                except Exception as e:
+                    return ToolResult(status="failed", error=str(e), output=f"Write error: {e}")
+            from core.filesystem.service import UnifiedFilesystemService
+            return UnifiedFilesystemService.instance().write_file(raw_path, content, context=ctx)
 
         self.register(ToolDefinition(
             name="write_file",
@@ -399,35 +369,13 @@ class ToolRegistry:
             ctx = context or {}
             allowed_roots = ctx.get("allowed_roots")
             allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
-            try:
-                target = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=allow_cross_drive)
-                if not target.is_dir():
-                    return ToolResult(status="failed", error=f"Not a directory: '{target}'", output="Not a directory")
-                entries = []
+            if allowed_roots and not (allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)):
                 try:
-                    for entry in target.iterdir():
-                        kind = "DIR" if entry.is_dir() else "FILE"
-                        size = entry.stat().st_size if entry.is_file() else 0
-                        entries.append(f"{kind:4}  {size:10} bytes  {entry.name}")
-                except PermissionError:
-                    from core.windows_runtime.client import get_windows_runtime_client
-                    client = get_windows_runtime_client()
-                    res = client.list_directory(str(target))
-                    if res.get("error"):
-                        raise PermissionError(res["error"])
-                    entries = []
-                    for e in res.get("entries", []):
-                        kind = "DIR" if e.get("is_dir") else "FILE"
-                        size = e.get("size", 0)
-                        entries.append(f"{kind:4}  {size:10} bytes  {e.get('name')}")
-                out = "\n".join(entries[:100])
-                return ToolResult(
-                    status="done",
-                    output=out or "Directory is empty.",
-                    evidence={"path": str(target), "count": len(entries)}
-                )
-            except Exception as e:
-                return ToolResult(status="failed", error=str(e), output=f"List error: {e}")
+                    _ = _resolve_safe_path(raw_path, allowed_roots, allow_cross_drive=False)
+                except Exception as e:
+                    return ToolResult(status="failed", error=str(e), output=f"List error: {e}")
+            from core.filesystem.service import UnifiedFilesystemService
+            return UnifiedFilesystemService.instance().list_directory(raw_path, context=ctx)
 
         self.register(ToolDefinition(
             name="list_directory",
