@@ -452,16 +452,18 @@ class PrivilegedExecutionBroker:
 
     def _op_open_in_explorer(self, params: dict[str, Any]) -> dict[str, Any]:
         path_str = params.get("path", "")
-        p = Path(path_str).resolve()
-        if not p.exists():
-            raise FileNotFoundError(f"Target '{p}' does not exist.")
-
-        if p.is_file():
-            cmd = ["explorer.exe", f"/select,{p}"]
-        else:
-            cmd = ["explorer.exe", str(p)]
-        subprocess.Popen(cmd)
-        return {"path": str(p), "status": "explorer_opened"}
+        select_file = bool(params.get("select_file", False))
+        from core.filesystem.service import UnifiedFilesystemService
+        res = UnifiedFilesystemService.instance().open_in_explorer(path_str, select_file=select_file)
+        if not res.is_success:
+            if "Target does not exist" in (res.error or "") or "PATH_NOT_FOUND" in (res.error or ""):
+                raise FileNotFoundError(res.error)
+            raise PermissionError(res.error)
+        return {
+            "path": res.evidence.get("path", path_str),
+            "status": "explorer_opened",
+            "evidence": res.evidence,
+        }
 
     def _op_list_processes(self, params: dict[str, Any]) -> dict[str, Any]:
         import psutil

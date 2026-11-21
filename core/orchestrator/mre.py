@@ -108,9 +108,48 @@ class MREClassifier:
     )
 
     _EXPLORER_PATTERN = re.compile(
-        r"^(?:open|explore|show|browse)\s+(?:folder|directory|path)?\s*([a-zA-Z]:[\\/][^<>:\"|?*\n]*|\.{1,2}[\\/][^<>:\"|?*\n]*)\s*$",
+        r"^(?:open|explore|show|browse)\s+(?:the\s+)?(?:folder\s+|directory\s+|file\s+)?(.*?)(?:\s+(?:folder|directory|file))?(?:\s+in\s+(?:the\s+)?(?:windows\s+|file\s+)?explorer|\s+in\s+(?:the\s+)?file\s+manager)?\s*[\.\?]?$",
         re.IGNORECASE,
     )
+
+    @classmethod
+    def _parse_explorer_intent(cls, clean: str) -> tuple[str, bool] | None:
+        """Parse user query for Windows File Explorer navigation or file highlighting intent."""
+        clean_stripped = clean.strip()
+        lower = clean_stripped.lower()
+        app_targets = {"notepad", "calc", "calculator", "cmd", "powershell", "paint", "terminal"}
+        is_explicit_explorer = any(kw in lower for kw in ("explorer", "file manager"))
+
+        m = cls._EXPLORER_PATTERN.match(clean_stripped)
+        if not m:
+            return None
+        raw_target = m.group(1).strip().strip("'\"")
+        if not raw_target:
+            if is_explicit_explorer:
+                raw_target = "this"
+            else:
+                return None
+        if raw_target.lower() in app_targets:
+            return None
+
+        select_file = False
+        if any(kw in lower for kw in ("show this file", "show file", "select file", "highlight file")):
+            select_file = True
+
+        lower_target = raw_target.lower()
+        if lower_target in ("this", "this folder", "this directory", "here", "workspace", "current", ".", "this file's containing"):
+            target_path = str(Path.cwd())
+        else:
+            shortcuts = {"downloads", "desktop", "documents", "pictures", "music", "videos", "home"}
+            is_path_like = bool(
+                re.match(r"^[a-zA-Z]:[\\/]", raw_target)
+                or raw_target.startswith((".", "/", "\\\\"))
+                or lower_target in shortcuts
+            )
+            if not is_path_like and not is_explicit_explorer and not any(kw in lower for kw in ("folder", "directory", "file")):
+                return None
+            target_path = raw_target
+        return target_path, select_file
 
     _SYSTEM_VITALS_PATTERN = re.compile(
         r"^(?:(?:show|get|check|what\s+is|what\s+are)\s+(?:system\s+)?(?:vitals|status|health|diagnostics|telemetry|metrics|cpu(?:\s+usage)?|memory(?:\s+usage)?|disk(?:\s+space)?)|system\s+status|system\s+vitals|cpu\s+usage|memory\s+usage|disk\s+space)\s*\??$",
@@ -236,15 +275,15 @@ class MREClassifier:
             )
 
         # 7. Native Filesystem Navigation (Priority 3: Registered Tool)
-        exp_match = self._EXPLORER_PATTERN.match(clean)
-        if exp_match:
-            target_path = exp_match.group(1).strip()
+        exp_res = self._parse_explorer_intent(clean)
+        if exp_res:
+            target_path, select_file = exp_res
             return MREDecision(
                 category=TaskCategory.FILESYSTEM,
                 priority=MethodPriority.P3_REGISTERED_TOOL,
                 tool_name="open_in_explorer",
-                arguments={"path": target_path},
-                caller_agent="windows_runtime",
+                arguments={"path": target_path, "select_file": select_file},
+                caller_agent="filesystem",
                 outcome_contract=OutcomeContract(contract_type="folder_open", target=target_path),
                 explanation="Folder navigation request; minimal action is native Shell Explorer opening.",
             )

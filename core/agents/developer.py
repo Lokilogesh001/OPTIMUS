@@ -49,6 +49,9 @@ def create_developer_profile() -> AgentProfile:
                 "read_file",
                 "write_file",
                 "list_directory",
+                "open_in_explorer",
+                "open_directory",
+                "open_folder",
                 "calculator",
             ],
             allowed_tiers=[

@@ -233,20 +233,25 @@ class CentralOrchestrator:
                 }]
                 return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to open '{app_target}'"), "execution_agent", side_effects
 
-        # 6. Direct Directory / Folder Open (e.g. 'open downloads', 'open downloads directory', 'open folder ...')
-        dir_match = re.match(r"^(?:open|explore)\s+(?:the\s+)?(?:folder\s+|directory\s+)?(downloads|desktop|documents|pictures|workspace|[\w\-\.\/\\]+)(?:\s+(?:folder|directory))?(?:\s+in\s+(?:the\s+)?file\s+manager)?$", stripped, re.IGNORECASE)
-        if dir_match:
-            dir_target = dir_match.group(1).strip()
-            tool_res = self.tool_registry.execute("open_directory", {"path": dir_target}, caller_agent="filesystem")
+        # 6. Direct Directory / Folder / Explorer Open
+        from core.orchestrator.mre import MREClassifier
+        exp_parsed = MREClassifier._parse_explorer_intent(stripped)
+        if exp_parsed:
+            dir_target, select_file = exp_parsed
+            tool_res = self.tool_registry.execute(
+                "open_in_explorer",
+                {"path": dir_target, "select_file": select_file},
+                caller_agent="filesystem",
+            )
             side_effects = [{
-                "tool_name": "open_directory",
-                "arguments": {"path": dir_target},
+                "tool_name": "open_in_explorer",
+                "arguments": {"path": dir_target, "select_file": select_file},
                 "status": tool_res.status,
                 "output": tool_res.output,
                 "evidence": tool_res.evidence,
                 "error": tool_res.error,
             }]
-            return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to open directory '{dir_target}'"), "filesystem", side_effects
+            return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to open '{dir_target}' in Explorer"), "filesystem", side_effects
 
         # 7. Check CPU and RAM
         if any(kw in lower for kw in ("cpu and ram", "cpu and memory", "cpu status", "get cpu status", "check cpu", "retrieve cpu")):

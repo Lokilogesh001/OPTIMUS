@@ -38,6 +38,7 @@ def create_execution_profile() -> AgentProfile:
                 "open_app",
                 "open_directory",
                 "open_folder",
+                "open_in_explorer",
                 "read_file",
                 "list_directory",
                 "computer_observe",

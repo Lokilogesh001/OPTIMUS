@@ -229,7 +229,6 @@ def create_folder(path: str, name: str = "") -> str:
 
 def delete_file(path: str, name: str = "") -> str:
     try:
-        from core.filesystem.service import UnifiedFilesystemService
         base   = _resolve_path(path)
         target = (base / name) if name else base
         if not _is_safe_path(target, "delete"):
@@ -584,6 +583,23 @@ def organize_desktop() -> str:
         return f"Could not organize desktop: {e}"
 
 
+def open_in_explorer(path: str = "downloads", name: str = "", select_file: bool = False) -> str:
+    try:
+        from core.filesystem.service import UnifiedFilesystemService
+        full_path = f"{path}/{name}" if name else path
+        res = UnifiedFilesystemService.instance().open_in_explorer(full_path, select_file=select_file)
+        if res.is_success:
+            return res.output
+        err = res.error or ""
+        if "APPROVAL_REQUIRED" in err or "POLICY_DENIED" in err:
+            return f"Access denied: {full_path}"
+        if "PATH_NOT_FOUND" in err:
+            return f"Path not found: {full_path}"
+        return res.output or err or f"Could not open in Explorer: {full_path}"
+    except Exception as e:
+        return f"Could not open in Explorer: {e}"
+
+
 def get_file_info(path: str, name: str = "") -> str:
     try:
         from core.filesystem.service import UnifiedFilesystemService
@@ -617,6 +633,13 @@ def file_controller(
     try:
         if action == "list":
             return list_files(path)
+
+        elif action in ("open", "open_folder", "open_directory", "open_in_explorer", "explore"):
+            return open_in_explorer(
+                path,
+                name=name,
+                select_file=params.get("select_file", False),
+            )
 
         elif action in ("create_file", "create"):
             return create_file(path, name=name, content=params.get("content", ""))

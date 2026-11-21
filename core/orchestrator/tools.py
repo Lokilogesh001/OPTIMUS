@@ -391,6 +391,59 @@ class ToolRegistry:
             is_mutating=False,
         ))
 
+        # 5. Open In Explorer
+        def _open_explorer_handler(params: dict, context: dict | None = None) -> ToolResult:
+            raw_path = str(params.get("path") or ".")
+            select_file = bool(params.get("select_file", False))
+            from core.filesystem.service import UnifiedFilesystemService
+            return UnifiedFilesystemService.instance().open_in_explorer(raw_path, select_file=select_file, context=context)
+
+        self.register(ToolDefinition(
+            name="open_in_explorer",
+            description="Open a directory or highlight a file in Windows File Explorer.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "path": {"type": "STRING", "description": "Folder or file path to open in File Explorer"},
+                    "select_file": {"type": "BOOLEAN", "description": "Optional flag to highlight the target file in Explorer"},
+                },
+                "required": ["path"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_open_explorer_handler,
+            is_mutating=False,
+        ))
+        self.register(ToolDefinition(
+            name="open_directory",
+            description="Alias for open_in_explorer: open a directory in Windows File Explorer.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "path": {"type": "STRING", "description": "Folder or file path to open in File Explorer"},
+                    "select_file": {"type": "BOOLEAN", "description": "Optional flag to highlight the target file in Explorer"},
+                },
+                "required": ["path"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_open_explorer_handler,
+            is_mutating=False,
+        ))
+        self.register(ToolDefinition(
+            name="open_folder",
+            description="Alias for open_in_explorer: open a folder in Windows File Explorer.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "path": {"type": "STRING", "description": "Folder or file path to open in File Explorer"},
+                    "select_file": {"type": "BOOLEAN", "description": "Optional flag to highlight the target file in Explorer"},
+                },
+                "required": ["path"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_open_explorer_handler,
+            is_mutating=False,
+        ))
+
     def register(self, tool_def: ToolDefinition) -> None:
         """Register or update a tool definition in the registry."""
         self._tools[tool_def.name] = tool_def

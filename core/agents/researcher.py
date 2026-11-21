@@ -38,6 +38,9 @@ def create_researcher_profile() -> AgentProfile:
                 "list_directory",
                 "calculate",
                 "calculator",
+                "open_in_explorer",
+                "open_directory",
+                "open_folder",
             ],
             allowed_tiers=[
                 CapabilityTier.READ_ONLY,

@@ -215,49 +215,11 @@ def open_app_handler(params: dict[str, Any], context: dict[str, Any] | None = No
 
 
 def open_directory_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
-    """Open an authorized folder (e.g. Downloads, Desktop, workspace) in the system file explorer."""
+    """Open an authorized folder (e.g. Downloads, Desktop, workspace) or file in the system file explorer."""
+    from core.filesystem.service import UnifiedFilesystemService
     raw = str(params.get("path") or "downloads").strip()
-    low = raw.lower()
-
-    if low in ("downloads", "download"):
-        target = Path.home() / "Downloads"
-    elif low in ("desktop",):
-        target = Path.home() / "Desktop"
-    elif low in ("documents", "document", "docs"):
-        target = Path.home() / "Documents"
-    elif low in ("pictures", "photos"):
-        target = Path.home() / "Pictures"
-    elif low in ("home", "~"):
-        target = Path.home()
-    elif low in ("workspace", "root", "."):
-        allowed_roots = (context or {}).get("allowed_roots")
-        target = Path(allowed_roots[0]).resolve() if allowed_roots else Path.cwd()
-    else:
-        allowed_roots = (context or {}).get("allowed_roots")
-        try:
-            target = _resolve_safe_path(raw, allowed_roots)
-        except Exception:
-            target = Path(raw).resolve()
-
-    if not target.is_dir():
-        return ToolResult(status="failed", error=f"Directory '{target}' does not exist or is not a directory.")
-
-    try:
-        sys_name = platform.system()
-        if sys_name == "Windows":
-            os.startfile(str(target))
-        elif sys_name == "Darwin":
-            subprocess.Popen(["open", str(target)])
-        else:
-            subprocess.Popen(["xdg-open", str(target)])
-
-        return ToolResult(
-            status="done",
-            output=f"Successfully opened directory '{target}' in file manager.",
-            evidence={"path": str(target), "is_dir": True, "verified": True},
-        )
-    except Exception as e:
-        return ToolResult(status="failed", error=f"Failed to open directory '{target}': {e}")
+    select_file = bool(params.get("select_file", False))
+    return UnifiedFilesystemService.instance().open_in_explorer(raw, select_file=select_file, context=context)
 
 
 def find_files_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
@@ -513,6 +475,21 @@ def get_execution_tools() -> list[ToolDefinition]:
                 "type": "OBJECT",
                 "properties": {
                     "path": {"type": "STRING", "description": "Folder name or path ('downloads', 'desktop', 'documents', '.')"},
+                },
+                "required": ["path"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=open_directory_handler,
+            is_mutating=False,
+        ),
+        ToolDefinition(
+            name="open_in_explorer",
+            description="Open a directory or highlight a file in Windows File Explorer.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "path": {"type": "STRING", "description": "Directory or file to show in File Explorer"},
+                    "select_file": {"type": "BOOLEAN", "description": "Optional flag to highlight the target file in Explorer"},
                 },
                 "required": ["path"],
             },

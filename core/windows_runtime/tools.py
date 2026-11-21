@@ -215,21 +215,22 @@ def register_windows_runtime_tools(registry: ToolRegistry) -> None:
     # 8. Open In Explorer
     def _open_explorer_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         path = params.get("path", "")
-        try:
-            ok = client.open_in_explorer(path)
-            return ToolResult(status="done" if ok else "failed", output=f"Opened '{path}' in File Explorer.")
-        except Exception as ex:  # noqa: BLE001
-            return ToolResult(status="failed", error=str(ex))
+        select_file = bool(params.get("select_file", False))
+        from core.filesystem.service import UnifiedFilesystemService
+        return UnifiedFilesystemService.instance().open_in_explorer(path, select_file=select_file, context=context)
 
     registry.register(ToolDefinition(
         name="open_in_explorer",
         description="Open a directory or highlight a file in Windows File Explorer.",
         parameters={
             "type": "OBJECT",
-            "properties": {"path": {"type": "STRING", "description": "Directory or file to show in Explorer"}},
+            "properties": {
+                "path": {"type": "STRING", "description": "Directory or file to show in Explorer"},
+                "select_file": {"type": "BOOLEAN", "description": "If true, highlights the specified file in Explorer"},
+            },
             "required": ["path"],
         },
-        capability_tier=CapabilityTier.EXECUTION,
+        capability_tier=CapabilityTier.READ_ONLY,
         handler=_open_explorer_handler,
         is_mutating=False,
     ))

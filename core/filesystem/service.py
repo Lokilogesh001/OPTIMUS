@@ -20,6 +20,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 from enum import Enum
@@ -798,3 +800,113 @@ class UnifiedFilesystemService:
         except Exception as ex:  # noqa: BLE001
             dur = (time.perf_counter() - t0) * 1000.0
             return ToolResult(status="failed", error=str(ex), output=f"Metadata error: {ex}", duration_ms=dur)
+
+    def open_in_explorer(
+        self,
+        path: str | Path,
+        select_file: bool = False,
+        context: dict[str, Any] | None = None,
+    ) -> ToolResult:
+        """Open a directory or highlight a file in Windows File Explorer (or platform default file manager)."""
+        t0 = time.perf_counter()
+        try:
+            target = self.resolve_path(path)
+        except Exception as ex:  # noqa: BLE001
+            return ToolResult(status="failed", error=str(ex), output=f"Path resolution error: {ex}")
+
+        # Policy & access check (classified as routine open_in_explorer inspection)
+        auth, req_appr, reason = self.check_access(target, "open_in_explorer", context=context)
+        if not auth:
+            status = "unverified" if req_appr else "failed"
+            return ToolResult(
+                status=status,
+                error=reason,
+                output=reason,
+                evidence={"requires_approval": req_appr, "approval_reason": reason, "target": str(target)},
+            )
+
+        if not target.exists():
+            return ToolResult(
+                status="failed",
+                error=f"{ErrorCategory.PATH_NOT_FOUND.value}: Target does not exist: '{target}'",
+                output=f"Target does not exist: '{target}'",
+            )
+
+        is_file = target.is_file()
+        should_select = bool(select_file or is_file)
+
+        # Platform execution
+        try:
+            if os.name == "nt":
+                # Check for Session 0 isolation
+                session_id = 1
+                try:
+                    import ctypes
+                    s_id = ctypes.c_ulong()
+                    if ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(s_id)):
+                        session_id = s_id.value
+                except Exception as ex:  # noqa: BLE001
+                    logger.debug("ProcessIdToSessionId query fallback: %s", ex)
+
+                if session_id == 0:
+                    # Windows Service running in Session 0: check if interactive console session is active
+                    try:
+                        import ctypes
+                        active_console = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
+                        if active_console == 0xFFFFFFFF or active_console == 0:
+                            return ToolResult(
+                                status="failed",
+                                error="SESSION_0_ISOLATION: No active interactive user desktop session available to display File Explorer.",
+                                output="SESSION_0_ISOLATION: Running inside Session 0 Windows Service and no interactive user desktop is available.",
+                            )
+                    except Exception as ex:  # noqa: BLE001
+                        logger.debug("WTSGetActiveConsoleSessionId query fallback: %s", ex)
+
+                explorer_exe = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "explorer.exe")
+                if not os.path.exists(explorer_exe):
+                    explorer_exe = "explorer.exe"
+
+                if should_select:
+                    cmd = [explorer_exe, f"/select,{target}"]
+                else:
+                    cmd = [explorer_exe, str(target)]
+
+                proc = subprocess.Popen(cmd, shell=False)
+                dur = (time.perf_counter() - t0) * 1000.0
+                out = f"Opened '{target}' in Windows File Explorer" + (" (file selected)." if should_select else ".")
+                return ToolResult(
+                    status="done",
+                    output=out,
+                    evidence={
+                        "path": str(target),
+                        "is_file": is_file,
+                        "select_file": should_select,
+                        "pid": proc.pid,
+                        "session_id": session_id,
+                        "verified": True,
+                    },
+                    duration_ms=dur,
+                )
+            else:
+                # Non-Windows fallback (macOS open or Linux xdg-open)
+                if should_select and target.parent.exists():
+                    target_to_open = target.parent
+                else:
+                    target_to_open = target
+                opener = "open" if sys.platform == "darwin" else "xdg-open"
+                proc = subprocess.Popen([opener, str(target_to_open)], shell=False)
+                dur = (time.perf_counter() - t0) * 1000.0
+                return ToolResult(
+                    status="done",
+                    output=f"Opened '{target_to_open}' in system file manager.",
+                    evidence={"path": str(target_to_open), "pid": proc.pid, "verified": True},
+                    duration_ms=dur,
+                )
+        except Exception as ex:  # noqa: BLE001
+            dur = (time.perf_counter() - t0) * 1000.0
+            return ToolResult(
+                status="failed",
+                error=str(ex),
+                output=f"Failed to launch File Explorer: {ex}",
+                duration_ms=dur,
+            )

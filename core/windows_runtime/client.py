@@ -153,8 +153,8 @@ class WindowsRuntimeClient:
         resp = self.execute_operation(OperationType.OPEN_WITH_ASSOCIATED, {"path": path})
         return resp.success
 
-    def open_in_explorer(self, path: str) -> bool:
-        resp = self.execute_operation(OperationType.OPEN_IN_EXPLORER, {"path": path})
+    def open_in_explorer(self, path: str, select_file: bool = False) -> bool:
+        resp = self.execute_operation(OperationType.OPEN_IN_EXPLORER, {"path": path, "select_file": select_file})
         return resp.success
 
     def list_processes(self, limit: int = 150, name_filter: str = "") -> list[dict[str, Any]]:
