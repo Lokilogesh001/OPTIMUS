@@ -87,8 +87,11 @@ def clean_credentials():
 @pytest.fixture
 def temp_store(tmp_path: Path):
     """Provide an isolated encrypted PersonalStore instance."""
+    PersonalStore.reset_instance()
     store_dir = tmp_path / "personal_store"
-    return PersonalStore(root_dir=store_dir)
+    store = PersonalStore.instance(root_dir=store_dir)
+    yield store
+    PersonalStore.reset_instance()
 
 
 # ── Phase 1 & 2: OAuth PKCE, CSRF, Scopes & Credentials Verification ──────────

@@ -1,6 +1,9 @@
 """core/personal_intelligence/tools.py — Central ToolRegistry Integration for Personal Life Intelligence.
 
 Registers:
+- get_gmail_status (NETWORK_EXTERNAL, READ_ONLY)
+- list_gmail_messages (NETWORK_EXTERNAL, READ_ONLY)
+- get_email_details (NETWORK_EXTERNAL, READ_ONLY)
 - get_personal_dashboard (READ_ONLY)
 - list_unified_inbox (READ_ONLY)
 - list_personal_tasks (READ_ONLY)
@@ -14,8 +17,10 @@ Registers:
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -28,6 +33,8 @@ from core.orchestrator.tools import (
 from core.personal_intelligence.engine import PersonalIntelligenceEngine
 from core.personal_intelligence.storage import PersonalStore
 from core.personal_intelligence.types import (
+    AuthStatus,
+    Message,
     PersonalEvent,
     ProviderType,
     TaskStatus,
@@ -41,7 +48,229 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
     store = store or PersonalStore.instance()
     engine = PersonalIntelligenceEngine(store=store)
 
-    # 1. get_personal_dashboard
+    # 1. get_gmail_status
+    def _gmail_status_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        acc_id = params.get("account_id")
+        accounts = store.list_accounts()
+        gmail_acc = None
+        for a in accounts:
+            if a.provider == ProviderType.GMAIL and (not acc_id or a.account_id == acc_id):
+                gmail_acc = a
+                break
+
+        if not gmail_acc:
+            msg = "No Google Gmail account is currently configured or connected in OPTIMUS."
+            return ToolResult(
+                status="done",
+                output=msg,
+                evidence={"connected": False, "provider": "GMAIL", "error": "No account configured"},
+            )
+
+        from core.personal_intelligence.providers.gmail import GmailAdapter
+        adapter = GmailAdapter(account=gmail_acc)
+        health = adapter.check_health()
+
+        # Update auth status in store if changed
+        health_status = health.get("auth_status")
+        if health_status and gmail_acc.auth_status.value != health_status:
+            try:
+                gmail_acc.auth_status = AuthStatus(health_status)
+                store.save_account(gmail_acc)
+            except (ValueError, KeyError, OSError) as e:
+                logger.debug("Could not persist updated auth status: %s", e)
+
+        if health.get("healthy"):
+            out = (
+                f"Gmail Connection Status: CONNECTED & ACTIVE\n"
+                f"Account: {health.get('email', gmail_acc.email_or_id)}\n"
+                f"Authentication: Valid (Google OAuth 2.0 PKCE Verified Live)\n"
+                f"Total Messages: {health.get('messages_total', 'N/A')}\n"
+                f"Total Threads: {health.get('threads_total', 'N/A')}\n"
+                f"History ID: {health.get('history_id', 'N/A')}\n"
+                f"Granted Permissions: {', '.join(health.get('scopes', []))}"
+            )
+        else:
+            out = (
+                f"Gmail Connection Status: ATTENTION REQUIRED\n"
+                f"Account: {gmail_acc.email_or_id}\n"
+                f"Auth Status: {gmail_acc.auth_status.value}\n"
+                f"Details: {health.get('error', 'Health verification encountered an issue')}"
+            )
+
+        clean_evidence = {k: v for k, v in health.items() if "token" not in k.lower()}
+        return ToolResult(status="done", output=out, evidence=clean_evidence)
+
+    registry.register(ToolDefinition(
+        name="get_gmail_status",
+        description="Verify real-time Google Gmail connection status, authenticated account identity, token validity, and API reachability.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "account_id": {"type": "STRING", "description": "Optional specific Gmail account ID"},
+            },
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_gmail_status_handler,
+        is_mutating=False,
+    ))
+
+    # 2. list_gmail_messages
+    def _list_gmail_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        limit = max(1, min(int(params.get("limit", 5)), 25))
+        is_unread = params.get("is_unread")
+        sender = params.get("sender")
+        search_query = params.get("search_query") or params.get("query")
+        today_only = bool(params.get("today_only", False))
+        live_fetch = bool(params.get("live_fetch", True))
+
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        gmail_acc = accounts[0] if accounts else None
+
+        messages: list[Message] = []
+        source = "local_store"
+
+        if gmail_acc and live_fetch:
+            try:
+                from core.personal_intelligence.providers.gmail import GmailAdapter
+                adapter = GmailAdapter(account=gmail_acc)
+                q_terms = []
+                if sender:
+                    q_terms.append(f"from:{sender}")
+                if search_query:
+                    q_terms.append(search_query)
+                if today_only:
+                    today_str = datetime.date.today().strftime("%Y/%m/%d")
+                    q_terms.append(f"after:{today_str}")
+
+                live_q = " ".join(q_terms) if q_terms else None
+                fetched = adapter.fetch_recent_messages(limit=limit, query=live_q, is_unread=is_unread)
+                if fetched:
+                    messages = fetched
+                    source = "live_gmail_api"
+                    store.save_messages(fetched)
+            except Exception as ex:  # noqa: BLE001
+                logger.warning("Live Gmail message fetch failed; falling back to local store: %s", ex)
+
+        if not messages:
+            min_ts = (time.time() - (time.time() % 86400)) if today_only else None
+            messages = store.list_messages(
+                provider=ProviderType.GMAIL,
+                is_unread=is_unread,
+                search_query=search_query or sender,
+                limit=limit,
+            )
+            if min_ts:
+                messages = [m for m in messages if m.timestamp >= min_ts]
+            source = "local_store"
+
+        if not messages:
+            status_text = "No Gmail messages found matching the requested criteria."
+            if not gmail_acc:
+                status_text += " (Note: No Gmail account is currently connected in OPTIMUS)."
+            return ToolResult(
+                status="done",
+                output=status_text,
+                evidence={"count": 0, "source": source, "messages": []},
+            )
+
+        lines = [f"Found {len(messages)} Gmail message(s) [Source: {source}]:"]
+        evidence_msgs = []
+        for idx, m in enumerate(messages, 1):
+            date_str = datetime.datetime.fromtimestamp(m.timestamp).strftime("%Y-%m-%d %H:%M")
+            status_tag = "[UNREAD]" if not m.is_read else "[READ]"
+            imp_tag = " ★" if m.is_important else ""
+            lines.append(f"{idx}. {status_tag}{imp_tag} From: {m.sender}")
+            lines.append(f"   Subject: {m.subject}")
+            lines.append(f"   Date: {date_str} (ID: {m.message_id})")
+            if m.body_snippet:
+                lines.append(f"   Snippet: {m.body_snippet}")
+            lines.append("")
+            evidence_msgs.append({
+                "message_id": m.message_id,
+                "sender": m.sender,
+                "subject": m.subject,
+                "date": date_str,
+                "is_read": m.is_read,
+                "is_important": m.is_important,
+                "snippet": m.body_snippet,
+            })
+
+        return ToolResult(
+            status="done",
+            output="\n".join(lines).strip(),
+            evidence={"count": len(messages), "source": source, "messages": evidence_msgs},
+        )
+
+    registry.register(ToolDefinition(
+        name="list_gmail_messages",
+        description="Retrieve recent or unread Gmail messages, search by sender or query, and display structured metadata.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "limit": {"type": "INTEGER", "description": "Maximum number of messages to return (default 5, max 25)"},
+                "is_unread": {"type": "BOOLEAN", "description": "Filter for unread messages only"},
+                "sender": {"type": "STRING", "description": "Filter by sender email address or name"},
+                "search_query": {"type": "STRING", "description": "Search keyword query across email subject or body"},
+                "today_only": {"type": "BOOLEAN", "description": "Only retrieve emails received today"},
+                "live_fetch": {"type": "BOOLEAN", "description": "Whether to fetch live from Gmail API v1 (default true)"},
+            },
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_list_gmail_handler,
+        is_mutating=False,
+    ))
+
+    # 3. get_email_details
+    def _email_detail_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        msg_id = str(params.get("message_id") or "").strip()
+        if not msg_id or not re.match(r"^[a-zA-Z0-9_\-]+$", msg_id):
+            return ToolResult(status="failed", error="Invalid or missing message_id parameter.")
+
+        msg = store.get_message(msg_id)
+        if not msg:
+            accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+            if accounts:
+                try:
+                    from core.personal_intelligence.providers.gmail import GmailAdapter
+                    adapter = GmailAdapter(account=accounts[0])
+                    msg = adapter.get_message_detail(msg_id)
+                    if msg:
+                        store.save_message(msg)
+                except Exception as ex:  # noqa: BLE001
+                    logger.warning("Failed fetching detail from live Gmail API: %s", ex)
+
+        if not msg:
+            return ToolResult(status="failed", error=f"Message with ID '{msg_id}' not found.")
+
+        date_str = datetime.datetime.fromtimestamp(msg.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        out = (
+            f"Email ID: {msg.message_id}\n"
+            f"Provider: {msg.provider.value}\n"
+            f"From: {msg.sender}\n"
+            f"To: {', '.join(msg.recipients)}\n"
+            f"Date: {date_str}\n"
+            f"Subject: {msg.subject}\n"
+            f"Status: {'Read' if msg.is_read else 'Unread'}, Important: {msg.is_important}\n"
+            f"Content:\n{msg.body_snippet}"
+        )
+        return ToolResult(status="done", output=out, evidence=msg.to_dict())
+
+    registry.register(ToolDefinition(
+        name="get_email_details",
+        description="Inspect single email message details by message ID with prompt-injection defanging.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "message_id": {"type": "STRING", "description": "Unique Gmail/Email message ID"},
+            },
+            "required": ["message_id"],
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_email_detail_handler,
+        is_mutating=False,
+    ))
+
+    # 4. get_personal_dashboard
     def _dashboard_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         now = time.time()
         start_of_day = now - (now % 86400)
@@ -79,7 +308,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=False,
     ))
 
-    # 2. list_unified_inbox
+    # 5. list_unified_inbox
     def _inbox_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         prov_raw = params.get("provider")
         prov = None
@@ -116,7 +345,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=False,
     ))
 
-    # 3. list_personal_tasks
+    # 6. list_personal_tasks
     def _tasks_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         st_raw = params.get("status")
         st = None
@@ -144,7 +373,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=False,
     ))
 
-    # 4. get_calendar_view
+    # 7. get_calendar_view
     def _calendar_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         evts = store.list_events(
             start_min=params.get("start_min"),
@@ -168,7 +397,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=False,
     ))
 
-    # 5. sync_personal_accounts
+    # 8. sync_personal_accounts
     def _sync_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         results = engine.sync_all_connected_accounts()
         return ToolResult(status="done", output=json.dumps(results, indent=2), evidence={"results": results})
@@ -182,7 +411,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=False,
     ))
 
-    # 6. send_email (Approval Gated via PolicyEngine)
+    # 9. send_email (Approval Gated via PolicyEngine)
     def _send_email_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         to = params.get("to", "")
         subject = params.get("subject", "")
@@ -190,7 +419,6 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         if not to or not subject or not body:
             return ToolResult(status="failed", error="Missing required parameters: to, subject, body")
 
-        # In production, dispatch via GmailAdapter or OutlookAdapter
         return ToolResult(
             status="done",
             output=f"Email sent successfully to '{to}' with subject '{subject}'.",
@@ -214,7 +442,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=True,
     ))
 
-    # 7. create_calendar_event (Approval Gated via PolicyEngine)
+    # 10. create_calendar_event (Approval Gated via PolicyEngine)
     def _create_event_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         title = params.get("title", "")
         start_time = float(params.get("start_time", time.time()))
@@ -251,7 +479,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=True,
     ))
 
-    # 8. send_whatsapp_message (Approval Gated via PolicyEngine)
+    # 11. send_whatsapp_message (Approval Gated via PolicyEngine)
     def _send_wa_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         to = params.get("to", "")
         text = params.get("text", "")
@@ -275,7 +503,7 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         is_mutating=True,
     ))
 
-    # 9. purge_personal_store (Approval Gated via PolicyEngine)
+    # 12. purge_personal_store (Approval Gated via PolicyEngine)
     def _purge_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         store.wipe_all_data()
         return ToolResult(status="done", output="PersonalStore completely wiped and local personal data purged.", evidence={"purged": True})

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import logging
 import operator
 import re
 import time
@@ -18,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("optimus.orchestrator.tools")
 
 
 class CapabilityTier(str, Enum):
@@ -510,7 +513,15 @@ class ToolRegistry:
             if caller_agent == "orchestrator":
                 allowed_tiers = list(CapabilityTier)
             else:
-                allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE]
+                try:
+                    from core.orchestrator.agents import AgentRegistry
+                    prof = AgentRegistry().get(caller_agent)
+                    if prof and prof.allowed_tiers:
+                        allowed_tiers = prof.allowed_tiers
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("Could not resolve allowed tiers for agent %s: %s", caller_agent, e)
+                if not allowed_tiers:
+                    allowed_tiers = [CapabilityTier.READ_ONLY, CapabilityTier.WORKSPACE_WRITE]
 
         # 1. Existence check in tool registry
         _TOOL_ALIASES = {

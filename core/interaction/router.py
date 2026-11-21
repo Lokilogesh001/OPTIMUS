@@ -39,8 +39,13 @@ _ACTIONABLE_VERBS = [
     "create", "build", "run", "execute", "analyze", "diagnose",
     "deploy", "fix", "delete", "download", "verify", "test",
     "inspect", "find", "search", "write", "compile", "generate",
-    "install", "backup", "restore", "clean",
+    "install", "backup", "restore", "clean", "show", "list", "check",
 ]
+
+_EMAIL_QUERY_PATTERN = re.compile(
+    r"(?:gmail|email|emails|inbox)",
+    re.IGNORECASE,
+)
 
 _TASK_PREFIXES = ["task:", "do:", "orchestrate:", "optimus:"]
 
@@ -89,6 +94,17 @@ class InteractionRouter:
                 target_goal=clean,
                 requires_orchestrator=False,
                 explanation="Read-only system telemetry query.",
+            )
+
+        # 3b. Check Email / Communication Intelligence Queries
+        if _EMAIL_QUERY_PATTERN.search(clean):
+            return IntentClassificationResult(
+                intent=IntentCategory.ACTIONABLE_TASK,
+                confidence=0.95,
+                target_goal=clean,
+                requires_orchestrator=True,
+                requires_vision=has_images,
+                explanation="Email or Gmail communication intelligence request.",
             )
 
         # 4. Multimodal Image Feasibility & Privacy Check

@@ -45,7 +45,7 @@ from core.orchestrator.runtime import (
     new_subtask_id,
     new_task_id,
 )
-from core.orchestrator.tools import ToolRegistry, ToolResult
+from core.orchestrator.tools import CapabilityTier, ToolRegistry, ToolResult
 
 
 _SAFE_MATH_OPS = {
@@ -337,7 +337,85 @@ class CentralOrchestrator:
             }]
             return tool_res.is_success, tool_res.output, "filesystem", side_effects
 
-        # 14. Explicit Unavailable Tool Request
+        # 14. Direct Gmail Status Check
+        gmail_status_match = re.match(
+            r"^(?:(?:what(?:'s|\s+is)\s+(?:the\s+)?status\s+of\s+(?:my\s+)?gmail(?:'s|\s+connection)?|is\s+(?:my\s+)?gmail\s+connected|check\s+(?:my\s+)?gmail\s+connection|check\s+my\s+gmail\s+status|gmail\s+status|gmail\s+connection))\s*\??$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if gmail_status_match:
+            tool_res = self.tool_registry.execute(
+                "get_gmail_status",
+                {},
+                caller_agent="personal_intelligence",
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.NETWORK_EXTERNAL],
+            )
+            side_effects = [{
+                "tool_name": "get_gmail_status",
+                "arguments": {},
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+                "error": tool_res.error,
+            }]
+            return tool_res.is_success, tool_res.output, "personal_intelligence", side_effects
+
+        # 15. Direct Email / Gmail Retrieval & Search
+        email_list_match = re.match(
+            r"^(?:can\s+you\s+see\s+(?:the\s+)?(?:last|latest)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:gmails?|emails?)(?:\s+i\s+have\s+received)?|show\s+(?:me\s+)?(?:my\s+)?(?:latest|last)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:unread\s+)?(?:gmails?|emails?)|show\s+(?:my\s+)?(?:unread\s+)?(?:gmails?|emails?)(?:\s+received\s+today)?|check\s+(?:my\s+)?(?:gmail|emails?)|list\s+(?:my\s+)?(?:latest\s+)?(?:gmails?|emails?)|find\s+(?:my\s+)?emails?\s+from\s+(.+)|search\s+emails?\s+(?:for|containing)\s+(.+))\s*\??$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if email_list_match:
+            word_map = {
+                "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            }
+            groups = email_list_match.groups()
+            raw_cnt = groups[0] or groups[1]
+            cnt = 5
+            if raw_cnt:
+                raw_lower = raw_cnt.lower()
+                cnt = word_map.get(raw_lower, 5)
+                if raw_lower not in word_map:
+                    try:
+                        cnt = int(raw_cnt)
+                    except ValueError:
+                        cnt = 5
+
+            is_unread = "unread" in lower
+            today_only = "today" in lower
+            sender = groups[2] if len(groups) > 2 and groups[2] else None
+            search_q = groups[3] if len(groups) > 3 and groups[3] else None
+
+            tool_params: dict[str, Any] = {
+                "limit": cnt,
+                "today_only": today_only,
+            }
+            if is_unread:
+                tool_params["is_unread"] = True
+            if sender:
+                tool_params["sender"] = sender.strip()
+            if search_q:
+                tool_params["search_query"] = search_q.strip()
+
+            tool_res = self.tool_registry.execute(
+                "list_gmail_messages",
+                tool_params,
+                caller_agent="personal_intelligence",
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.NETWORK_EXTERNAL],
+            )
+            side_effects = [{
+                "tool_name": "list_gmail_messages",
+                "arguments": tool_params,
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+                "error": tool_res.error,
+            }]
+            return tool_res.is_success, tool_res.output, "personal_intelligence", side_effects
+
+        # 16. Explicit Unavailable Tool Request
         unavail_match = re.match(r"^(?:call|invoke|execute|use|run)\s+(?:tool\s+)?([a-zA-Z0-9_]+)$", stripped, re.IGNORECASE)
         if unavail_match:
             candidate_tool = unavail_match.group(1)
@@ -426,6 +504,7 @@ class CentralOrchestrator:
             has_calc = any(kw in lower_goal for kw in ("calculate", "compute", "math", "+", "*", "-", "/", "sum"))
             has_file = has_folder or has_find or any(kw in lower_goal for kw in ("write", "save", "file", "create", "result.txt", "export"))
             has_research = any(kw in lower_goal for kw in ("research", "inspect", "read", "find", "search", "investigate", "citation", "paper"))
+            has_email = any(kw in lower_goal for kw in ("email", "gmail", "inbox", "mail"))
 
             idx = 1
             if has_audit and self.agent_registry.get("system_diagnosis"):
@@ -564,6 +643,19 @@ class CentralOrchestrator:
                     assigned_agent="filesystem",
                     allowed_tools=list(prof.allowed_tools),
                     expected_deliverables=expected_deliv,
+                ))
+                idx += 1
+
+            if has_email and self.agent_registry.get("personal_intelligence"):
+                prof = self.agent_registry.get("personal_intelligence")
+                subtasks.append(Subtask(
+                    subtask_id=new_subtask_id(t_id, idx),
+                    task_id=t_id,
+                    index=idx,
+                    title="Personal Intelligence & Email Integration",
+                    description=f"Inspect email and communication intelligence for: {goal}",
+                    assigned_agent="personal_intelligence",
+                    allowed_tools=list(prof.allowed_tools),
                 ))
                 idx += 1
 

@@ -5,18 +5,28 @@ Implements:
 - Least-privilege OAuth 2.0 (`gmail.readonly` default, progressive consent for `gmail.send`).
 - Secure token storage in OS Keyring / CredentialVault.
 - History ID-based incremental synchronization.
-- Expired cursor (HTTP 404/410) recovery via controlled recent window fallback.
-- Header parsing (From, To, Subject, Date, Message-ID) and importance detection.
-- Offline mock transport mode for reliable automated testing.
+- Real-time live profile diagnostics & token health checks.
+- Two-stage message retrieval (message list + full payload metadata).
+- Token refresh with client_id and client_secret under exclusive lock.
+- Prompt injection quarantine using core.outcome.untrusted.
+- Backward-compatible offline mock transport mode for automated unit tests.
 """
 
 from __future__ import annotations
 
 import email.utils
 import logging
+import re
 import time
 from typing import Any
 
+import requests
+
+from core.outcome import untrusted
+from core.personal_intelligence.oauth import (
+    get_google_client_id,
+    get_google_client_secret,
+)
 from core.personal_intelligence.providers.base import (
     BaseProviderAdapter,
     oauth_refresh_lock,
@@ -66,51 +76,146 @@ class GmailAdapter(BaseProviderAdapter):
         self.account.error_message = ""
         return True
 
+    def _execute_request(self, method: str, url: str, **kwargs) -> Any:
+        """Execute HTTP request using injected client or requests with automatic 401 retry."""
+        token = self._get_access_token()
+        headers = dict(kwargs.pop("headers", {}))
+        if token and "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {token}"
+        kwargs["headers"] = headers
+
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 15.0
+
+        if self.http_client:
+            func = getattr(self.http_client, method.lower())
+            return func(url, **kwargs)
+
+        # Live network request
+        resp = requests.request(method, url, **kwargs)
+        if resp.status_code == 401:
+            logger.info("Encountered 401 for %s; attempting token refresh...", self.account.account_id)
+            if self.refresh_token_if_needed():
+                new_token = self._get_access_token()
+                if new_token:
+                    headers["Authorization"] = f"Bearer {new_token}"
+                    kwargs["headers"] = headers
+                    resp = requests.request(method, url, **kwargs)
+        return resp
+
     def refresh_token_if_needed(self) -> bool:
-        """Execute OAuth refresh token exchange under exclusive inter-process lock."""
+        """Execute OAuth refresh token exchange with client_id & client_secret under exclusive lock."""
         with oauth_refresh_lock(self.account.account_id):
-            token = self._get_access_token()
-            if not token:
+            refresh_token = get_credential(f"gmail_{self.account.account_id}_refresh")
+            if not refresh_token:
+                logger.warning("No refresh token available for %s", self.account.account_id)
                 self.account.auth_status = AuthStatus.EXPIRED
                 return False
 
-            refresh_token = get_credential(f"gmail_{self.account.account_id}_refresh")
-            if not refresh_token:
-                return True
+            client_id = get_google_client_id() or self.account.oauth_client_id
+            client_secret = get_google_client_secret()
+            if not client_id or not client_secret:
+                logger.warning("Google OAuth client credentials missing for token refresh")
+                self.account.auth_status = AuthStatus.EXPIRED
+                return False
 
-            # If an injected HTTP client is available, simulate or perform token refresh
-            if self.http_client and hasattr(self.http_client, "post"):
-                try:
-                    resp = self.http_client.post(
-                        "https://oauth2.googleapis.com/token",
-                        data={
-                            "client_id": self.account.oauth_client_id or "optimus_client",
-                            "grant_type": "refresh_token",
-                            "refresh_token": refresh_token,
-                        },
-                    )
+            payload = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            }
+
+            try:
+                if self.http_client and hasattr(self.http_client, "post"):
+                    resp = self.http_client.post("https://oauth2.googleapis.com/token", data=payload)
                     data = safe_parse_json(resp)
-                    new_access_token = data.get("access_token")
-                    if new_access_token:
-                        new_refresh = data.get("refresh_token", refresh_token)
-                        self._store_tokens(new_access_token, new_refresh)
-                        self.account.auth_status = AuthStatus.CONNECTED
-                        return True
-                except Exception as ex:
-                    logger.warning("Failed refreshing token for %s: %s", self.account.account_id, ex)
-                    self.account.auth_status = AuthStatus.EXPIRED
-                    return False
-            return True
+                else:
+                    resp = requests.post("https://oauth2.googleapis.com/token", data=payload, timeout=15.0)
+                    data = resp.json() if resp.status_code == 200 else {}
+
+                new_access_token = data.get("access_token")
+                if new_access_token:
+                    new_refresh = data.get("refresh_token", refresh_token)
+                    self._store_tokens(new_access_token, new_refresh)
+                    self.account.auth_status = AuthStatus.CONNECTED
+                    self.account.error_message = ""
+                    logger.info("Successfully refreshed access token for %s", self.account.account_id)
+                    return True
+
+                err_msg = data.get("error_description", data.get("error", "Refresh token rejected"))
+                logger.warning("Token refresh rejected for %s: %s", self.account.account_id, err_msg)
+                self.account.auth_status = AuthStatus.EXPIRED
+                self.account.error_message = str(err_msg)
+                return False
+            except Exception as ex:  # noqa: BLE001
+                logger.warning("Network or unexpected error refreshing token for %s: %s", self.account.account_id, ex)
+                self.account.auth_status = AuthStatus.EXPIRED
+                self.account.error_message = str(ex)
+                return False
 
     def check_health(self) -> dict[str, Any]:
-        """Perform diagnostic health check."""
+        """Perform live diagnostic health check against official Gmail API v1."""
         token = self._get_access_token()
         if not token:
-            return {"healthy": False, "error": "No access token configured"}
-        return {"healthy": True, "provider": "Gmail", "account": self.account.email_or_id}
+            return {
+                "healthy": False,
+                "provider": "Gmail",
+                "error": "No access token configured in CredentialVault",
+                "auth_status": self.account.auth_status.value,
+            }
 
-    def _parse_raw_gmail_message(self, raw_item: dict[str, Any]) -> Message:
-        """Parse raw Gmail message resource into normalized Message dataclass."""
+        try:
+            resp = self._execute_request("GET", "https://gmail.googleapis.com/gmail/v1/users/me/profile")
+            status_code = getattr(resp, "status_code", 200)
+            if status_code == 200:
+                profile = safe_parse_json(resp)
+                email_addr = profile.get("emailAddress", self.account.email_or_id)
+                self.account.auth_status = AuthStatus.CONNECTED
+                self.account.error_message = ""
+                return {
+                    "healthy": True,
+                    "provider": "Gmail",
+                    "account_id": self.account.account_id,
+                    "email": email_addr,
+                    "messages_total": profile.get("messagesTotal", 0),
+                    "threads_total": profile.get("threadsTotal", 0),
+                    "history_id": profile.get("historyId", ""),
+                    "auth_status": "CONNECTED",
+                    "scopes": self.account.scopes or ["https://www.googleapis.com/auth/gmail.readonly"],
+                    "last_verified": time.time(),
+                }
+            if status_code == 401:
+                self.account.auth_status = AuthStatus.EXPIRED
+                return {
+                    "healthy": False,
+                    "provider": "Gmail",
+                    "error": "OAuth access token expired and refresh failed",
+                    "auth_status": "EXPIRED",
+                }
+            if status_code == 403:
+                return {
+                    "healthy": False,
+                    "provider": "Gmail",
+                    "error": "Gmail API access forbidden or rate limit exceeded",
+                    "auth_status": self.account.auth_status.value,
+                }
+            return {
+                "healthy": False,
+                "provider": "Gmail",
+                "error": f"Gmail API returned HTTP {status_code}",
+                "auth_status": self.account.auth_status.value,
+            }
+        except Exception as ex:  # noqa: BLE001
+            return {
+                "healthy": False,
+                "provider": "Gmail",
+                "error": f"Gmail service unreachable: {ex}",
+                "auth_status": self.account.auth_status.value,
+            }
+
+    def _parse_raw_gmail_message(self, raw_item: dict[str, Any], defang: bool = True) -> Message:
+        """Parse raw Gmail message resource into normalized Message dataclass with injection defense."""
         msg_id = raw_item.get("id", "")
         thread_id = raw_item.get("threadId", msg_id)
         snippet = raw_item.get("snippet", "")
@@ -133,11 +238,14 @@ class GmailAdapter(BaseProviderAdapter):
                 parsed_tuple = email.utils.parsedate_tz(date_header)
                 if parsed_tuple:
                     timestamp = email.utils.mktime_tz(parsed_tuple)
-            except Exception:
-                pass
+            except (ValueError, TypeError, OverflowError) as e:
+                logger.debug("Failed parsing email date header '%s': %s", date_header, e)
 
         is_unread = "UNREAD" in labels
         is_important = "IMPORTANT" in labels or "STARRED" in labels
+
+        # Quarantined body snippet using core.outcome.untrusted
+        safe_snippet = untrusted("gmail", snippet[:500]) if (defang and snippet) else snippet[:500]
 
         return Message(
             message_id=msg_id,
@@ -147,7 +255,7 @@ class GmailAdapter(BaseProviderAdapter):
             sender=sender,
             recipients=recipients,
             subject=subject,
-            body_snippet=snippet[:500],
+            body_snippet=safe_snippet,
             timestamp=timestamp,
             labels=labels,
             is_read=not is_unread,
@@ -161,21 +269,40 @@ class GmailAdapter(BaseProviderAdapter):
         if not token:
             raise PermissionError("Gmail account not authenticated")
 
-        if self.http_client:
-            # Use injected client for offline testing
-            resp = self.http_client.get(
+        try:
+            resp = self._execute_request(
+                "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-                headers={"Authorization": f"Bearer {token}"},
                 params={"maxResults": max_items},
             )
             data = safe_parse_json(resp)
             messages_raw = data.get("messages", [])
-            parsed_messages = [self._parse_raw_gmail_message(m) for m in messages_raw]
+            parsed_messages: list[Message] = []
+            for m in messages_raw:
+                if "payload" in m:
+                    # Injected test stub with full payload already present (preserves unit tests)
+                    parsed_messages.append(self._parse_raw_gmail_message(m))
+                else:
+                    # Live Gmail API stub {"id": "...", "threadId": "..."} - fetch full payload
+                    msg_id = m.get("id")
+                    if msg_id:
+                        try:
+                            msg_resp = self._execute_request(
+                                "GET",
+                                f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}",
+                                params={"format": "full"},
+                            )
+                            if getattr(msg_resp, "status_code", 200) == 200:
+                                raw_detail = safe_parse_json(msg_resp)
+                                parsed_messages.append(self._parse_raw_gmail_message(raw_detail))
+                        except Exception as m_ex:  # noqa: BLE001
+                            logger.warning("Failed fetching detail for Gmail msg %s: %s", msg_id, m_ex)
+
             new_cursor = str(data.get("historyId", "1000000"))
             return parsed_messages, [], new_cursor
-
-        # Default standard response structure when running without live client
-        return [], [], "1000000"
+        except Exception as ex:  # noqa: BLE001
+            logger.warning("Gmail initial_sync error: %s", ex)
+            return [], [], "1000000"
 
     def incremental_sync(self, cursor: str, max_items: int = 50) -> tuple[list[Message], list[PersonalEvent], str | None]:
         """Execute incremental sync from historyId."""
@@ -183,10 +310,10 @@ class GmailAdapter(BaseProviderAdapter):
         if not token:
             raise PermissionError("Gmail account not authenticated")
 
-        if self.http_client:
-            resp = self.http_client.get(
+        try:
+            resp = self._execute_request(
+                "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/history",
-                headers={"Authorization": f"Bearer {token}"},
                 params={"startHistoryId": cursor, "maxResults": max_items},
             )
             # Handle HTTP 404/410 cursor expired
@@ -202,25 +329,111 @@ class GmailAdapter(BaseProviderAdapter):
                 for added in h.get("messagesAdded", []):
                     m = added.get("message")
                     if m:
-                        messages.append(self._parse_raw_gmail_message(m))
+                        if "payload" in m:
+                            messages.append(self._parse_raw_gmail_message(m))
+                        else:
+                            msg_id = m.get("id")
+                            if msg_id:
+                                try:
+                                    msg_resp = self._execute_request(
+                                        "GET",
+                                        f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}",
+                                        params={"format": "full"},
+                                    )
+                                    if getattr(msg_resp, "status_code", 200) == 200:
+                                        messages.append(self._parse_raw_gmail_message(safe_parse_json(msg_resp)))
+                                except Exception as m_ex:  # noqa: BLE001
+                                    logger.warning("Failed fetching detail for incremental msg %s: %s", msg_id, m_ex)
             return messages, [], new_cursor
+        except Exception as ex:  # noqa: BLE001
+            logger.warning("Gmail incremental_sync error: %s", ex)
+            return [], [], cursor
 
-        return [], [], cursor
+    def fetch_recent_messages(
+        self,
+        limit: int = 5,
+        query: str | None = None,
+        is_unread: bool | None = None,
+    ) -> list[Message]:
+        """Fetch recent messages directly from Gmail API v1 with search and filter parameters."""
+        token = self._get_access_token()
+        if not token:
+            raise PermissionError("Gmail account not authenticated")
+
+        limit = max(1, min(int(limit), 25))
+        q_parts = []
+        if query:
+            q_parts.append(query)
+        if is_unread:
+            q_parts.append("is:unread")
+        q = " ".join(q_parts) if q_parts else None
+
+        params: dict[str, Any] = {"maxResults": limit}
+        if q:
+            params["q"] = q
+
+        resp = self._execute_request(
+            "GET",
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+            params=params,
+        )
+        data = safe_parse_json(resp)
+        messages_raw = data.get("messages", [])
+        results: list[Message] = []
+        for m in messages_raw:
+            if "payload" in m:
+                results.append(self._parse_raw_gmail_message(m))
+            else:
+                msg_id = m.get("id")
+                if msg_id:
+                    try:
+                        msg_resp = self._execute_request(
+                            "GET",
+                            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}",
+                            params={"format": "full"},
+                        )
+                        if getattr(msg_resp, "status_code", 200) == 200:
+                            raw_detail = safe_parse_json(msg_resp)
+                            results.append(self._parse_raw_gmail_message(raw_detail))
+                    except Exception as m_ex:  # noqa: BLE001
+                        logger.warning("Failed fetching detail for msg %s: %s", msg_id, m_ex)
+        return results
+
+    def get_message_detail(self, message_id: str) -> Message | None:
+        """Fetch single full message by ID with strict input validation."""
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", message_id):
+            raise ValueError(f"Invalid message ID format: {message_id}")
+        resp = self._execute_request(
+            "GET",
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}",
+            params={"format": "full"},
+        )
+        if getattr(resp, "status_code", 200) == 200:
+            raw_detail = safe_parse_json(resp)
+            return self._parse_raw_gmail_message(raw_detail)
+        return None
 
     def revoke(self) -> bool:
         """Revoke tokens remotely if possible, purge credentials, and update AuthStatus honestly."""
         remote_ok = False
         token = self._get_access_token()
 
-        if token and self.http_client and hasattr(self.http_client, "post"):
+        if token:
             try:
-                resp = self.http_client.post(
-                    "https://oauth2.googleapis.com/revoke",
-                    params={"token": token},
-                )
+                if self.http_client and hasattr(self.http_client, "post"):
+                    resp = self.http_client.post(
+                        "https://oauth2.googleapis.com/revoke",
+                        params={"token": token},
+                    )
+                else:
+                    resp = requests.post(
+                        "https://oauth2.googleapis.com/revoke",
+                        params={"token": token},
+                        timeout=15.0,
+                    )
                 if getattr(resp, "status_code", 0) == 200:
                     remote_ok = True
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 logger.warning("Remote revocation network error for %s: %s", self.account.account_id, ex)
 
         if remote_ok:

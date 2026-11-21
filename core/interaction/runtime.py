@@ -11,7 +11,11 @@ The central coordinator connecting:
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
+import time
+
+logger = logging.getLogger("optimus.interaction.runtime")
 
 from core.intelligence.gateway import IntelligenceGateway
 from core.intelligence.types import ChatMessage, ModelRequest
@@ -154,10 +158,9 @@ class InteractionRuntime:
         att_list = list(attachments or [])
 
         # 1. Deduplication Check for Voice Inputs
-        if modality == InteractionModality.VOICE:
-            if self.voice_bridge.is_duplicate(clean_text):
-                print(f"[InteractionRuntime] Suppressed duplicate speech utterance: '{clean_text}'")
-                return ""
+        if modality == InteractionModality.VOICE and self.voice_bridge.is_duplicate(clean_text):
+            print(f"[InteractionRuntime] Suppressed duplicate speech utterance: '{clean_text}'")
+            return ""
 
         # 2. Add User Message to Session History
         user_msg = self.session_manager.add_message(
@@ -241,13 +244,19 @@ class InteractionRuntime:
         if classification.intent == IntentCategory.ACTIONABLE_TASK:
             goal = classification.target_goal or clean_text
             if self.orchestrator:
-                record = self.orchestrator.start(goal)
-                self.session_manager.set_active_task(session_id, record.task_id)
-                sub_count = len(record.plan.subtasks) if record.plan else 0
-                response_text = (
-                    f"OPTIMUS directive initialized. Task [{record.task_id[:8]}] scheduled with "
-                    f"{sub_count} planned subtask(s). Delegated to specialized agents under physical verification."
-                )
+                # Fast-path check for deterministic execution (e.g. Gmail status/retrieval, math, system vitals)
+                fast_res = self.orchestrator._try_fast_path(goal, f"fast_{int(time.time()*1000)}")
+                if fast_res is not None:
+                    _success, summary, _agent, _side_effects = fast_res
+                    response_text = summary
+                else:
+                    record = self.orchestrator.start(goal)
+                    self.session_manager.set_active_task(session_id, record.task_id)
+                    sub_count = len(record.plan.subtasks) if record.plan else 0
+                    response_text = (
+                        f"OPTIMUS directive initialized. Task [{record.task_id[:8]}] scheduled with "
+                        f"{sub_count} planned subtask(s). Delegated to specialized agents under physical verification."
+                    )
             else:
                 response_text = f"Central Orchestrator unavailable to execute directive: '{goal}'."
 
@@ -263,7 +272,7 @@ class InteractionRuntime:
             self._finalize_turn(session_id, response_text, speak_response=speak_response)
             return response_text
 
-        # Retrieve relevant memory facts
+        # Retrieve relevant memory facts and connected account statuses
         memory_ctx = ""
         if self.memory_manager:
             try:
@@ -273,8 +282,21 @@ class InteractionRuntime:
             except Exception as e:
                 print(f"[InteractionRuntime] Memory retrieval warning: {e}")
 
+        # Inject connected account status into conversational context so assistant knows provider states
+        account_ctx = ""
+        try:
+            from core.personal_intelligence.storage import PersonalStore
+            accs = PersonalStore.instance().list_accounts()
+            if accs:
+                acc_lines = [f"- {a.provider.value}: {a.email_or_id} (Status: {a.auth_status.value})" for a in accs]
+                account_ctx = "Connected Accounts:\n" + "\n".join(acc_lines)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Failed injecting connected accounts: %s", e)
+
+        merged_ctx = f"{memory_ctx}\n\n{account_ctx}".strip() if account_ctx else memory_ctx
+
         # Assemble prompt history
-        history_msgs = self.session_manager.format_prompt_history(session_id, memory_context=memory_ctx)
+        history_msgs = self.session_manager.format_prompt_history(session_id, memory_context=merged_ctx)
         chat_messages = [
             ChatMessage(role=m["role"], content=m["content"]) for m in history_msgs
         ]
