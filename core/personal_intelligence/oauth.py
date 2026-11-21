@@ -17,6 +17,7 @@ from __future__ import annotations
 import html
 import http.server
 import logging
+import re
 import threading
 import time
 import urllib.parse
@@ -43,6 +44,9 @@ from core.security.credentials import (
 
 logger = logging.getLogger("optimus.personal.oauth")
 
+GOOGLE_CLIENT_ID_KEY = "google_client_id"
+GOOGLE_CLIENT_SECRET_KEY = "google_client_secret"
+
 DEFAULT_LOOPBACK_PORT = 8484
 DEFAULT_REDIRECT_URI = f"http://localhost:{DEFAULT_LOOPBACK_PORT}/oauth/callback"
 
@@ -63,19 +67,90 @@ OPENID_SCOPE = "openid"
 
 def get_google_client_id() -> str | None:
     """Retrieve Google OAuth Client ID from CredentialVault or environment."""
-    return get_credential("google_client_id")
+    cid = get_credential("google_client_id")
+    return cid.strip() if cid else None
 
 
 def get_google_client_secret() -> str | None:
     """Retrieve Google OAuth Client Secret from CredentialVault or environment."""
-    return get_credential("google_client_secret")
+    sec = get_credential("google_client_secret")
+    return sec.strip() if sec else None
+
+
+def validate_google_credentials(client_id: str | None, client_secret: str | None) -> tuple[bool, str]:
+    """Validate Google OAuth Client ID and Secret format and completeness."""
+    if not client_id or not str(client_id).strip():
+        return False, "Google Client ID is missing or empty."
+    if not client_secret or not str(client_secret).strip():
+        return False, "Google Client Secret is missing or empty."
+
+    cid = str(client_id).strip()
+    sec = str(client_secret).strip()
+
+    # Reject whitespace or newline characters inside credentials
+    if any(c.isspace() for c in cid):
+        return False, "Google Client ID contains invalid whitespace or newline characters."
+    if any(c.isspace() for c in sec):
+        return False, "Google Client Secret contains invalid whitespace or newline characters."
+
+    # Validate Client ID format: Must end with .apps.googleusercontent.com
+    if not cid.endswith(".apps.googleusercontent.com"):
+        return False, (
+            "Invalid Google Client ID format. Desktop Client IDs must end with "
+            "'.apps.googleusercontent.com' (e.g. 123456789-xxxx.apps.googleusercontent.com)."
+        )
+
+    # Validate Client ID prefix
+    prefix = cid[:-len(".apps.googleusercontent.com")]
+    if not prefix or not re.match(r"^[0-9a-zA-Z_\.\-]+$", prefix):
+        return False, "Invalid characters in Google Client ID prefix."
+
+    # Validate Client Secret length
+    if len(sec) < 8:
+        return False, "Google Client Secret is too short (must be at least 8 characters)."
+
+    return True, ""
+
+
+def has_valid_google_credentials() -> bool:
+    """Check if both Google Client ID and Secret are configured and correctly formatted."""
+    cid = get_google_client_id()
+    sec = get_google_client_secret()
+    is_valid, _ = validate_google_credentials(cid, sec)
+    return is_valid
 
 
 def has_google_credentials() -> bool:
-    """Check if both Google Client ID and Secret are available."""
-    cid = get_google_client_id()
-    sec = get_google_client_secret()
-    return bool(cid and sec)
+    """Check if valid Google Client ID and Secret are available."""
+    return has_valid_google_credentials()
+
+
+def save_and_verify_google_credentials(client_id: str, client_secret: str) -> tuple[bool, str]:
+    """Validate, store in encrypted vault/keyring, and re-read to verify consistency."""
+    is_valid, err_msg = validate_google_credentials(client_id, client_secret)
+    if not is_valid:
+        return False, err_msg
+
+    cid_clean = str(client_id).strip()
+    sec_clean = str(client_secret).strip()
+
+    # 1. Store credentials securely
+    ok_cid = store_credential("google_client_id", cid_clean)
+    ok_sec = store_credential("google_client_secret", sec_clean)
+    if not ok_cid or not ok_sec:
+        return False, "Failed to persist credentials in secure credential vault."
+
+    # 2. Re-read from vault/keyring and verify
+    saved_cid = get_google_client_id()
+    saved_sec = get_google_client_secret()
+
+    if saved_cid != cid_clean:
+        return False, "Verification failed: Saved Client ID in vault does not match submitted Client ID."
+    if saved_sec != sec_clean:
+        return False, "Verification failed: Saved Client Secret in vault does not match submitted Client Secret."
+
+    logger.info("Google OAuth credentials verified and securely saved to CredentialVault.")
+    return True, ""
 
 
 def get_google_credentials_guidance() -> str:
@@ -250,8 +325,10 @@ class GoogleOAuthManager:
     ) -> dict[str, Any]:
         """Construct authorization URL, PKCE pair, and CSRF state token."""
         client_id = custom_client_id or get_google_client_id()
-        if not client_id:
-            raise ValueError("Google Client ID is not configured.")
+        client_secret = get_google_client_secret()
+        is_valid, err_msg = validate_google_credentials(client_id, client_secret)
+        if not is_valid:
+            raise ValueError(f"Cannot initialize Google OAuth session: {err_msg}")
 
         code_verifier, code_challenge = generate_pkce_pair()
         state = generate_state_token()

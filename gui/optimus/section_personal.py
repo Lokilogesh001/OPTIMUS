@@ -63,13 +63,15 @@ logger = logging.getLogger("optimus.gui.personal")
 
 
 class GoogleCredentialsDialog(QDialog):
-    """Dialog to configure Google Client ID and Secret."""
+    """Secure dialog for configuring Google OAuth Client ID and Secret."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, allow_keep_secret: bool = True):
         super().__init__(parent)
         self.setWindowTitle("Google OAuth Credentials Setup")
-        self.setFixedWidth(520)
+        self.setFixedWidth(540)
         self.setStyleSheet(f"background: {C.BG}; color: {C.WHITE};")
+        self.allow_keep_secret = allow_keep_secret
+        self.submitted_client_id: str | None = None
 
         vbox = QVBoxLayout(self)
         vbox.setSpacing(10)
@@ -82,6 +84,7 @@ class GoogleCredentialsDialog(QDialog):
 
         desc = QLabel(
             "To connect Gmail or Google Calendar, configure your Google Cloud Desktop Client credentials.\n\n"
+            "• Application type: Desktop app\n"
             "• Redirect URI: http://localhost:8484/oauth/callback\n"
             "• Scopes: Least privilege (gmail.readonly, calendar.readonly)\n"
             "• Security: Tokens encrypted locally in OS CredentialVault / Keyring"
@@ -91,18 +94,34 @@ class GoogleCredentialsDialog(QDialog):
         desc.setStyleSheet(f"color: {C.TEXT_DIM};")
         vbox.addWidget(desc)
 
+        from core.personal_intelligence.oauth import (
+            get_google_client_id,
+            has_valid_google_credentials,
+        )
+
+        has_existing = has_valid_google_credentials()
+        status_text = (
+            "Status: Valid credentials currently saved in CredentialVault (Review or update below)"
+            if has_existing
+            else "Status: No valid credentials configured"
+        )
+        lbl_status = QLabel(status_text)
+        lbl_status.setFont(px_font(8, QFont.Weight.DemiBold))
+        lbl_status.setStyleSheet(f"color: {C.GREEN if has_existing else C.ACC};")
+        vbox.addWidget(lbl_status)
+
         lbl_cid = QLabel("GOOGLE CLIENT ID:")
         lbl_cid.setFont(px_font(9, QFont.Weight.DemiBold))
         vbox.addWidget(lbl_cid)
 
-        from core.personal_intelligence.oauth import (
-            get_google_client_id,
-            get_google_client_secret,
-        )
+        existing_cid = get_google_client_id()
         self.txt_client_id = QLineEdit()
         self.txt_client_id.setPlaceholderText("e.g. 123456789-xxxx.apps.googleusercontent.com")
-        self.txt_client_id.setText(get_google_client_id() or "")
-        self.txt_client_id.setStyleSheet(f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;")
+        if existing_cid:
+            self.txt_client_id.setText(existing_cid)
+        self.txt_client_id.setStyleSheet(
+            f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;"
+        )
         vbox.addWidget(self.txt_client_id)
 
         lbl_sec = QLabel("GOOGLE CLIENT SECRET:")
@@ -110,10 +129,16 @@ class GoogleCredentialsDialog(QDialog):
         vbox.addWidget(lbl_sec)
 
         self.txt_client_secret = QLineEdit()
-        self.txt_client_secret.setPlaceholderText("e.g. GOCSPX-xxxx")
         self.txt_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self.txt_client_secret.setText(get_google_client_secret() or "")
-        self.txt_client_secret.setStyleSheet(f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;")
+        if self.allow_keep_secret and existing_cid:
+            self.txt_client_secret.setPlaceholderText(
+                "(Leave blank to keep existing encrypted secret, or enter new secret)"
+            )
+        else:
+            self.txt_client_secret.setPlaceholderText("e.g. GOCSPX-xxxx")
+        self.txt_client_secret.setStyleSheet(
+            f"background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 6px;"
+        )
         vbox.addWidget(self.txt_client_secret)
 
         btn_box = QHBoxLayout()
@@ -137,14 +162,35 @@ class GoogleCredentialsDialog(QDialog):
         vbox.addLayout(btn_box)
 
     def _save_and_accept(self) -> None:
+        from core.personal_intelligence.oauth import (
+            GOOGLE_CLIENT_ID_KEY,
+            GOOGLE_CLIENT_SECRET_KEY,
+            get_google_client_secret,
+            validate_google_credentials,
+        )
+
         cid = self.txt_client_id.text().strip()
         sec = self.txt_client_secret.text().strip()
-        if not cid or not sec:
-            QMessageBox.warning(self, "Input Error", "Both Client ID and Client Secret are required.")
+
+        # If secret left blank and keeping existing secret is permitted:
+        if not sec and self.allow_keep_secret:
+            existing_sec = get_google_client_secret()
+            if existing_sec and existing_sec.strip():
+                sec = existing_sec.strip()
+
+        ok, err_msg = validate_google_credentials(cid, sec)
+        if not ok:
+            QMessageBox.warning(self, "Invalid Credentials", f"Credential verification failed:\n{err_msg}")
             return
 
-        store_credential("google_client_id", cid)
-        store_credential("google_client_secret", sec)
+        # Store through store_credential (persists to OS keyring + fallback vault, supports test mocking)
+        ok_cid = store_credential(GOOGLE_CLIENT_ID_KEY, cid)
+        ok_sec = store_credential(GOOGLE_CLIENT_SECRET_KEY, sec)
+        if not ok_cid or not ok_sec:
+            QMessageBox.critical(self, "Storage Error", "Failed to persist credentials in secure credential vault.")
+            return
+
+        self.submitted_client_id = cid
         self.accept()
 
 
@@ -411,6 +457,14 @@ class SectionPersonal(QWidget):
         self.btn_oauth_connect_gcal.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_oauth_connect_gcal.clicked.connect(lambda: self._start_google_oauth(ProviderType.GOOGLE_CALENDAR))
         tb_layout.addWidget(self.btn_oauth_connect_gcal)
+
+        self.btn_oauth_reconfig = QPushButton("CHANGE CREDENTIALS")
+        self.btn_oauth_reconfig.setFont(px_font(9, QFont.Weight.Bold))
+        self.btn_oauth_reconfig.setStyleSheet(btn_css("secondary"))
+        self.btn_oauth_reconfig.setFixedHeight(28)
+        self.btn_oauth_reconfig.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_oauth_reconfig.clicked.connect(self._open_google_credentials_dialog)
+        tb_layout.addWidget(self.btn_oauth_reconfig)
 
         self.btn_oauth_help = QPushButton("OAUTH SETUP GUIDE")
         self.btn_oauth_help.setFont(px_font(9, QFont.Weight.DemiBold))
@@ -731,6 +785,15 @@ class SectionPersonal(QWidget):
                 btn_sync.clicked.connect(lambda checked=False, aid=a.account_id: self._sync_single_account(aid))
                 act_box.addWidget(btn_sync)
 
+                if a.provider in (ProviderType.GMAIL, ProviderType.GOOGLE_CALENDAR):
+                    btn_reconfig = QPushButton("RECONFIGURE")
+                    btn_reconfig.setFont(px_font(8, QFont.Weight.Bold))
+                    btn_reconfig.setStyleSheet(btn_css("secondary"))
+                    btn_reconfig.setFixedHeight(26)
+                    btn_reconfig.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn_reconfig.clicked.connect(self._open_google_credentials_dialog)
+                    act_box.addWidget(btn_reconfig)
+
                 btn_disc = QPushButton("DISCONNECT")
                 btn_disc.setFont(px_font(8, QFont.Weight.Bold))
                 btn_disc.setStyleSheet(btn_css("danger"))
@@ -746,6 +809,15 @@ class SectionPersonal(QWidget):
                 btn_reconn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_reconn.clicked.connect(lambda checked=False, p=a.provider: self._connect_provider(p))
                 act_box.addWidget(btn_reconn)
+
+                if a.provider in (ProviderType.GMAIL, ProviderType.GOOGLE_CALENDAR):
+                    btn_reconfig = QPushButton("RECONFIGURE")
+                    btn_reconfig.setFont(px_font(8, QFont.Weight.Bold))
+                    btn_reconfig.setStyleSheet(btn_css("secondary"))
+                    btn_reconfig.setFixedHeight(26)
+                    btn_reconfig.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn_reconfig.clicked.connect(self._open_google_credentials_dialog)
+                    act_box.addWidget(btn_reconfig)
 
                 btn_del = QPushButton("REMOVE")
                 btn_del.setFont(px_font(8))
@@ -791,6 +863,15 @@ class SectionPersonal(QWidget):
                 btn_conn.clicked.connect(lambda checked=False, p=prov_type: self._connect_provider(p))
                 act_box.addWidget(btn_conn)
 
+                if prov_type in (ProviderType.GMAIL, ProviderType.GOOGLE_CALENDAR):
+                    btn_reconfig = QPushButton("RECONFIGURE")
+                    btn_reconfig.setFont(px_font(8, QFont.Weight.Bold))
+                    btn_reconfig.setStyleSheet(btn_css("secondary"))
+                    btn_reconfig.setFixedHeight(26)
+                    btn_reconfig.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn_reconfig.clicked.connect(self._open_google_credentials_dialog)
+                    act_box.addWidget(btn_reconfig)
+
                 self.tbl_accounts.setCellWidget(row, 5, act_w)
 
     def _show_oauth_guidance_dialog(self) -> None:
@@ -813,20 +894,77 @@ class SectionPersonal(QWidget):
                 "3. Set OUTLOOK_CLIENT_ID and OUTLOOK_CLIENT_SECRET in environment or vault.",
             )
 
+    def _open_google_credentials_dialog(self) -> bool:
+        """Explicit action to configure, review, or replace Google OAuth credentials."""
+        dlg = GoogleCredentialsDialog(parent=self, allow_keep_secret=True)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.lbl_accounts_status.setText("Google OAuth credentials verified and saved.")
+            self._refresh_accounts()
+            return True
+        return False
+
     def _start_google_oauth(self, provider: ProviderType = ProviderType.GMAIL) -> None:
         from core.personal_intelligence.oauth import (
             GoogleOAuthManager,
-            has_google_credentials,
+            get_google_client_id,
+            get_google_client_secret,
+            has_valid_google_credentials,
+            validate_google_credentials,
         )
 
-        if not has_google_credentials():
-            dlg = GoogleCredentialsDialog(parent=self)
+        # 1 & 2. Check whether credentials exist and are correctly formatted
+        if not has_valid_google_credentials():
+            # 3. Missing or invalid -> display GoogleCredentialsDialog
+            dlg = GoogleCredentialsDialog(parent=self, allow_keep_secret=False)
             if dlg.exec() != QDialog.DialogCode.Accepted:
+                self.lbl_accounts_status.setText("Authorization cancelled (no credentials).")
                 return
+        else:
+            # 4. Present -> Allow the user to review or replace existing credentials before authorization
+            current_cid = get_google_client_id() or ""
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Google OAuth Client Review")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText(
+                "Configured Google OAuth Client:\n\n"
+                f"Client ID: {current_cid}\n"
+                "Client Secret: [Encrypted in Vault]\n\n"
+                "Do you want to authorize with this Client ID or enter new credentials?"
+            )
+            btn_use = msg.addButton("AUTHORIZE WITH THIS CLIENT", QMessageBox.ButtonRole.AcceptRole)
+            btn_change = msg.addButton("CHANGE CREDENTIALS", QMessageBox.ButtonRole.ActionRole)
+            btn_cancel = msg.addButton("CANCEL", QMessageBox.ButtonRole.RejectRole)
+            btn_use.setStyleSheet(btn_css("primary"))
+            btn_change.setStyleSheet(btn_css("secondary"))
+            btn_cancel.setStyleSheet(btn_css("secondary"))
+            msg.exec()
 
+            if msg.clickedButton() == btn_cancel:
+                self.lbl_accounts_status.setText("Authorization cancelled.")
+                return
+            elif msg.clickedButton() == btn_change:
+                dlg = GoogleCredentialsDialog(parent=self, allow_keep_secret=True)
+                if dlg.exec() != QDialog.DialogCode.Accepted:
+                    self.lbl_accounts_status.setText("Authorization cancelled.")
+                    return
+
+        # 5, 6, 7. Re-read credentials from vault and verify format and integrity
+        cid = get_google_client_id()
+        sec = get_google_client_secret()
+        is_valid, err_msg = validate_google_credentials(cid, sec)
+        if not is_valid:
+            QMessageBox.critical(
+                self,
+                "Invalid Credentials",
+                f"Google OAuth credentials in vault are invalid or missing:\n{err_msg}\n\n"
+                "Please configure valid Google Desktop OAuth Client credentials."
+            )
+            return
+
+        # 8. Only then generate the Google OAuth authorization URL
         mgr = GoogleOAuthManager(store=self.store)
         try:
-            session = mgr.build_auth_session(provider=provider, port=8484)
+            session = mgr.build_auth_session(provider=provider, port=8484, custom_client_id=cid)
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "OAuth Initialization Error", f"Failed to initialize Google OAuth session:\n{e}")
             return
@@ -836,16 +974,16 @@ class SectionPersonal(QWidget):
         self.btn_oauth_connect_gcal.setEnabled(False)
 
         def _worker() -> None:
-            server = mgr.start_loopback_listener(expected_state=session["state"], port=8484)
-            cb_result = mgr.wait_for_callback(server, timeout=120.0)
-            mgr.stop_loopback_listener()
-
-            if not cb_result.get("success"):
-                err = cb_result.get("error", "OAuth timeout or rejection.")
-                QTimer.singleShot(0, lambda msg=err: self._on_oauth_failed(msg))
-                return
-
             try:
+                server = mgr.start_loopback_listener(expected_state=session["state"], port=8484)
+                cb_result = mgr.wait_for_callback(server, timeout=120.0)
+                mgr.stop_loopback_listener()
+
+                if not cb_result.get("success"):
+                    err = cb_result.get("error", "OAuth timeout or rejection.")
+                    QTimer.singleShot(0, lambda msg=err: self._on_oauth_failed(msg))
+                    return
+
                 token_data = mgr.exchange_code(
                     code=cb_result["code"],
                     code_verifier=session["code_verifier"],
@@ -865,7 +1003,8 @@ class SectionPersonal(QWidget):
                 QTimer.singleShot(0, lambda acc=account: self._on_oauth_success(acc))
             except Exception as ex:  # noqa: BLE001
                 err_str = str(ex)
-                logger.error("OAuth token exchange failure: %s", err_str)
+                logger.error("OAuth loopback / exchange failure: %s", err_str)
+                mgr.stop_loopback_listener()
                 QTimer.singleShot(0, lambda msg=err_str: self._on_oauth_failed(msg))
 
         threading.Thread(target=_worker, daemon=True).start()

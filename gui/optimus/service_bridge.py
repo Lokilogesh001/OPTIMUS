@@ -1544,19 +1544,23 @@ class OptimusServiceBridge(QObject):
             return []
 
     def check_google_oauth_credentials(self) -> dict[str, Any]:
-        """Check whether Google OAuth client credentials are configured."""
+        """Check whether valid Google OAuth client credentials are configured."""
         try:
             from core.personal_intelligence.oauth import (
                 get_google_client_id,
                 get_google_client_secret,
                 get_google_credentials_guidance,
+                validate_google_credentials,
             )
             cid = get_google_client_id()
             sec = get_google_client_secret()
+            is_valid, validation_error = validate_google_credentials(cid, sec)
             return {
-                "configured": bool(cid and sec),
+                "configured": is_valid,
                 "client_id_present": bool(cid),
                 "client_secret_present": bool(sec),
+                "valid_format": is_valid,
+                "validation_error": validation_error,
                 "guidance": get_google_credentials_guidance(),
             }
         except Exception as e:  # noqa: BLE001

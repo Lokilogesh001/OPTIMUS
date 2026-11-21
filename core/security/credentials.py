@@ -20,6 +20,8 @@ from pathlib import Path
 logger = logging.getLogger("optimus.security.credentials")
 
 SERVICE_NAME = "OPTIMUS_AI"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "config"
 
 # Standard provider key mappings to environment variables
 ENV_FALLBACKS: dict[str, list[str]] = {
@@ -38,7 +40,7 @@ class CredentialVault:
     """Fallback encrypted file-based vault when OS keyring backend is unavailable."""
 
     def __init__(self, vault_dir: Path | None = None) -> None:
-        self.vault_dir = vault_dir or (Path.cwd() / "config")
+        self.vault_dir = vault_dir or _DEFAULT_CONFIG_DIR
         self.vault_file = self.vault_dir / ".vault.enc"
         self.salt_file = self.vault_dir / ".vault.salt"
         self._fernet = None
@@ -76,7 +78,7 @@ class CredentialVault:
             f = self._get_fernet()
             data = f.decrypt(self.vault_file.read_bytes())
             return json.loads(data.decode("utf-8"))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Failed to decrypt fallback credential vault: {e}")
             return {}
 
@@ -86,7 +88,7 @@ class CredentialVault:
             encrypted = f.encrypt(json.dumps(data).encode("utf-8"))
             self.vault_file.write_bytes(encrypted)
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Failed to write fallback credential vault: {e}")
             return False
 
@@ -112,20 +114,23 @@ _fallback_vault = CredentialVault()
 def store_credential(provider: str, secret: str) -> bool:
     """Store an API credential securely in OS Keyring with encrypted vault fallback."""
     provider_clean = provider.strip().lower()
-    if not secret:
+    secret_clean = secret.strip() if secret else ""
+    if not secret_clean:
         return delete_credential(provider_clean)
 
     # 1. Try OS Keyring
     try:
         import keyring
-        keyring.set_password(SERVICE_NAME, provider_clean, secret)
+        keyring.set_password(SERVICE_NAME, provider_clean, secret_clean)
         logger.info(f"Credential for '{provider_clean}' securely saved in OS keyring.")
+        # Also sync to fallback vault for high reliability across contexts
+        _fallback_vault.set(provider_clean, secret_clean)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"OS keyring unavailable ({e}), falling back to machine-encrypted vault.")
 
     # 2. Encrypted Vault Fallback
-    return _fallback_vault.set(provider_clean, secret)
+    return _fallback_vault.set(provider_clean, secret_clean)
 
 
 def get_credential(provider: str) -> str | None:
@@ -136,35 +141,37 @@ def get_credential(provider: str) -> str | None:
     try:
         import keyring
         val = keyring.get_password(SERVICE_NAME, provider_clean)
-        if val:
-            return val
-    except Exception:
+        if val and val.strip():
+            return val.strip()
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # 2. Try Encrypted Vault
     vault_val = _fallback_vault.get(provider_clean)
-    if vault_val:
-        return vault_val
+    if vault_val and vault_val.strip():
+        return vault_val.strip()
 
     # 3. Try Environment Variables
     env_keys = ENV_FALLBACKS.get(provider_clean, [f"{provider_clean.upper()}_API_KEY"])
     for env_k in env_keys:
         val = os.environ.get(env_k)
-        if val:
-            return val
+        if val and val.strip():
+            return val.strip()
 
     # 4. Legacy config/api_keys.json fallback for backward compatibility
     try:
-        cfg_path = Path.cwd() / "config" / "api_keys.json"
+        cfg_path = _DEFAULT_CONFIG_DIR / "api_keys.json"
+        if not cfg_path.exists():
+            cfg_path = Path.cwd() / "config" / "api_keys.json"
         if cfg_path.exists():
             cfg_data = json.loads(cfg_path.read_text(encoding="utf-8"))
             if provider_clean == "gemini" and cfg_data.get("gemini_api_key"):
-                return cfg_data["gemini_api_key"]
+                return str(cfg_data["gemini_api_key"]).strip()
             if cfg_data.get(provider_clean):
-                return cfg_data[provider_clean]
+                return str(cfg_data[provider_clean]).strip()
             if cfg_data.get(f"{provider_clean}_api_key"):
-                return cfg_data[f"{provider_clean}_api_key"]
-    except Exception:
+                return str(cfg_data[f"{provider_clean}_api_key"]).strip()
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return None
@@ -178,7 +185,7 @@ def delete_credential(provider: str) -> bool:
     try:
         import keyring
         keyring.delete_password(SERVICE_NAME, provider_clean)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     _fallback_vault.delete(provider_clean)

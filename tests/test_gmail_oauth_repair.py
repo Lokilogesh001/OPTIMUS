@@ -134,7 +134,7 @@ def test_oauth_session_pkce_and_parameters(clean_credentials, temp_store):
 
 
 def test_oauth_progressive_consent_mutating_scopes(clean_credentials, temp_store):
-    store_credential("google_client_id", "test_client_id_123")
+    store_credential("google_client_id", "test_client_id_123.apps.googleusercontent.com")
     store_credential("google_client_secret", "test_secret_456")
 
     mgr = GoogleOAuthManager(store=temp_store)
@@ -145,7 +145,7 @@ def test_oauth_progressive_consent_mutating_scopes(clean_credentials, temp_store
 
 
 def test_google_calendar_scopes(clean_credentials, temp_store):
-    store_credential("google_client_id", "test_client_id_123")
+    store_credential("google_client_id", "test_client_id_123.apps.googleusercontent.com")
     store_credential("google_client_secret", "test_secret_456")
 
     mgr = GoogleOAuthManager(store=temp_store)
@@ -165,7 +165,7 @@ def test_missing_credentials_handling(clean_credentials, temp_store):
     assert DEFAULT_REDIRECT_URI in guidance
 
     mgr = GoogleOAuthManager(store=temp_store)
-    with pytest.raises(ValueError, match="Google Client ID is not configured"):
+    with pytest.raises(ValueError, match="Google Client ID is missing or empty"):
         mgr.build_auth_session(provider=ProviderType.GMAIL)
 
 
@@ -469,10 +469,167 @@ def test_ui_table_rendering_when_account_connected(qapp, temp_store):
     # Col 3: CONNECTED status
     assert section.tbl_accounts.item(0, 3).text() == "CONNECTED"
 
-    # Col 5: Actions must have SYNC and DISCONNECT buttons
+    # Col 5: Actions must have SYNC, RECONFIGURE and DISCONNECT buttons
     act_w = section.tbl_accounts.cellWidget(0, 5)
-    from PyQt6.QtWidgets import QPushButton
     btns = act_w.findChildren(QPushButton)
     btn_texts = [b.text() for b in btns]
     assert "SYNC" in btn_texts
+    assert "RECONFIGURE" in btn_texts
     assert "DISCONNECT" in btn_texts
+
+
+# ── Phase 3: Credential Resolution, Validation & Replacement Tests ───────────
+
+
+def test_cannot_launch_oauth_before_credentials_exist(clean_credentials, temp_store):
+    """Prove clicking Connect cannot launch OAuth before credentials exist."""
+    assert not has_google_credentials()
+
+    mgr = GoogleOAuthManager(store=temp_store)
+    with pytest.raises(ValueError, match="Cannot initialize Google OAuth session"):
+        mgr.build_auth_session(provider=ProviderType.GMAIL)
+
+
+def test_invalid_credentials_produce_useful_error():
+    """Prove invalid credentials produce clear format errors and are rejected."""
+    from core.personal_intelligence.oauth import validate_google_credentials
+
+    # Empty values
+    ok, err = validate_google_credentials("", "")
+    assert not ok
+    assert "missing or empty" in err
+
+    # Newlines / whitespace in Client ID
+    ok, err = validate_google_credentials("123-\nfoo.apps.googleusercontent.com", "GOCSPX-validsecret123")
+    assert not ok
+    assert "whitespace or newline" in err
+
+    # Newlines / whitespace in Client Secret
+    ok, err = validate_google_credentials("123-foo.apps.googleusercontent.com", "GOCSPX-\nsecret123")
+    assert not ok
+    assert "whitespace or newline" in err
+
+    # Missing required Google desktop suffix
+    ok, err = validate_google_credentials("invalid_client_id_without_suffix", "GOCSPX-validsecret123")
+    assert not ok
+    assert ".apps.googleusercontent.com" in err
+
+    # Secret too short
+    ok, err = validate_google_credentials("123-foo.apps.googleusercontent.com", "short")
+    assert not ok
+    assert "too short" in err
+
+    # Clean, valid credentials
+    ok, err = validate_google_credentials("123456789-abcdef.apps.googleusercontent.com", "GOCSPX-validsecret123")
+    assert ok
+    assert err == ""
+
+
+def test_newly_supplied_credentials_replace_stale_credentials(clean_credentials):
+    """Prove newly supplied credentials replace stale credentials and are verified."""
+    from core.personal_intelligence.oauth import (
+        save_and_verify_google_credentials,
+    )
+
+    # 1. Store initial/stale credentials
+    store_credential("google_client_id", "stale-client-111.apps.googleusercontent.com")
+    store_credential("google_client_secret", "stale-secret-111")
+    assert get_google_client_id() == "stale-client-111.apps.googleusercontent.com"
+
+    # 2. Save new credentials through save_and_verify
+    new_cid = "new-client-222.apps.googleusercontent.com"
+    new_sec = "new-secret-222"
+    ok, err = save_and_verify_google_credentials(new_cid, new_sec)
+    assert ok, err
+
+    # 3. Assert vault/keyring contains the new credentials, not the stale ones
+    assert get_google_client_id() == new_cid
+    assert get_google_client_secret() == new_sec
+
+
+def test_oauth_uses_newly_saved_client_id(clean_credentials, temp_store):
+    """Prove OAuth session generation strictly uses the newly saved Client ID."""
+    from core.personal_intelligence.oauth import save_and_verify_google_credentials
+
+    # Stale credential
+    store_credential("google_client_id", "stale-id.apps.googleusercontent.com")
+    store_credential("google_client_secret", "stale-secret-xxx")
+
+    # User reconfigures with new credential
+    new_cid = "freshly-created-client.apps.googleusercontent.com"
+    new_sec = "freshly-created-secret-yyy"
+    ok, err = save_and_verify_google_credentials(new_cid, new_sec)
+    assert ok, err
+
+    mgr = GoogleOAuthManager(store=temp_store)
+    session = mgr.build_auth_session(provider=ProviderType.GMAIL)
+
+    assert session["client_id"] == new_cid
+    assert f"client_id={new_cid}" in session["auth_url"]
+    assert "stale-id" not in session["auth_url"]
+
+
+def test_missing_credentials_opens_dialog(qapp, clean_credentials, monkeypatch):
+    """Prove clicking Connect when credentials are missing displays GoogleCredentialsDialog."""
+    from PyQt6.QtWidgets import QDialog
+
+    from gui.optimus.section_personal import GoogleCredentialsDialog, SectionPersonal
+
+    assert not has_google_credentials()
+
+    dialog_opened = False
+
+    def mock_exec(self):
+        nonlocal dialog_opened
+        dialog_opened = True
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(GoogleCredentialsDialog, "exec", mock_exec)
+
+    sec = SectionPersonal()
+    sec._start_google_oauth(ProviderType.GMAIL)
+
+    assert dialog_opened, "GoogleCredentialsDialog was not opened when credentials were missing"
+
+
+def test_change_credentials_reconfigure_action_present_in_ui(qapp, temp_store):
+    """Prove explicit CHANGE CREDENTIALS / RECONFIGURE actions are present in the toolbar and table."""
+    from gui.optimus.section_personal import SectionPersonal
+
+    sec = SectionPersonal()
+    sec.store = temp_store
+    sec._refresh_accounts()
+
+    # Toolbar action must be present
+    assert hasattr(sec, "btn_oauth_reconfig")
+    assert sec.btn_oauth_reconfig.text() == "CHANGE CREDENTIALS"
+
+    # Table catalog row must have RECONFIGURE action
+    act_w = sec.tbl_accounts.cellWidget(0, 5)
+    assert act_w is not None
+    btns = act_w.findChildren(QPushButton)
+    btn_texts = [b.text() for b in btns]
+    assert "RECONFIGURE" in btn_texts
+
+
+def test_existing_encrypted_credential_storage_remains_intact(tmp_path):
+    """Prove existing encrypted CredentialVault storage roundtrips correctly and protects secrets."""
+    from core.security.credentials import CredentialVault
+
+    vault = CredentialVault(vault_dir=tmp_path / "test_vault")
+    assert vault.read_all() == {}
+
+    # Write secrets
+    ok = vault.set("google_client_id", "my-test-id.apps.googleusercontent.com")
+    assert ok
+    ok = vault.set("google_client_secret", "my-test-secret-zzz")
+    assert ok
+
+    # Read secrets back
+    assert vault.get("google_client_id") == "my-test-id.apps.googleusercontent.com"
+    assert vault.get("google_client_secret") == "my-test-secret-zzz"
+
+    # Verify encrypted on disk (file exists and does not contain plaintext secret)
+    enc_bytes = (tmp_path / "test_vault" / ".vault.enc").read_bytes()
+    assert b"my-test-secret-zzz" not in enc_bytes
+    assert b"my-test-id.apps.googleusercontent.com" not in enc_bytes
