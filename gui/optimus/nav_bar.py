@@ -120,12 +120,13 @@ class OptimusNavBar(QWidget):
         ("IMPROVE", "↑"),         # 16
         ("VISION", "◎"),          # 17
         ("APPLICATIONS", "⎈"),    # 18
+        ("INTEGRATIONS", "☍"),    # 19
     ]
 
     # Logical groupings for structured navigation
     _GROUPS = [
         ("EXECUTION & CONTROL", [0, 13, 1, 18, 17, 3, 2, 11]),
-        ("INTELLIGENCE & KNOWLEDGE", [4, 15, 5, 12, 10]),
+        ("INTELLIGENCE & KNOWLEDGE", [4, 15, 19, 5, 12, 10]),
         ("SYSTEM & GOVERNANCE", [7, 6, 14, 16, 8, 9]),
     ]
 
@@ -168,7 +169,7 @@ class OptimusNavBar(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;" + scroll_css())
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }" + scroll_css())
 
         nav_container = QWidget()
         nav_container.setStyleSheet("background: transparent;")

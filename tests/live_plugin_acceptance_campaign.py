@@ -6,6 +6,8 @@ actual OPTIMUS application subsystems, UI overlays, registries, and configuratio
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -18,15 +20,16 @@ _qapp = QApplication.instance()
 if _qapp is None:
     _qapp = QApplication([])
 
-from core.orchestrator.tools import ToolRegistry
-from core.plugin_loader import PluginASTValidator, discover_plugins
+from core.orchestrator.tools import ToolRegistry, CapabilityTier
+from core.plugin_loader import discover_plugins, PluginRegistry, PluginASTValidator
 from gui.overlays import PluginManagerOverlay, PluginSettingsOverlay
 from memory.config_manager import (
-    CONFIG_FILE,
     get_plugin_enabled,
-    get_plugin_setting,
-    save_plugin_config,
     save_plugin_enabled,
+    get_plugin_config,
+    save_plugin_config,
+    get_plugin_setting,
+    CONFIG_FILE,
 )
 
 

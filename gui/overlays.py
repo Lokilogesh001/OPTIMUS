@@ -583,8 +583,7 @@ class PluginManagerOverlay(QWidget):
         else:
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self._style_toggle(btn, p["enabled"])
-            tier_val = str(p.get("tier", "READ_ONLY"))
-            btn.clicked.connect(lambda _, name=p["name"], tier=tier_val, b=btn: self._toggle(name, tier, b))
+            btn.clicked.connect(lambda _, name=p["name"], tier=p.get("tier", "READ_ONLY"), b=btn: self._toggle(name, tier, b))
         row.addWidget(btn)
         return row
 
@@ -1625,9 +1624,8 @@ class PluginSettingsOverlay(QWidget):
             lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
 
         def worker():
-            import concurrent.futures
-
             from core.plugin_loader import PluginRegistry
+            import concurrent.futures
             ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             try:
                 fut = ex.submit(run_fn, values)

@@ -93,12 +93,37 @@ class MREClassifier:
     )
 
     _EMAIL_LIST_PATTERN = re.compile(
-        r"^(?:can\s+you\s+see\s+(?:the\s+)?(?:last|latest)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:gmails?|emails?)(?:\s+i\s+have\s+received)?|show\s+(?:me\s+)?(?:my\s+)?(?:latest|last)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:unread\s+)?(?:important\s+)?(?:gmails?|emails?)|show\s+(?:my\s+)?(?:unread\s+)?(?:important\s+)?(?:gmails?|emails?)(?:\s+received\s+today)?|check\s+(?:my\s+)?(?:gmail|emails?)|list\s+(?:my\s+)?(?:latest\s+)?(?:gmails?|emails?)|find\s+(?:my\s+)?emails?\s+from\s+(.+)|search\s+emails?\s+(?:for|containing|with\s+subject)\s+(.+))\s*\??$",
+        r"^(?:check\s+(?:my\s+)?(?:unread\s+)?(?:gmails?|emails?)(?:\s+messages?)?|can\s+you\s+see\s+(?:the\s+)?(?:last|latest)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:gmails?|emails?)(?:\s+i\s+have\s+received)?|show\s+(?:me\s+)?(?:my\s+)?(?:latest|last)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(?:unread\s+)?(?:important\s+)?(?:gmails?|emails?)|show\s+(?:my\s+)?(?:unread\s+)?(?:important\s+)?(?:gmails?|emails?)(?:\s+received\s+today)?|check\s+(?:my\s+)?(?:gmail|emails?)|list\s+(?:my\s+)?(?:latest\s+)?(?:gmails?|emails?)|find\s+(?:my\s+)?emails?\s+from\s+(.+)|search\s+emails?\s+(?:for|containing|with\s+subject)\s+(.+))\s*[\.\?]?$",
         re.IGNORECASE,
     )
 
     _EMAIL_SUMMARIZE_PATTERN = re.compile(
-        r"^(?:summarize\s+(?:the\s+)?(?:email|gmail)\s+(\S+)|summarize\s+(?:my\s+)?(?:latest|last)\s+(?:email|gmail))\s*\??$",
+        r"^(?:summarize\s+(?:my\s+)?emails?(?:\s+from\s+today|\s+today)?|summarize\s+(?:the\s+)?(?:email|gmail)\s+(\S+)|summarize\s+(?:my\s+)?(?:latest|last)\s+(?:email|gmail))\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _CALENDAR_VIEW_PATTERN = re.compile(
+        r"^(?:what(?:'s|\s+is)\s+on\s+(?:my\s+)?calendar(?:\s+(?:for\s+)?(tomorrow|today))?|show\s+(?:my\s+)?calendar(?:\s+(?:for\s+)?(tomorrow|today))?|what\s+events\s+do\s+i\s+have(?:\s+(tomorrow|today))?|calendar(?:\s+(tomorrow|today))?)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _CALENDAR_CONFLICT_PATTERN = re.compile(
+        r"^(?:find\s+(?:any\s+)?(?:schedule\s+|calendar\s+)?conflicts(?:\s+in\s+my\s+schedule|\s+on\s+my\s+calendar)?|check\s+(?:for\s+)?(?:schedule\s+|calendar\s+)?conflicts|schedule\s+conflicts|calendar\s+conflicts)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _RAM_USAGE_PATTERN = re.compile(
+        r"^(?:how\s+much\s+ram\s+(?:am\s+i\s+using|is\s+used|is\s+free)|check\s+ram(?:\s+usage)?|what(?:'s|\s+is)\s+my\s+ram\s+usage|memory\s+status|ram\s+usage)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _GPU_USAGE_PATTERN = re.compile(
+        r"^(?:what(?:'s|\s+is)\s+my\s+gpu(?:\s+utilization|\s+usage)?(?:\s+and\s+vram(?:\s+usage)?)?|check\s+gpu(?:\s+usage)?|gpu\s+status|gpu\s+usage|vram\s+usage)\s*[\.\?]?$",
+        re.IGNORECASE,
+    )
+
+    _TOP_PROCESSES_PATTERN = re.compile(
+        r"^(?:which\s+processes\s+are\s+consuming\s+the\s+most\s+resources|what\s+processes\s+are\s+using\s+the\s+most\s+(?:ram|cpu|resources)|show\s+top\s+processes|top\s+processes|process\s+diagnostics)\s*[\.\?]?$",
         re.IGNORECASE,
     )
 
@@ -261,15 +286,16 @@ class MREClassifier:
         # 5. Email Summarization (Priority 2: Structured REST API)
         summ_match = self._EMAIL_SUMMARIZE_PATTERN.match(clean)
         if summ_match:
-            msg_id = summ_match.group(1)
-            args = {"message_id": msg_id} if msg_id else {"latest": True}
+            msg_id = summ_match.group(1) if summ_match.lastindex and summ_match.group(1) and summ_match.group(1).lower() not in ("today", "from today") else None
+            today_only = "today" in lower
+            args = {"message_id": msg_id, "today_only": today_only} if msg_id else {"today_only": today_only}
             return MREDecision(
                 category=TaskCategory.EMAIL,
                 priority=MethodPriority.P2_STRUCTURED_API,
-                tool_name="summarize_email" if msg_id else "list_gmail_messages",
-                arguments=args if msg_id else {"limit": 1},
+                tool_name="summarize_email",
+                arguments=args,
                 caller_agent="personal_intelligence",
-                outcome_contract=OutcomeContract(contract_type="email_summary", target=msg_id or "latest"),
+                outcome_contract=OutcomeContract(contract_type="email_summary", target=msg_id or ("today" if today_only else "latest")),
                 explanation="Email summarization request via defanged GmailAdapter payload.",
             )
 
@@ -327,6 +353,72 @@ class MREClassifier:
                 caller_agent="filesystem",
                 outcome_contract=OutcomeContract(contract_type="folder_open", target=target_path),
                 explanation="Folder navigation request; minimal action is native Shell Explorer opening.",
+            )
+
+        # 8a. Calendar Schedule Query
+        cal_match = self._CALENDAR_VIEW_PATTERN.match(clean)
+        if cal_match:
+            target_day = "tomorrow"
+            if cal_match.lastindex and cal_match.group(1):
+                target_day = cal_match.group(1).lower()
+            elif "today" in lower:
+                target_day = "today"
+            return MREDecision(
+                category=TaskCategory.CALENDAR_SCHEDULING,
+                priority=MethodPriority.P2_STRUCTURED_API,
+                tool_name="get_calendar_view",
+                arguments={"day": target_day},
+                caller_agent="personal_intelligence",
+                outcome_contract=OutcomeContract(contract_type="calendar_view", target=target_day),
+                explanation=f"Calendar schedule retrieval for {target_day}.",
+            )
+
+        # 8b. Calendar Conflict Search Query
+        if self._CALENDAR_CONFLICT_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.CALENDAR_SCHEDULING,
+                priority=MethodPriority.P2_STRUCTURED_API,
+                tool_name="find_calendar_conflicts",
+                arguments={},
+                caller_agent="personal_intelligence",
+                outcome_contract=OutcomeContract(contract_type="calendar_conflicts", target="schedule"),
+                explanation="Schedule conflict and meeting collision analysis.",
+            )
+
+        # 8c. Dedicated RAM / Memory Utilization Query
+        if self._RAM_USAGE_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.DEVICE_HARDWARE_INFO,
+                priority=MethodPriority.P1_NATIVE_DETERMINISTIC,
+                tool_name="memory_status",
+                arguments={},
+                caller_agent="system_diagnosis",
+                outcome_contract=OutcomeContract(contract_type="memory_status", target="ram"),
+                explanation="Real-time physical and virtual memory utilization query.",
+            )
+
+        # 8d. Dedicated GPU / VRAM Utilization Query
+        if self._GPU_USAGE_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.DEVICE_HARDWARE_INFO,
+                priority=MethodPriority.P1_NATIVE_DETERMINISTIC,
+                tool_name="gpu_status",
+                arguments={},
+                caller_agent="system_diagnosis",
+                outcome_contract=OutcomeContract(contract_type="gpu_status", target="gpu"),
+                explanation="Real-time GPU compute and VRAM memory telemetry query.",
+            )
+
+        # 8e. Top Process Diagnostics Query
+        if self._TOP_PROCESSES_PATTERN.match(clean):
+            return MREDecision(
+                category=TaskCategory.SYSTEM_ADMINISTRATION,
+                priority=MethodPriority.P1_NATIVE_DETERMINISTIC,
+                tool_name="process_diagnostics",
+                arguments={"top_n": 8},
+                caller_agent="system_diagnosis",
+                outcome_contract=OutcomeContract(contract_type="process_diagnostics", target="processes"),
+                explanation="Top active process resource consumption query.",
             )
 
         # 8. System Vitals & Diagnostics (Priority 3: Registered Tool)
@@ -524,6 +616,14 @@ class MREOutcomeVerifier:
             if "error" in evidence:
                 return False, f"Email verification reported error: {evidence.get('error')}"
             return True, "Email operation validated against Gmail service."
+
+        if ctype in ("calendar_view", "calendar_conflicts"):
+            if "error" in evidence:
+                return False, f"Calendar verification reported error: {evidence.get('error')}"
+            return tool_result.is_success, "Calendar operation validated against schedule data."
+
+        if ctype in ("memory_status", "gpu_status", "process_diagnostics"):
+            return tool_result.is_success, f"Hardware metric telemetry validated for {ctype}."
 
         if ctype == "folder_open":
             target = contract.target

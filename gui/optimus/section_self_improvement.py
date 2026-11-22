@@ -74,7 +74,7 @@ class SectionSelfImprovement(QWidget):
         # Main Scroll Area
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("background: transparent; border: none;" + scroll_css())
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }" + scroll_css())
 
         container = QWidget()
         container.setStyleSheet("background: transparent;")

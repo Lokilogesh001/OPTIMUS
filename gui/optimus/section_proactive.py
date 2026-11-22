@@ -169,8 +169,8 @@ class SectionProactive(QWidget):
 
         # Left: Recommendations Table
         left_panel = HoloPanel("ACTIVE RECOMMENDATIONS & NEXT ACTIONS")
-        ll = QVBoxLayout(left_panel)
-        ll.setContentsMargins(8, 28, 8, 8)
+        ll = left_panel.body
+        ll.setContentsMargins(8, 34, 8, 8)
         ll.setSpacing(6)
 
         self.table_recs = QTableWidget()
@@ -201,8 +201,8 @@ class SectionProactive(QWidget):
 
         # Right: Details & Action Controls
         right_panel = HoloPanel("RECOMMENDATION DETAILS & ACTIONS")
-        rl = QVBoxLayout(right_panel)
-        rl.setContentsMargins(8, 28, 8, 8)
+        rl = right_panel.body
+        rl.setContentsMargins(8, 34, 8, 8)
         rl.setSpacing(8)
 
         self.rec_detail_text = QTextEdit()
@@ -421,8 +421,8 @@ class SectionProactive(QWidget):
         layout_page.setSpacing(12)
 
         panel = HoloPanel("PROACTIVE AUTONOMY & GOVERNANCE SETTINGS")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(12, 32, 12, 12)
+        pl = panel.body
+        pl.setContentsMargins(12, 34, 12, 12)
         pl.setSpacing(8)
 
         info = QLabel(

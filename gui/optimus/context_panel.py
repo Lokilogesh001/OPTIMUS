@@ -80,7 +80,7 @@ class OptimusContextPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;" + scroll_css())
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }" + scroll_css())
 
         container = QWidget()
         container.setStyleSheet("background: transparent;")

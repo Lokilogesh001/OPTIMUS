@@ -201,7 +201,7 @@ class SectionVision(QWidget):
         self.table_windows.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table_windows.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table_windows.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_windows.setStyleSheet(scroll_css() + f"""
+        self.table_windows.setStyleSheet(f"""
             QTableWidget {{
                 background: {C.PANEL};
                 color: {C.WHITE};
@@ -216,7 +216,7 @@ class SectionVision(QWidget):
                 border: 1px solid {C.BORDER_A};
                 font-weight: bold;
             }}
-        """)
+        """ + scroll_css())
         win_lay.addWidget(self.table_windows)
         panel_windows.body.addLayout(win_lay)
         mid_split.addWidget(panel_windows)
@@ -249,7 +249,7 @@ class SectionVision(QWidget):
         self.txt_supervisor_log = QTextEdit()
         self.txt_supervisor_log.setReadOnly(True)
         self.txt_supervisor_log.setFont(mono_font(9))
-        self.txt_supervisor_log.setStyleSheet(scroll_css() + f"""
+        self.txt_supervisor_log.setStyleSheet(f"""
             QTextEdit {{
                 background: {C.PANEL};
                 color: {C.WHITE};
@@ -257,7 +257,7 @@ class SectionVision(QWidget):
                 border-radius: 3px;
                 padding: 6px;
             }}
-        """)
+        """ + scroll_css())
         sup_lay.addWidget(self.txt_supervisor_log)
         panel_supervisor.body.addLayout(sup_lay)
         layout.addWidget(panel_supervisor, stretch=2)

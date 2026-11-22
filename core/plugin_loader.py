@@ -22,6 +22,7 @@ import importlib.util
 import inspect
 import re
 import sys
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -83,10 +84,11 @@ class PluginASTValidator:
                     top_pkg = alias.name.split(".")[0]
                     if top_pkg in _DANGEROUS_MODULES:
                         return False, f"SECURITY_VIOLATION: Import of dangerous module '{alias.name}' is prohibited."
-            elif isinstance(subnode, ast.ImportFrom) and subnode.module:
-                top_pkg = subnode.module.split(".")[0]
-                if top_pkg in _DANGEROUS_MODULES:
-                    return False, f"SECURITY_VIOLATION: Import from dangerous module '{subnode.module}' is prohibited."
+            elif isinstance(subnode, ast.ImportFrom):
+                if subnode.module:
+                    top_pkg = subnode.module.split(".")[0]
+                    if top_pkg in _DANGEROUS_MODULES:
+                        return False, f"SECURITY_VIOLATION: Import from dangerous module '{subnode.module}' is prohibited."
 
         # 2. Inspect root level nodes
         for node in tree.body:

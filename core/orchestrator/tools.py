@@ -43,9 +43,11 @@ _TIER_RANK = {
 
 
 _SECRET_PATTERNS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"AIza[0-9A-Za-z-_]{35}", re.IGNORECASE), "[REDACTED_GEMINI_KEY]"),
+    (re.compile(r"AIza[0-9A-Za-z_\-]{30,45}", re.IGNORECASE), "[REDACTED_GEMINI_KEY]"),
+    (re.compile(r"sk-ant-[a-zA-Z0-9_\-]{20,}", re.IGNORECASE), "[REDACTED_ANTHROPIC_KEY]"),
     (re.compile(r"sk-[a-zA-Z0-9_\-]{20,}", re.IGNORECASE), "[REDACTED_API_KEY]"),
-    (re.compile(r"ghp_[a-zA-Z0-9]{36,}", re.IGNORECASE), "[REDACTED_API_KEY]"),
+    (re.compile(r"AKIA[0-9A-Z]{16}", re.IGNORECASE), "[REDACTED_AWS_KEY]"),
+    (re.compile(r"ghp_[a-zA-Z0-9]{36,}", re.IGNORECASE), "[REDACTED_GITHUB_TOKEN]"),
     (re.compile(r"(Bearer\s+)[a-zA-Z0-9_\-\.]{20,}", re.IGNORECASE), r"\1[REDACTED_TOKEN]"),
     (re.compile(r"(['\"]?(?:password|passwd|secret|api_?key)['\"]?\s*[:=]\s*['\"])[^'\"]+(['\"])", re.IGNORECASE), r"\1[REDACTED]\2"),
 ]
@@ -229,6 +231,16 @@ class ToolRegistry:
         try:
             from core.personal_intelligence.tools import register_personal_tools
             register_personal_tools(self)
+        except ImportError:
+            pass
+        try:
+            from core.system_monitor.tools import register_system_monitor_tools
+            register_system_monitor_tools(self)
+        except ImportError:
+            pass
+        try:
+            from core.workspace_mcp.tools import register_workspace_mcp_tools
+            register_workspace_mcp_tools(self)
         except ImportError:
             pass
 

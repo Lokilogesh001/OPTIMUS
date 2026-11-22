@@ -121,8 +121,8 @@ class SectionMissions(QWidget):
 
         # ── Left: Missions List Pane ─────────────────────────────────────────
         left_panel = HoloPanel("MISSION REPOSITORY", parent=splitter)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(8, 28, 8, 8)
+        left_layout = left_panel.body
+        left_layout.setContentsMargins(8, 34, 8, 8)
         left_layout.setSpacing(6)
 
         # Filter buttons
@@ -184,8 +184,8 @@ class SectionMissions(QWidget):
 
         # ── Right: Mission Details & Live DAG Pane ───────────────────────────
         right_panel = HoloPanel("MISSION EXECUTION MONITOR", parent=splitter)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(10, 28, 10, 10)
+        right_layout = right_panel.body
+        right_layout.setContentsMargins(10, 34, 10, 10)
         right_layout.setSpacing(8)
 
         # Detail Header & State Badge

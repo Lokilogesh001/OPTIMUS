@@ -153,7 +153,7 @@ class SectionWorkflows(QWidget):
         p_dag = HoloPanel("WORKFLOW DAG STRUCTURE", "GRAPH")
         self.dag_scroll = QScrollArea()
         self.dag_scroll.setWidgetResizable(True)
-        self.dag_scroll.setStyleSheet("background: transparent; border: 1px solid " + C.BORDER + ";" + scroll_css())
+        self.dag_scroll.setStyleSheet("QScrollArea { background: transparent; border: 1px solid " + C.BORDER + "; }" + scroll_css())
         self.dag_container = QWidget()
         self.dag_container.setStyleSheet("background: transparent;")
         self.dag_nodes_lay = QVBoxLayout(self.dag_container)

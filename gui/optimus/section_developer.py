@@ -261,7 +261,7 @@ class SectionDeveloper(QWidget):
 
         self.file_list = QListWidget()
         self.file_list.setFont(mono_font(10))
-        self.file_list.setStyleSheet(f"color: {C.TEXT}; background: transparent; border: none; {scroll_css()}")
+        self.file_list.setStyleSheet(f"QListWidget {{ color: {C.TEXT}; background: transparent; border: none; }} {scroll_css()}")
         self.file_list.itemClicked.connect(self._on_file_selected)
         exp_lay.addWidget(self.file_list)
         left_tabs.addTab(tab_explorer, "EXPLORER")
@@ -278,7 +278,7 @@ class SectionDeveloper(QWidget):
         self.mod_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.mod_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.mod_table.setFont(mono_font(10))
-        self.mod_table.setStyleSheet(f"color: {C.TEXT}; background: transparent; border: none; {scroll_css()}")
+        self.mod_table.setStyleSheet(f"QTableWidget {{ color: {C.TEXT}; background: transparent; border: none; }} {scroll_css()}")
         self.mod_table.itemSelectionChanged.connect(self._on_mod_selected)
         mod_lay.addWidget(self.mod_table)
 

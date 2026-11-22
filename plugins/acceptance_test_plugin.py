@@ -7,7 +7,6 @@ and secret-redacted error containment.
 from __future__ import annotations
 
 from typing import Any
-
 from memory.config_manager import get_plugin_setting
 
 PLUGIN = {

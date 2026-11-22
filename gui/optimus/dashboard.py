@@ -114,7 +114,7 @@ class OptimusDashboardView(QWidget):
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;" + scroll_css())
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }" + scroll_css())
 
         container = QWidget()
         container.setStyleSheet("background: transparent;")
@@ -328,7 +328,7 @@ class OptimusDashboardView(QWidget):
         self.wf_dag_scroll = QScrollArea()
         self.wf_dag_scroll.setWidgetResizable(True)
         self.wf_dag_scroll.setFixedHeight(95)
-        self.wf_dag_scroll.setStyleSheet("background: transparent; border: 1px solid " + C.BORDER + ";" + scroll_css())
+        self.wf_dag_scroll.setStyleSheet("QScrollArea { background: transparent; border: 1px solid " + C.BORDER + "; }" + scroll_css())
 
         self.wf_dag_widget = QWidget()
         self.wf_dag_widget.setStyleSheet("background: transparent;")
@@ -409,7 +409,7 @@ class OptimusDashboardView(QWidget):
         self.agents_scroll = QScrollArea()
         self.agents_scroll.setWidgetResizable(True)
         self.agents_scroll.setFixedHeight(95)
-        self.agents_scroll.setStyleSheet("background: transparent; border: 1px solid " + C.BORDER + ";" + scroll_css())
+        self.agents_scroll.setStyleSheet("QScrollArea { background: transparent; border: 1px solid " + C.BORDER + "; }" + scroll_css())
 
         self.agents_container = QWidget()
         self.agents_container.setStyleSheet("background: transparent;")

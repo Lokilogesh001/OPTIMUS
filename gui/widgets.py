@@ -704,8 +704,22 @@ class RingGauge(QWidget):
         self._v, self._text = 0.0, "--"
         self.setMinimumSize(70, 74)
 
-    def set_value(self, pct: float, text: str) -> None:
-        v = max(0.0, min(100.0, float(pct)))
+    def set_value(self, pct: float, text: str | None = None) -> None:
+        try:
+            v_val = float(pct)
+            if math.isnan(v_val) or math.isinf(v_val):
+                v = 0.0
+                is_valid = False
+            else:
+                v = max(0.0, min(100.0, v_val))
+                is_valid = True
+        except (TypeError, ValueError):
+            v = 0.0
+            is_valid = False
+
+        if text is None:
+            text = f"{int(round(v))}%" if is_valid else "--"
+
         if v == self._v and text == self._text:
             return
         self._v, self._text = v, text

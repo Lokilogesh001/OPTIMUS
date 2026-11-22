@@ -196,8 +196,8 @@ class SectionSkills(QWidget):
         self.text_instructions.setReadOnly(True)
         self.text_instructions.setFont(mono_font(10))
         self.text_instructions.setStyleSheet(
-            f"color: {C.WHITE}; background: #020617; border: 1px solid {C.BORDER_A}; "
-            f"border-radius: 3px; {scroll_css()}"
+            f"QTextEdit {{ color: {C.WHITE}; background: #020617; border: 1px solid {C.BORDER_A}; border-radius: 3px; }} "
+            + scroll_css()
         )
         det_lay.addWidget(self.text_instructions, stretch=1)
 
@@ -259,8 +259,8 @@ class SectionSkills(QWidget):
         self.text_pkg_manifest.setReadOnly(True)
         self.text_pkg_manifest.setFont(mono_font(10))
         self.text_pkg_manifest.setStyleSheet(
-            f"color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; "
-            f"border-radius: 3px; {scroll_css()}"
+            f"QTextEdit {{ color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; border-radius: 3px; }} "
+            + scroll_css()
         )
         pkg_lay.addWidget(self.text_pkg_manifest, stretch=1)
 
@@ -281,8 +281,8 @@ class SectionSkills(QWidget):
         self.text_sec_report.setReadOnly(True)
         self.text_sec_report.setFont(mono_font(10))
         self.text_sec_report.setStyleSheet(
-            f"color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; "
-            f"border-radius: 3px; {scroll_css()}"
+            f"QTextEdit {{ color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; border-radius: 3px; }} "
+            + scroll_css()
         )
         sec_lay.addWidget(self.text_sec_report, stretch=1)
 
@@ -302,7 +302,8 @@ class SectionSkills(QWidget):
         self.table_history.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table_history.setFont(mono_font(10))
         self.table_history.setStyleSheet(
-            f"color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; {scroll_css()}"
+            f"QTableWidget {{ color: {C.TEXT}; background: #020617; border: 1px solid {C.BORDER_A}; }} "
+            + scroll_css()
         )
         hist_lay.addWidget(self.table_history)
 

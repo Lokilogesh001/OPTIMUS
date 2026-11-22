@@ -27,6 +27,7 @@ from gui.optimus.section_applications import SectionApplications
 from gui.optimus.section_approvals import SectionApprovals
 from gui.optimus.section_command import SectionCommandCenter
 from gui.optimus.section_developer import SectionDeveloper
+from gui.optimus.section_integrations import SectionIntegrations
 from gui.optimus.section_intelligence import SectionIntelligence
 from gui.optimus.section_memory import SectionMemory
 from gui.optimus.section_missions import SectionMissions
@@ -97,6 +98,7 @@ class OptimusControlCenterWidget(QWidget):
         self.self_improvement_view = SectionSelfImprovement(self.bridge, parent=self.stack)
         self.vision_view = SectionVision(self.bridge, parent=self.stack)
         self.applications_view = SectionApplications(self.bridge, parent=self.stack)
+        self.integrations_view = SectionIntegrations(self.bridge, parent=self.stack)
 
         # Add to stack in index order matching OptimusNavBar.SECTIONS
         self.stack.addWidget(self.dashboard_view)        # 0: DASHBOARD
@@ -118,6 +120,7 @@ class OptimusControlCenterWidget(QWidget):
         self.stack.addWidget(self.self_improvement_view) # 16: IMPROVE
         self.stack.addWidget(self.vision_view)           # 17: VISION
         self.stack.addWidget(self.applications_view)     # 18: APPLICATIONS
+        self.stack.addWidget(self.integrations_view)     # 19: INTEGRATIONS
 
         center_lay.addWidget(self.stack, stretch=1)
         root_lay.addWidget(self.center_container, stretch=1)

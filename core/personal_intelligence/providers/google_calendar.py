@@ -16,6 +16,7 @@ import logging
 import time
 from typing import Any
 
+from core.outcome import untrusted
 from core.personal_intelligence.providers.base import (
     BaseProviderAdapter,
     oauth_refresh_lock,
@@ -134,9 +135,9 @@ class GoogleCalendarAdapter(BaseProviderAdapter):
             provider=ProviderType.GOOGLE_CALENDAR,
             account_id=self.account.account_id,
             calendar_id=self.account.metadata.get("calendar_id", "primary"),
-            title=summary,
-            description=description,
-            location=location,
+            title=untrusted(source="google_calendar", content=summary),
+            description=untrusted(source="google_calendar", content=description) if description else "",
+            location=untrusted(source="google_calendar", content=location) if location else "",
             start_time=start_ts,
             end_time=end_ts,
             timezone=tz,
