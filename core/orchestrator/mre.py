@@ -367,6 +367,27 @@ class MREClassifier:
                 explanation="Native desktop application execution via Windows runtime broker.",
             )
 
+        # Dynamic application launch / activate
+        dyn_match = re.match(r"^(?:launch|open|start|activate)\s+(?:the\s+)?(?:app|application|program)?\s*([a-zA-Z0-9_\-\.\s]+)$", clean, re.IGNORECASE)
+        if dyn_match:
+            cand = dyn_match.group(1).strip()
+            if cand.lower() not in ("downloads", "desktop", "documents", "pictures", "workspace", "folder", "directory", "the", "file", "tab", "window", "terminal"):
+                try:
+                    from core.application_intelligence.registry import ApplicationRegistry
+                    discovered = ApplicationRegistry.instance().find_app(cand)
+                    if discovered:
+                        return MREDecision(
+                            category=TaskCategory.APPLICATION_MANAGEMENT,
+                            priority=MethodPriority.P3_REGISTERED_TOOL,
+                            tool_name="app_launch_or_activate",
+                            arguments={"app_name": cand},
+                            caller_agent="execution_agent",
+                            outcome_contract=OutcomeContract(contract_type="process_running", target=discovered.name),
+                            explanation=f"Autonomous application launch or activation for '{discovered.name}' via ApplicationRegistry.",
+                        )
+                except Exception:
+                    pass
+
         # 11. Visual State Explanation / Anomaly Diagnosis
         if self._EXPLAIN_DESKTOP_PATTERN.match(clean):
             return MREDecision(

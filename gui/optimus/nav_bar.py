@@ -119,11 +119,12 @@ class OptimusNavBar(QWidget):
         ("PERSONAL", "●"),        # 15
         ("IMPROVE", "↑"),         # 16
         ("VISION", "◎"),          # 17
+        ("APPLICATIONS", "⎈"),    # 18
     ]
 
     # Logical groupings for structured navigation
     _GROUPS = [
-        ("EXECUTION & CONTROL", [0, 13, 1, 17, 3, 2, 11]),
+        ("EXECUTION & CONTROL", [0, 13, 1, 18, 17, 3, 2, 11]),
         ("INTELLIGENCE & KNOWLEDGE", [4, 15, 5, 12, 10]),
         ("SYSTEM & GOVERNANCE", [7, 6, 14, 16, 8, 9]),
     ]

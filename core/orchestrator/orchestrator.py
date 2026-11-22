@@ -446,6 +446,168 @@ class CentralOrchestrator:
             if not self.tool_registry.is_registered(candidate_tool):
                 return False, f"Capability unavailable: Tool '{candidate_tool}' is not registered in OPTIMUS.", "general", []
 
+        # 17. M17: WhatsApp Messaging & Communication
+        wa_prefix = re.match(
+            r"^(?:open\s+whatsapp\s+and\s+)?(?:text|message|send\s+(?:a\s+)?(?:whatsapp\s+)?message\s+to)\s+(.+)$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if wa_prefix and "whatsapp" in lower:
+            rest = wa_prefix.group(1).strip()
+            # Check for explicit message delimiter: 'saying', 'with text', 'that', ':', or quotes
+            delims = re.split(r"\s+(?:saying|with\s+(?:the\s+)?text|with\s+(?:the\s+)?message|that)\s+|:\s*|\s+[\"']", rest, maxsplit=1, flags=re.IGNORECASE)
+            if len(delims) == 2:
+                recipient = delims[0].strip()
+                msg = delims[1].strip().strip("\"'")
+            else:
+                words = rest.split()
+                recipient = rest
+                msg = "hii"
+                from core.application_intelligence.adapters.whatsapp import WhatsAppAdapter
+                wa_tmp = WhatsAppAdapter()
+                matched = False
+                for i in range(min(len(words), 3), 0, -1):
+                    candidate_name = " ".join(words[:i])
+                    chk = wa_tmp.resolve_contact(candidate_name)
+                    if chk.is_matched:
+                        recipient = candidate_name
+                        msg = " ".join(words[i:]) or "hii"
+                        matched = True
+                        break
+                if not matched and len(words) >= 2:
+                    recipient = " ".join(words[:2])
+                    msg = " ".join(words[2:]) or "hii"
+
+            if not msg:
+                msg = "hii"
+
+            # 1. Resolve contact with ambiguity check
+            resolve_res = self.tool_registry.execute(
+                "app_resolve_entity",
+                {"entity_type": "contact", "query": recipient},
+                caller_agent="application_agent",
+            )
+            if resolve_res.status == "unverified":  # Ambiguous
+                return False, resolve_res.output, "application_agent", [{"tool_name": "app_resolve_entity", "output": resolve_res.output, "status": "unverified"}]
+            if not resolve_res.is_success:
+                return False, resolve_res.error or f"Contact '{recipient}' not found.", "application_agent", []
+
+            # 2. Execute WhatsApp action
+            tool_res = self.tool_registry.execute(
+                "app_execute_action",
+                {
+                    "target_app": "whatsapp",
+                    "operation": "send_message",
+                    "parameters": {"recipient": recipient, "message": msg, "approval_token": None},
+                },
+                caller_agent="application_agent",
+            )
+            side_effects = [{
+                "tool_name": "app_execute_action",
+                "arguments": {"target_app": "whatsapp", "operation": "send_message", "recipient": recipient},
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+                "error": tool_res.error,
+            }]
+            return tool_res.is_success, tool_res.output or (tool_res.error or "Failed to send WhatsApp message"), "application_agent", side_effects
+
+        # 18. M17: Web Search, Research & Multi-Source Comparison
+        web_cmp_match = re.match(
+            r"^(?:(?:search(?:\s+the\s+web)?\s+for|look\s+up|research)\s+(.+?)(?:\s+and\s+compare(?:\s+them)?|\s+compare(?:\s+them)?)|\s*compare\s+(.+?))\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if web_cmp_match and ("compare" in lower or "nvidia" in lower or "latest" in lower):
+            search_q = (web_cmp_match.group(1) or web_cmp_match.group(2) or stripped).strip()
+            tool_res = self.tool_registry.execute(
+                "app_execute_action",
+                {
+                    "target_app": "browser",
+                    "operation": "search_and_compare",
+                    "parameters": {"query": search_q, "max_sources": 3},
+                },
+                caller_agent="researcher",
+            )
+            side_effects = [{
+                "tool_name": "app_execute_action",
+                "arguments": {"target_app": "browser", "query": search_q},
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+            }]
+            return tool_res.is_success, tool_res.output or (tool_res.error or "Failed to synthesize web comparison"), "researcher", side_effects
+
+        # 19. M17: Document Operations (PDF, DOCX, XLSX, reports)
+        doc_open_match = re.match(
+            r"^(?:open|view|inspect)\s+(?:my\s+|that\s+|the\s+)?([a-zA-Z0-9_\-\s]+\.(?:pdf|docx|xlsx|pptx|txt|csv|png|jpg|py|json|md)|(?:project\s+)?report|documentation)\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if doc_open_match and not any(kw in lower for kw in ("folder", "directory", "browser", "window")):
+            doc_q = doc_open_match.group(1).strip()
+            tool_res = self.tool_registry.execute(
+                "app_execute_action",
+                {
+                    "target_app": "document",
+                    "operation": "open_document",
+                    "parameters": {"query": doc_q},
+                },
+                caller_agent="filesystem",
+            )
+            side_effects = [{
+                "tool_name": "app_execute_action",
+                "arguments": {"target_app": "document", "query": doc_q},
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+            }]
+            return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to open document '{doc_q}'"), "filesystem", side_effects
+
+        # 20. M17: Developer Workspace & Tools (VS Code, Tests)
+        dev_match = re.match(
+            r"^(?:open(?:\s+the)?\s+(?:project|workspace)?\s*(?:in\s+)?(?:vs\s*code|vscode|code)|continue(?:\s+the)?\s+work\s+in\s+(?:vs\s*code|vscode|code))\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if dev_match:
+            tool_res = self.tool_registry.execute(
+                "app_execute_action",
+                {
+                    "target_app": "devtools",
+                    "operation": "open_workspace",
+                    "parameters": {"path": str(Path.cwd())},
+                },
+                caller_agent="developer",
+            )
+            side_effects = [{
+                "tool_name": "app_execute_action",
+                "arguments": {"target_app": "devtools", "operation": "open_workspace"},
+                "status": tool_res.status,
+                "output": tool_res.output,
+                "evidence": tool_res.evidence,
+            }]
+            return tool_res.is_success, tool_res.output or (tool_res.error or "Failed to open VS Code workspace"), "developer", side_effects
+
+        # 21. M17: Universal Dynamic Application Launch/Activation
+        dyn_app_match = re.match(r"^(?:open|launch|start|activate)\s+(?:the\s+)?(?:app|application|program)?\s*([a-zA-Z0-9_\-\.\s]+)$", stripped, re.IGNORECASE)
+        if dyn_app_match:
+            app_target = dyn_app_match.group(1).strip()
+            if app_target.lower() not in ("downloads", "desktop", "documents", "pictures", "workspace", "folder", "directory", "the", "file", "tab", "window", "terminal"):
+                from core.application_intelligence.registry import ApplicationRegistry
+                discovered_app = ApplicationRegistry.instance().find_app(app_target)
+                if discovered_app:
+                    tool_res = self.tool_registry.execute("app_launch_or_activate", {"app_name": app_target}, caller_agent="execution_agent")
+                    side_effects = [{
+                        "tool_name": "app_launch_or_activate",
+                        "arguments": {"app_name": app_target},
+                        "status": tool_res.status,
+                        "output": tool_res.output,
+                        "evidence": tool_res.evidence,
+                        "error": tool_res.error,
+                    }]
+                    return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to launch '{app_target}'"), "execution_agent", side_effects
+
         return None
 
     # ── Model Access Bridge ──────────────────────────────────────────────────
@@ -1133,6 +1295,16 @@ class CentralOrchestrator:
         return is_verified, verdict, evidence_map
 
     # ── Task Execution Orchestration ─────────────────────────────────────────
+
+    def execute_user_request(self, goal: str, task_id: str | None = None) -> tuple[bool, str, str, list[dict[str, Any]]]:
+        """Execute a user request via deterministic fast-path or full task execution."""
+        t_id = task_id or new_task_id()
+        fast = self._try_fast_path(goal, t_id)
+        if fast is not None:
+            return fast
+        task = self.execute_task(goal, t_id)
+        status_str = task.status.value if hasattr(task.status, "value") else str(task.status)
+        return (status_str.lower() == "completed", task.result or "", "orchestrator", [])
 
     def execute_task(self, goal: str, task_id: str | None = None) -> TaskRecord:
         """Synchronously execute a task through the full hierarchical lifecycle."""

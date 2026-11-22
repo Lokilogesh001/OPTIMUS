@@ -141,6 +141,7 @@ class PolicyEngine:
     ) -> None:
         self.permission_manager = permission_manager or PermissionManager.instance()
         self._consumed_nonces: set[str] = set()
+        self._active_tokens: dict[str, ApprovalToken] = {}
         self._lock = threading.RLock()
         if journal_path:
             self.journal_path = Path(journal_path)
@@ -200,6 +201,16 @@ class PolicyEngine:
                 expires_at=time.time() + ttl_seconds,
                 canonical_hash=canonical_hash,
             )
+            self._active_tokens[token.token_id] = token
+            return token
+
+    def get_token(self, token_id: str) -> ApprovalToken | None:
+        """Retrieve an active approval token by token ID."""
+        with self._lock:
+            token = self._active_tokens.get(token_id)
+            if token and token.is_expired():
+                self._active_tokens.pop(token_id, None)
+                return None
             return token
 
     def is_nonce_consumed(self, nonce: str) -> bool:

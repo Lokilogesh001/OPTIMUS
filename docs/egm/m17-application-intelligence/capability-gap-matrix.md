@@ -1,0 +1,35 @@
+# OPTIMUS M17 — Universal Application Intelligence: Capability Gap Matrix
+
+**Date:** 2026-11-22  
+**Target:** Universal Application Intelligence & Autonomous Computer Operation Subsystem  
+**Scope:** Architectural Audit of Existing OPTIMUS Subsystems vs. M17 Requirements  
+**Status:** AUDITED — PRE-IMPLEMENTATION BASELINE
+
+---
+
+## 1. Architectural Baseline & Subsystem Audit
+
+| Subsystem | Existing Implementation | Observed Limitation / Defect | M17 Required Capability | Gap Severity |
+|---|---|---|---|---|
+| **MRE Classifier (`core/orchestrator/mre.py`)** | Rigid regex dictionary (`_APP_LAUNCH_PATTERN`) matching only 7 hardcoded app names (`notepad`, `calc`, `cmd`, `powershell`, `explorer`, `paint`). | Cannot understand objectives involving arbitrary applications (e.g., WhatsApp, VS Code, Slack, Word, Excel, Chrome). Fails on natural language objectives with arguments ("Open WhatsApp and text John hii"). | Objective-driven intent recognition; semantic application resolution; multi-parameter task parsing; entity extraction (recipients, queries, files). | **CRITICAL** |
+| **Application Discovery & Inventory** | Non-existent. No subsystem discovers installed Windows applications. | OPTIMUS has zero registry or metadata for installed desktop software, Start menu shortcuts, App Paths, UWP apps, or file associations. | `core/application_intelligence/discovery.py` & `registry.py`: Windows Start Menu, Registry (App Paths, Uninstall keys), Running Processes/Windows, File Associations. | **CRITICAL** |
+| **Interaction Routing Hierarchy** | Fragmented. Individual tools call `subprocess.Popen` or `win32gui.SetForegroundWindow` in an ad-hoc manner. | No priority ladder between Native API (P1), Integration Adapters (P2), UI Automation (P3), Browser Automation (P4), and Visual Computer Use (P5). | `InteractionRouter`: Standardized multi-tier execution hierarchy with safe fallback, outcome verification, and error recovery. | **CRITICAL** |
+| **Windows UI Automation** | Primitive mouse/keyboard clicks (`core/computer_use/actuation.py`) and basic window enumeration (`win32gui`). | Cannot inspect UI Automation accessibility trees, find controls by name/role/automation ID, or interact with native controls reliably without screen coordinates. | Standardized UI Automation provider inspection and accessibility navigation (Win32 / UIA / pywinauto / ctypes). | **HIGH** |
+| **Application Learning Engine** | Non-existent. | Every supported action must be manually coded by developers in Python scripts or regexes. Cannot explore an unfamiliar app, extract its control tree, or synthesize a reusable skill. | `core/application_intelligence/learning_engine.py`: Controlled discovery, interface inspection, action workflow proposal, safe test execution, observation, and skill promotion. | **CRITICAL** |
+| **Skill Persistence & Integration** | `SkillRegistry` exists in `core/skills/` with `SkillManifest` and `skills_registry.json`. | Disconnected from application workflows. Does not store verified application execution procedures. | `WorkflowStore`: Bridges learned application workflows directly into `SkillRegistry` and `SkillManifest` without creating a duplicate skill system. | **HIGH** |
+| **Real-World Application: WhatsApp** | Personal intelligence has Meta Cloud API connector, but desktop/web WhatsApp automation does not exist. | Cannot open/activate WhatsApp Desktop, search contacts, resolve ambiguous recipients, compose messages, or obtain required human approval before sending. | `WhatsAppAdapter`: Contact search, conversation activation, drafting, human authorization gate, send execution, and delivery verification. | **CRITICAL** |
+| **Real-World Application: Browser & Web** | Browser tab enumeration in `core/vision/browser_intelligence.py` can list tabs and switch. | Cannot orchestrate end-to-end web research, query search engines, extract multi-source information, compare content, or verify downloads. | `BrowserAdapter`: Unified web search, multi-source information comparison, navigation, tab reuse, content extraction, and document download verification. | **HIGH** |
+| **Real-World Application: Document & Files** | `UnifiedFilesystemService` reads/writes files, and `open_in_explorer` opens folders. | Cannot resolve the correct associated desktop application for PDF, DOCX, XLSX, PPTX, CSV, images, and code, nor verify that the document successfully loaded. | `DocumentAdapter`: File type intelligence, Windows file association resolution, viewer/editor execution, and window launch verification. | **HIGH** |
+| **Real-World Application: Dev Tools** | `python_version` and `git_status` exist as static diagnosis tools. | Cannot open VS Code projects, inspect workspace state, execute approved terminal commands with boundary guards, and diagnose build/test failures. | `DevToolsAdapter`: VS Code workspace launcher, Terminal execution harness, Git status inspector, and test output diagnostic engine. | **HIGH** |
+| **Task Supervision & Verification** | Visual supervisor detects dead clicks and modal dialogs via dhash diffs. | Verification is not tied to structured action contracts (preconditions, operation, expected outcome, evidence). | ActionContract integration: pre/post condition assertions, physical outcome validation, and failure classification. | **HIGH** |
+| **User Interface (`gui/optimus/`)** | Refined command center with 18 tabs, but no dedicated view for Applications. | No visible panel to inspect discovered applications, view running instances, test adapters, inspect learned skills, or manage application permissions. | `gui/optimus/section_applications.py`: High-density application inventory, running process monitor, adapter status, learned skills review, and capability inspection. | **MEDIUM** |
+| **Security & Authorization** | `PolicyEngine` enforces capability tiers and approval tokens, but has no specific rules for application-level operations. | External messaging, purchasing, or destructive actions inside applications lack explicit human approval gates and prompt injection sanitization. | Strict CBAC binding: Application actions categorized into Safe/Privileged/Critical; approval tokens required for sending messages or modifying external systems. Untrusted UI text sanitization. | **CRITICAL** |
+
+---
+
+## 2. Summary of Strategic Objectives
+
+1. **Eliminate Regex Fragility:** Replace isolated keyword matching with a semantic application intelligence registry that resolves applications, files, and objectives dynamically.
+2. **Implement Universal Adapter Framework:** Establish the standardized lifecycle (`Discover`, `Connect`, `Inspect`, `Execute`, `Observe`, `Verify`, `Recover`, `Disconnect`) across all applications.
+3. **Establish Autonomous Learning:** Enable OPTIMUS to inspect unfamiliar UI trees, test candidate action sequences safely, observe results, and register verified workflows as reusable skills.
+4. **Preserve Architectural Rigor:** Build directly on top of `UnifiedFilesystemService`, `WindowsRuntimeBroker`, `PolicyEngine`, `SkillRegistry`, and `UnifiedVisionService`.

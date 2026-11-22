@@ -622,6 +622,194 @@ class ToolRegistry:
             is_mutating=False,
         ))
 
+        # ── M17 Universal Application Intelligence Tools ─────────────────────────
+        def _app_discover_inventory_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.registry import ApplicationRegistry
+            registry = ApplicationRegistry.instance()
+            force = params.get("force", False)
+            registry.refresh(force=force)
+            running_only = params.get("running_only", False)
+            apps = registry.list_running_apps() if running_only else registry.list_all_apps()
+            app_list = [a.to_dict() for a in apps]
+            return ToolResult(
+                status="done",
+                output=f"Discovered {len(app_list)} {'running' if running_only else 'installed'} applications.",
+                evidence={"count": len(app_list), "applications": app_list},
+            )
+
+        self.register(ToolDefinition(
+            name="app_discover_inventory",
+            description="Discover or query installed and currently running Windows applications.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "running_only": {"type": "BOOLEAN", "description": "If true, return only currently running applications with window handles."},
+                    "force": {"type": "BOOLEAN", "description": "Force refresh the system discovery inventory."},
+                },
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_app_discover_inventory_handler,
+            is_mutating=False,
+        ))
+
+        def _app_launch_or_activate_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.registry import ApplicationRegistry
+            query = params.get("app_name") or params.get("query", "")
+            args = params.get("args")
+            registry = ApplicationRegistry.instance()
+            res = registry.launch_or_activate(query, args=args)
+            if res.get("success"):
+                return ToolResult(
+                    status="done",
+                    output=res.get("message", f"Application '{query}' successfully activated/launched."),
+                    evidence=res,
+                )
+            return ToolResult(
+                status="failed",
+                error=res.get("error", f"Failed to activate or launch '{query}'."),
+                evidence=res,
+            )
+
+        self.register(ToolDefinition(
+            name="app_launch_or_activate",
+            description="Launch an installed application or activate/restore an existing window by name or alias.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "app_name": {"type": "STRING", "description": "Name, alias, or ID of the application (e.g. 'whatsapp', 'vscode', 'notepad')."},
+                    "args": {"type": "ARRAY", "description": "Optional command-line arguments to pass if launched."},
+                },
+                "required": ["app_name"],
+            },
+            capability_tier=CapabilityTier.SYSTEM_MUTATING,
+            handler=_app_launch_or_activate_handler,
+            is_mutating=True,
+        ))
+
+        def _app_execute_action_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.interaction_router import InteractionRouter
+            from core.application_intelligence.types import ActionContract
+            router = InteractionRouter()
+            contract = ActionContract(
+                action_id=params.get("action_id", f"act_{int(time.time()*1000)}"),
+                target_app=params.get("target_app", ""),
+                operation=params.get("operation", ""),
+                parameters=params.get("parameters", {}),
+            )
+            evidence = router.dispatch(contract, tool_registry=self)
+            ev_dict = evidence.to_dict()
+            if isinstance(evidence.evidence_data, dict):
+                ev_dict.update(evidence.evidence_data)
+            if evidence.is_success:
+                return ToolResult(
+                    status="done",
+                    output=f"Successfully executed '{contract.operation}' on '{contract.target_app}'.",
+                    evidence=ev_dict,
+                )
+            elif "APPROVAL_REQUIRED" in (evidence.error_message or ""):
+                return ToolResult(
+                    status="unverified",
+                    output=evidence.error_message,
+                    error="APPROVAL_REQUIRED",
+                    evidence=ev_dict,
+                )
+            return ToolResult(
+                status="failed",
+                error=evidence.error_message or f"Action '{contract.operation}' on '{contract.target_app}' failed.",
+                evidence=ev_dict,
+            )
+
+        self.register(ToolDefinition(
+            name="app_execute_action",
+            description="Execute a high-level application action (e.g. search contacts, draft message, send message, web search, open document).",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "target_app": {"type": "STRING", "description": "Target application (e.g. 'whatsapp', 'browser', 'document', 'devtools')."},
+                    "operation": {"type": "STRING", "description": "Operation name (e.g. 'send_message', 'search_web', 'open_document')."},
+                    "parameters": {"type": "OBJECT", "description": "Action parameters."},
+                },
+                "required": ["target_app", "operation"],
+            },
+            capability_tier=CapabilityTier.SYSTEM_MUTATING,
+            handler=_app_execute_action_handler,
+            is_mutating=True,
+        ))
+
+        def _app_resolve_entity_handler(params: dict, context: dict | None = None) -> ToolResult:
+            entity_type = params.get("entity_type", "contact").lower()
+            query = params.get("query", "")
+            if entity_type == "contact":
+                from core.application_intelligence.adapters.whatsapp import WhatsAppAdapter
+                wa = WhatsAppAdapter()
+                res = wa.resolve_contact(query)
+            elif entity_type == "document":
+                from core.application_intelligence.adapters.document import DocumentAdapter
+                doc = DocumentAdapter()
+                res = doc.resolve_document(query, target_extension=params.get("file_extension"))
+            else:
+                return ToolResult(status="failed", error=f"Unknown entity type: {entity_type}")
+
+            return ToolResult(
+                status="done" if res.is_matched else ("unverified" if res.is_ambiguous else "failed"),
+                output=res.clarification_prompt or f"Resolved {entity_type}: {res.resolved_value}",
+                evidence=res.to_dict(),
+            )
+
+        self.register(ToolDefinition(
+            name="app_resolve_entity",
+            description="Resolve a contact or document entity with composite scoring and disambiguation prompt.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "entity_type": {"type": "STRING", "description": "'contact' or 'document'"},
+                    "query": {"type": "STRING", "description": "Name or query string to resolve"},
+                    "file_extension": {"type": "STRING", "description": "Optional file extension for documents (e.g. '.pdf')"},
+                },
+                "required": ["entity_type", "query"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_app_resolve_entity_handler,
+            is_mutating=False,
+        ))
+
+        def _app_learn_workflow_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.learning_engine import ApplicationLearningEngine
+            from core.application_intelligence.workflow_store import WorkflowStore
+            engine = ApplicationLearningEngine(workflow_store=WorkflowStore.instance())
+            app_name = params.get("app_name", "")
+            goal = params.get("goal")
+            if goal:
+                wf = engine.learn_workflow_for_goal(app_name, goal)
+                return ToolResult(
+                    status="done",
+                    output=f"Synthesized workflow '{wf.workflow_id}' for goal '{goal}' on '{app_name}' (Trust: UNVERIFIED).",
+                    evidence=wf.to_dict(),
+                )
+            else:
+                explore_data = engine.passive_explore_app(app_name)
+                return ToolResult(
+                    status="done",
+                    output=f"Passive exploration of '{app_name}' discovered {explore_data.get('control_count', 0)} controls.",
+                    evidence=explore_data,
+                )
+
+        self.register(ToolDefinition(
+            name="app_learn_workflow",
+            description="Explore an unfamiliar application and synthesize a reusable workflow (strictly UNVERIFIED initially).",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "app_name": {"type": "STRING", "description": "Name of the target application."},
+                    "goal": {"type": "STRING", "description": "Optional goal to synthesize a workflow for."},
+                },
+                "required": ["app_name"],
+            },
+            capability_tier=CapabilityTier.SYSTEM_MUTATING,
+            handler=_app_learn_workflow_handler,
+            is_mutating=True,
+        ))
+
     def register(self, tool_def: ToolDefinition) -> None:
         """Register or update a tool definition in the registry."""
         self._tools[tool_def.name] = tool_def
