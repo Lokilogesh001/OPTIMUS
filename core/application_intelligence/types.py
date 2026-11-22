@@ -13,18 +13,22 @@ from typing import Any
 
 
 class AppInteractionTier(str, Enum):
-    """The 5-tier interaction hierarchy for desktop applications."""
+    """The interaction hierarchy for desktop applications (M17-M19)."""
     TIER_1_NATIVE_API = "tier_1_native_api"          # Official API, SDK, CLI, or IPC protocol
     TIER_2_ADAPTER = "tier_2_adapter"                # Dedicated application connector
     TIER_3_UI_AUTOMATION = "tier_3_ui_automation"    # Windows UI Automation / Accessibility tree
     TIER_4_BROWSER_DOM = "tier_4_browser_dom"        # Browser automation / CDP / DOM interaction
-    TIER_5_VISUAL_ACTUATION = "tier_5_visual_act"    # Visual Computer Use / Screen observation & actuation
+    TIER_5_UFO_DESKTOP_AGENT = "tier_5_ufo_desktop_agent"  # Microsoft UFO² HostAgent / AppAgent multi-app runtime
+    TIER_6_STAGEHAND_NATURAL = "tier_6_stagehand_natural"  # Stagehand natural-language web extraction
+    TIER_7_VISUAL_ACTUATION = "tier_7_visual_act"    # Visual Computer Use / Screen observation & actuation
+    TIER_5_VISUAL_ACTUATION = "tier_7_visual_act"    # Backward compatibility alias
 
     # Convenience aliases
     DIRECT_API = "tier_1_native_api"
     UI_AUTOMATION = "tier_3_ui_automation"
     DOM_ACCESSIBILITY = "tier_4_browser_dom"
-    VISUAL_COMPUTER_USE = "tier_5_visual_act"
+    UFO_DESKTOP_AGENT = "tier_5_ufo_desktop_agent"
+    VISUAL_COMPUTER_USE = "tier_7_visual_act"
 
 
 class AppCategory(str, Enum):
@@ -147,11 +151,15 @@ class ActionContract:
     verification_strategy: str = "window_state"  # "window_state", "element_visible", "file_exists", "process_running"
     tier: AppInteractionTier | None = None
     is_destructive: bool = False
+    allowed_apps: list[str] = field(default_factory=list)          # Reconciles HIGH-1
+    allowed_operations: list[str] = field(default_factory=list)    # Reconciles HIGH-1
 
     def __post_init__(self) -> None:
         if not self.action_id:
             import uuid
             self.action_id = f"act_{uuid.uuid4().hex[:12]}"
+        if self.target_app and self.target_app not in self.allowed_apps:
+            self.allowed_apps.append(self.target_app)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +174,10 @@ class ActionContract:
             "session_nonce": self.session_nonce,
             "caller_identity": self.caller_identity,
             "verification_strategy": self.verification_strategy,
+            "tier": self.tier.value if self.tier else None,
+            "is_destructive": self.is_destructive,
+            "allowed_apps": self.allowed_apps,
+            "allowed_operations": self.allowed_operations,
         }
 
 
@@ -204,6 +216,7 @@ class LearnedWorkflow:
     validation_state: str = "UNVERIFIED"       # "DISCOVERED", "UNVERIFIED", "TESTED", "VERIFIED_SKILL"
     preconditions: list[str] = field(default_factory=list)
     recovery_hints: list[str] = field(default_factory=list)
+    expected_outcome: str = ""
     created_at: float = field(default_factory=time.time)
     execution_count: int = 0
     success_count: int = 0
@@ -218,6 +231,7 @@ class LearnedWorkflow:
             "validation_state": self.validation_state,
             "preconditions": self.preconditions,
             "recovery_hints": self.recovery_hints,
+            "expected_outcome": self.expected_outcome,
             "created_at": self.created_at,
             "execution_count": self.execution_count,
             "success_count": self.success_count,
@@ -234,6 +248,7 @@ class LearnedWorkflow:
             validation_state=data.get("validation_state", "UNVERIFIED"),
             preconditions=data.get("preconditions", []),
             recovery_hints=data.get("recovery_hints", []),
+            expected_outcome=data.get("expected_outcome", ""),
             created_at=data.get("created_at", time.time()),
             execution_count=data.get("execution_count", 0),
             success_count=data.get("success_count", 0),

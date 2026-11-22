@@ -191,6 +191,15 @@ def _resolve_safe_path(
 class ToolRegistry:
     """Central repository for tool discovery, capability checks, and sandboxed dispatch."""
 
+    _instance: ToolRegistry | None = None
+
+    @classmethod
+    def instance(cls, event_bus: Any | None = None) -> ToolRegistry:
+        """Global thread-safe singleton accessor."""
+        if cls._instance is None:
+            cls._instance = cls(event_bus=event_bus)
+        return cls._instance
+
     def __init__(self, event_bus: Any | None = None) -> None:
         self._tools: dict[str, ToolDefinition] = {}
         self._event_bus = event_bus
@@ -878,6 +887,90 @@ class ToolRegistry:
             parameters={"type": "OBJECT", "properties": {}},
             capability_tier=CapabilityTier.READ_ONLY,
             handler=_app_benchmark_providers_handler,
+            is_mutating=False,
+        ))
+
+        # ── Milestone 19: Full Microsoft UFO² Desktop Agent Tools ─────────
+        def _ufo_desktop_mission_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.frameworks.ufo.mission_runner import UFODesktopMissionRunner
+            from core.application_intelligence.types import ActionContract, AppInteractionTier
+
+            target_app = str(params.get("target_app") or "")
+            allowed_apps = params.get("allowed_apps") or ([target_app] if target_app else [])
+            operation = str(params.get("operation") or "execute_desktop_task")
+            inner_params = params.get("parameters") or {}
+            timeout = float(params.get("timeout") or 60.0)
+
+            contract = ActionContract(
+                target_app=target_app,
+                operation=operation,
+                parameters=inner_params,
+                tier=AppInteractionTier.TIER_5_UFO_DESKTOP_AGENT,
+                allowed_apps=allowed_apps,
+                allowed_operations=params.get("allowed_operations", [operation]),
+            )
+
+            runner = UFODesktopMissionRunner()
+            evidence = runner.execute_mission(contract, timeout=timeout)
+
+            if evidence.status == "done":
+                return ToolResult(
+                    status="done",
+                    output=f"UFO Desktop Mission completed successfully: {len(evidence.facts)} facts recorded.",
+                    evidence=evidence.evidence_data,
+                )
+            else:
+                return ToolResult(
+                    status="failed" if evidence.status == "failed" else "unverified",
+                    error=evidence.error_message or "UFO Desktop Mission failed or requires authorization.",
+                    output=f"UFO Desktop Mission status: {evidence.status}. Error: {evidence.error_message}",
+                    evidence=evidence.evidence_data,
+                )
+
+        self.register(ToolDefinition(
+            name="ufo_desktop_mission",
+            description="Delegate a bounded multi-application or desktop automation mission to Microsoft UFO² (HostAgent, AppAgents, FastMCP).",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "target_app": {"type": "STRING", "description": "Primary target application name or executable"},
+                    "allowed_apps": {"type": "ARRAY", "description": "List of authorized application executables (e.g. ['WINWORD.EXE', 'EXCEL.EXE'])"},
+                    "operation": {"type": "STRING", "description": "High-level goal or operation to execute"},
+                    "parameters": {"type": "OBJECT", "description": "Operation arguments"},
+                    "timeout": {"type": "NUMBER", "description": "Maximum execution budget in seconds (default: 60.0)"},
+                },
+                "required": ["operation"],
+            },
+            capability_tier=CapabilityTier.EXECUTION,
+            handler=_ufo_desktop_mission_handler,
+            is_mutating=True,
+        ))
+
+        def _ufo_mcp_servers_status_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.frameworks.ufo.compat import ensure_ufo_environment
+            ensure_ufo_environment()
+            try:
+                from ufo.client.mcp.local_servers import (
+                    cli_mcp_server, excel_wincom_mcp_server, pdf_reader_mcp_server,
+                    ppt_wincom_mcp_server, ui_mcp_server, word_wincom_mcp_server,
+                )
+                from ufo.client.mcp.mcp_registry import MCPRegistry
+                servers = MCPRegistry.list()
+                ev_data = {"servers": servers, "count": len(servers)}
+                return ToolResult(
+                    status="done",
+                    output=f"UFO Local FastMCP Servers: {len(servers)} registered ({', '.join(servers)})",
+                    evidence=ev_data,
+                )
+            except Exception as e:
+                return ToolResult(status="failed", error=str(e), output=f"Failed querying UFO MCP servers: {e}")
+
+        self.register(ToolDefinition(
+            name="ufo_mcp_servers_status",
+            description="Inspect registered Microsoft UFO² local FastMCP execution servers (UICollector, HostUI, AppUI, WinCOM, CLI, PDF).",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_ufo_mcp_servers_status_handler,
             is_mutating=False,
         ))
 

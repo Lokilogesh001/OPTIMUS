@@ -45,6 +45,10 @@ class InteractionRouter:
         app = self.registry.find_app(contract.target_app)
         adapter = get_adapter(contract.target_app)
 
+        # 0. Multi-App UFO desktop mission check (M19)
+        if len(contract.allowed_apps) > 1 or contract.tier == AppInteractionTier.TIER_5_UFO_DESKTOP_AGENT or any(k in contract.operation.lower() for k in ("mission", "multi_app", "extract_to", "handoff")):
+            return AppInteractionTier.TIER_5_UFO_DESKTOP_AGENT
+
         # 1. Native API check
         if app and AppInteractionTier.TIER_1_NATIVE_API in app.supported_tiers:
             return AppInteractionTier.TIER_1_NATIVE_API
@@ -54,7 +58,7 @@ class InteractionRouter:
             return AppInteractionTier.TIER_2_ADAPTER
 
         # 3. Browser DOM check
-        if app and app.category.value == "browser":
+        if (app and app.category.value == "browser") or any(b in contract.target_app.lower() for b in ("chrome", "msedge", "firefox", "brave", "browser")):
             return AppInteractionTier.TIER_4_BROWSER_DOM
 
         # 4. Windows UI Automation
@@ -125,14 +129,18 @@ class InteractionRouter:
                     },
                 )
 
-        # 3. Dynamic Framework Provider Selection (M18)
+        # 3. Dynamic Framework Provider Selection (M18 & M19)
         provider = self.provider_registry.select_best_provider(contract, preferred_tier=current_tier)
         if provider:
+            req_params = dict(contract.parameters)
+            req_params.setdefault("allowed_apps", contract.allowed_apps)
+            req_params.setdefault("allowed_operations", contract.allowed_operations)
+
             req = ExecutionRequest(
                 action_id=contract.action_id,
                 target_app=contract.target_app,
                 operation=contract.operation,
-                parameters=contract.parameters,
+                parameters=req_params,
                 approval_token=contract.approval_token,
                 session_nonce=contract.session_nonce,
                 caller_identity=contract.caller_identity,

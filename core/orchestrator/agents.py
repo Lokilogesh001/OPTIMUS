@@ -58,6 +58,15 @@ class AgentProfile:
 class AgentRegistry:
     """Thread-safe registry managing specialized agent profiles and capabilities."""
 
+    _instance: AgentRegistry | None = None
+
+    @classmethod
+    def instance(cls) -> AgentRegistry:
+        """Global thread-safe singleton accessor."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._agents: dict[str, AgentProfile] = {}
@@ -203,6 +212,8 @@ class AgentRegistry:
                     "app_learn_workflow",
                     "app_provider_status",
                     "app_benchmark_providers",
+                    "ufo_desktop_mission",
+                    "ufo_mcp_servers_status",
                 ],
                 allowed_tiers=[
                     CapabilityTier.READ_ONLY,
@@ -280,6 +291,8 @@ class AgentRegistry:
                     "search_web",
                     "app_provider_status",
                     "app_benchmark_providers",
+                    "ufo_desktop_mission",
+                    "ufo_mcp_servers_status",
                 ],
                 allowed_tiers=[
                     CapabilityTier.READ_ONLY,

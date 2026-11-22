@@ -38,10 +38,16 @@ class ApprovalToken:
     nonce: str
     expires_at: float
     canonical_hash: str  # SHA-256 of tool_name + canonical arguments
+    arguments: dict[str, Any] = field(default_factory=dict)
 
     def is_expired(self) -> bool:
         """Check if token has passed its expiration timestamp."""
         return time.time() > self.expires_at
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if token is within valid lifetime."""
+        return not self.is_expired()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,6 +58,7 @@ class ApprovalToken:
             "nonce": self.nonce,
             "expires_at": self.expires_at,
             "canonical_hash": self.canonical_hash,
+            "arguments": self.arguments,
         }
 
     @classmethod
@@ -64,6 +71,7 @@ class ApprovalToken:
             nonce=str(data["nonce"]),
             expires_at=float(data["expires_at"]),
             canonical_hash=str(data["canonical_hash"]),
+            arguments=data.get("arguments", {}),
         )
 
 
@@ -200,6 +208,7 @@ class PolicyEngine:
                 nonce=secrets.token_hex(16),
                 expires_at=time.time() + ttl_seconds,
                 canonical_hash=canonical_hash,
+                arguments=dict(arguments) if arguments else {},
             )
             self._active_tokens[token.token_id] = token
             return token

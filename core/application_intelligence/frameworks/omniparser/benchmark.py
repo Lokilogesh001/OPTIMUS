@@ -43,6 +43,17 @@ class OmniParserBenchmark:
 
         return env
 
+    def get_hardware_status(self) -> dict[str, Any]:
+        """Query hardware status for dynamic VRAM preflight."""
+        env = self.inspect_hardware_environment()
+        return {
+            "gpu_detected": env.get("cuda_available", False),
+            "free_vram_mb": env.get("free_vram_mb", 0.0),
+            "total_vram_mb": env.get("total_vram_mb", 0.0),
+            "device_name": env.get("device_name", "CPU"),
+            "meets_threshold": env.get("meets_3gb_threshold", False),
+        }
+
     @staticmethod
     def run_benchmark(sample_image_dims: tuple[int, int] = (1920, 1080)) -> dict[str, Any]:
         """Execute comparative benchmark of CPU vs GPU visual grounding."""

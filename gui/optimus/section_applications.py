@@ -421,6 +421,7 @@ class SectionApplications(QWidget):
 
         domain_map = {
             "ufo_desktop": "Windows WinCOM & AppAgent (Word/Excel/Settings)",
+            "ufo_desktop_agent": "Full Microsoft UFO² Multi-App Agent (HostAgent/AppAgents/FastMCP)",
             "pywinauto_uia": "Native UIA Pattern Automation (Desktop GUI)",
             "playwright_browser": "Headless Browser Automation (DOM/Locators)",
             "stagehand_intelligence": "Browser Intelligence (Natural Language/Extract)",
@@ -464,6 +465,8 @@ class SectionApplications(QWidget):
                 hw_desc = f"Headless: True · Desktop Lock: {prov.requires_desktop_lock} · Streamed Downloads: SHA-256"
             elif prov.name == "ufo_desktop":
                 hw_desc = f"WinCOM: Active · Desktop Lock: {prov.requires_desktop_lock} · AppAgent: ms-settings/explorer"
+            elif prov.name == "ufo_desktop_agent":
+                hw_desc = f"UFO HostAgent/AppAgents · 8 FastMCP Servers · Desktop Lock: {prov.requires_desktop_lock} · Gateway Guarded"
             elif prov.name == "pywinauto_uia":
                 hw_desc = f"COM Apartment: STA/MTA Safe · UIA Patterns: Active · Timeout: 5.0s"
             elif prov.name == "stagehand_intelligence":

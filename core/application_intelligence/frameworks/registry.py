@@ -155,11 +155,15 @@ class ProviderRegistry:
         score = 100.0
 
         # Provider domain affinity
-        if provider.name == "ufo_desktop":
+        if provider.name in ("ufo_desktop", "ufo_desktop_agent"):
+            if len(contract.allowed_apps) > 1 or any(k in operation for k in ("multi_app", "workflow", "extract_to", "handoff", "mission")):
+                score += 70.0
             if any(k in target_app for k in ("word", "excel", "powerpnt", "office", "settings", "explorer")):
                 score += 50.0
             if any(k in operation for k in ("com_", "document_", "office_", "export_")):
                 score += 40.0
+            if preferred_tier == AppInteractionTier.TIER_5_UFO_DESKTOP_AGENT:
+                score += 80.0
 
         elif provider.name in ("playwright_browser", "stagehand_intelligence"):
             if any(k in target_app for k in ("chrome", "msedge", "brave", "firefox", "browser", "web")):
@@ -195,6 +199,12 @@ class ProviderRegistry:
             self.register_provider(UFODesktopBackend())
         except Exception as ex:
             logger.debug("UFODesktopBackend default init deferred: %s", ex)
+
+        try:
+            from core.application_intelligence.frameworks.ufo.ufo_desktop_provider import UFODesktopAgentProvider
+            self.register_provider(UFODesktopAgentProvider())
+        except Exception as ex:
+            logger.debug("UFODesktopAgentProvider default init deferred: %s", ex)
 
         try:
             from core.application_intelligence.frameworks.pywinauto.pywinauto_backend import PywinautoExecutionBackend
