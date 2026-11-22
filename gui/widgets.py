@@ -645,43 +645,32 @@ class HoloPanel(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         W = self.width()
         H = self.height()
-        cut = 11
-        g = QLinearGradient(0, 0, 0, H)
-        g.setColorAt(0.0, blend(C.PRI, 0.085))
-        g.setColorAt(0.18, blend(C.PRI, 0.045))
-        g.setColorAt(1.0, blend(C.PRI, 0.025))
-        p.setBrush(QBrush(g))
-        p.setPen(QPen(blend(C.PRI, 0.24), 1))
-        p.drawPolygon(chamfer(QRectF(0.5, 0.5, W - 1, H - 1), cut))
-        # lit edges: the two chamfers and a short run along from each
-        p.setPen(QPen(blend(C.PRI, 0.85), 1.6))
-        p.drawLine(QLineF(0.5, cut + 0.5, cut + 0.5, 0.5))
-        p.drawLine(QLineF(cut + 0.5, 0.5, cut + 44, 0.5))
-        p.drawLine(QLineF(W - 0.5, H - cut - 0.5, W - cut - 0.5, H - 0.5))
-        p.drawLine(QLineF(W - cut - 0.5, H - 0.5, W - cut - 34, H - 0.5))
+
+        # 1. Precision rectangular card with subtle 4px radius and dark blue-gray surface
+        p.setBrush(QBrush(qcol(C.PANEL)))
+        p.setPen(QPen(qcol(C.BORDER), 1))
+        p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 4, 4)
+
         if self._title:
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(qcol(C.ACC)))
-            p.drawRect(QRectF(12, 11, 3, 10))
             right = self._header_right()
             code_w = 0.0
             if self._code:
-                p.setFont(px_font(10, mono=True))
-                code_w = p.fontMetrics().horizontalAdvance(self._code) + 8
-                p.setPen(QPen(blend(C.PRI, 0.5)))
-                p.drawText(QRectF(right - code_w, 6, code_w, 20),
+                p.setFont(px_font(9, mono=True))
+                code_w = p.fontMetrics().horizontalAdvance(self._code) + 12
+                p.setPen(QPen(qcol(C.TEXT_DIM)))
+                p.drawText(QRectF(right - code_w, 5, code_w, 20),
                            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, self._code)
-            p.setFont(px_font(11, QFont.Weight.DemiBold, spacing=1.8))
-            p.setPen(QPen(qcol(C.PRI)))
-            room = max(10.0, right - code_w - 26)
-            p.drawText(QRectF(21, 6, room, 20), Qt.AlignmentFlag.AlignVCenter,
+
+            # Title in crisp cool white without artificial wide tracking
+            p.setFont(px_font(11, QFont.Weight.DemiBold))
+            p.setPen(QPen(qcol(C.WHITE)))
+            room = max(10.0, right - code_w - 20)
+            p.drawText(QRectF(12, 5, room, 20), Qt.AlignmentFlag.AlignVCenter,
                        p.fontMetrics().elidedText(self._title, Qt.TextElideMode.ElideRight, int(room)))
-            lg = QLinearGradient(12, 0, W - 12, 0)
-            lg.setColorAt(0.0, with_alpha(C.PRI, 0.55))
-            lg.setColorAt(0.6, with_alpha(C.PRI, 0.12))
-            lg.setColorAt(1.0, with_alpha(C.PRI, 0.0))
-            p.setPen(QPen(QBrush(lg), 1))
-            p.drawLine(QLineF(12, self.HEADER, W - 12, self.HEADER))
+
+            # Clean subtle hairline separator
+            p.setPen(QPen(qcol(C.BORDER_A), 1))
+            p.drawLine(QLineF(1, self.HEADER, W - 1, self.HEADER))
         p.end()
 
 

@@ -24,10 +24,6 @@ from typing import Any
 import requests
 
 from core.outcome import untrusted
-from core.personal_intelligence.oauth import (
-    get_google_client_id,
-    get_google_client_secret,
-)
 from core.personal_intelligence.providers.base import (
     BaseProviderAdapter,
     oauth_refresh_lock,
@@ -112,6 +108,11 @@ class GmailAdapter(BaseProviderAdapter):
                 logger.warning("No refresh token available for %s", self.account.account_id)
                 self.account.auth_status = AuthStatus.EXPIRED
                 return False
+
+            from core.personal_intelligence.oauth import (
+                get_google_client_id,
+                get_google_client_secret,
+            )
 
             client_id = get_google_client_id() or self.account.metadata.get("oauth_client_id", "")
             client_secret = get_google_client_secret()

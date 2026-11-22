@@ -109,32 +109,39 @@ def btn_css(kind: str = "dim", align: str = "left") -> str:
     """Stylesheet for a drawer/panel button.
 
     kind: "primary" (the main action), "dim" (ordinary), "on" / "off" (a switch),
-    "choice" (one of two equal options — neither reads as disabled)."""
-    pad = "padding: 0 10px;" if align == "left" else "padding: 0 6px;"
-    base = f"text-align: {align}; {pad} border-radius: 0px;"
+    "choice" (one of two equal options — neither reads as disabled), "danger"."""
+    pad = "padding: 0 12px;" if align == "left" else "padding: 0 10px;"
+    base = f"text-align: {align}; {pad} border-radius: 4px; font-weight: 500;"
     if kind == "primary":
         return f"""
-            QPushButton {{ background: {C.PRI_GHO}; color: {C.PRI};
-                border: 1px solid {C.PRI_DIM}; border-left: 3px solid {C.PRI}; {base} }}
-            QPushButton:hover {{ border-color: {C.PRI}; color: {C.WHITE}; }}
-            QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}"""
-    if kind == "on":
+            QPushButton {{ background: {C.PRI}; color: #ffffff;
+                border: 1px solid {C.PRI}; {base} }}
+            QPushButton:hover {{ background: #0091ff; border-color: #0091ff; color: #ffffff; }}
+            QPushButton:pressed {{ background: #0070db; border-color: #0070db; }}
+            QPushButton:disabled {{ background: {C.PANEL2}; color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}"""
+    if kind in ("on", "success"):
         return f"""
-            QPushButton {{ background: {C.PANEL2}; color: {C.GREEN};
-                border: 1px solid {C.GREEN_D}; border-left: 3px solid {C.GREEN}; {base} }}
-            QPushButton:hover {{ border-color: {C.GREEN}; }}
+            QPushButton {{ background: rgba(16, 185, 129, 0.12); color: {C.GREEN};
+                border: 1px solid {C.GREEN_D}; {base} }}
+            QPushButton:hover {{ background: rgba(16, 185, 129, 0.2); border-color: {C.GREEN}; color: #ffffff; }}
+            QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}"""
+    if kind in ("danger", "red"):
+        return f"""
+            QPushButton {{ background: rgba(239, 68, 68, 0.12); color: {C.RED};
+                border: 1px solid {C.RED}; {base} }}
+            QPushButton:hover {{ background: rgba(239, 68, 68, 0.22); border-color: #f87171; color: #ffffff; }}
             QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}"""
     if kind == "choice":
         return f"""
-            QPushButton {{ background: {C.PANEL2}; color: {C.PRI};
-                border: 1px solid {C.BORDER_A}; border-left: 3px solid {C.PRI_DIM}; {base} }}
-            QPushButton:hover {{ color: {C.WHITE}; border-color: {C.BORDER_B}; }}"""
-    # "dim" and "off"
+            QPushButton {{ background: {C.PANEL2}; color: {C.TEXT};
+                border: 1px solid {C.BORDER_A}; {base} }}
+            QPushButton:hover {{ color: {C.WHITE}; border-color: {C.BORDER_B}; background: #16223b; }}"""
+    # "dim", "secondary" and "off"
     return f"""
-        QPushButton {{ background: {C.PANEL}; color: {C.TEXT_MED if kind == 'dim' else C.TEXT_DIM};
-            border: 1px solid {C.BORDER}; border-left: 3px solid {C.BORDER_A}; {base} }}
-        QPushButton:hover {{ color: {C.PRI}; border-color: {C.BORDER_B};
-            border-left: 3px solid {C.PRI_DIM}; }}
+        QPushButton {{ background: {C.PANEL2}; color: {C.TEXT};
+            border: 1px solid {C.BORDER_A}; {base} }}
+        QPushButton:hover {{ color: {C.WHITE}; border-color: {C.BORDER_B}; background: #16223b; }}
+        QPushButton:pressed {{ background: {C.PANEL}; }}
         QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}"""
 
 

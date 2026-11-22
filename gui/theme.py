@@ -82,32 +82,33 @@ _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
 
 class C:
-    BG        = "#00060a"
-    PANEL     = "#010d14"
-    PANEL2    = "#010f18"
-    BORDER    = "#0d3347"
-    BORDER_B  = "#1a5c7a"
-    BORDER_A  = "#0f4060"
-    PRI       = "#00d4ff"
-    PRI_DIM   = "#007a99"
-    PRI_GHO   = "#001f2e"
-    ACC       = "#ff6b00"
-    ACC2      = "#ffcc00"
-    GREEN     = "#00ff88"
-    GREEN_D   = "#00aa55"
-    RED       = "#ff3355"
-    MUTED_C   = "#ff3366"
-    TEXT      = "#8ffcff"
-    TEXT_DIM  = "#3a8a9a"
-    TEXT_MED  = "#5ab8cc"
-    WHITE     = "#d8f8ff"
-    DARK      = "#000d14"
-    BAR_BG    = "#011520"
+    BG        = "#070b14"  # Deep midnight navy primary background
+    PANEL     = "#0c1322"  # Secondary surface: dark blue-gray
+    PANEL2    = "#111a2e"  # Elevated surface: slightly lighter dark blue-gray
+    PANEL_HEAD= "#0f172a"  # Table / card header surface
+    BORDER    = "#1e293b"  # Subtle hairline border
+    BORDER_B  = "#334155"  # Active / hover border
+    BORDER_A  = "#1e293b"  # Subtle separator border
+    PRI       = "#0084ff"  # Controlled electric blue (primary accent)
+    PRI_DIM   = "#005bb5"  # Muted electric blue
+    PRI_GHO   = "#0b1c33"  # Quiet dark blue surface highlight
+    ACC       = "#f59e0b"  # Amber warning
+    ACC2      = "#38bdf8"  # Muted cyan (secondary accent)
+    GREEN     = "#10b981"  # Restrained green (success)
+    GREEN_D   = "#059669"  # Dark green
+    RED       = "#ef4444"  # Controlled red (error)
+    MUTED_C   = "#f43f5e"  # Rose / alert
+    TEXT      = "#f1f5f9"  # Cool white primary text
+    TEXT_DIM  = "#64748b"  # Desaturated blue-gray secondary text
+    TEXT_MED  = "#94a3b8"  # Medium blue-gray
+    WHITE     = "#f8fafc"  # Crisp cool white
+    DARK      = "#05080f"  # Deepest background
+    BAR_BG    = "#0f1728"  # Track / progress background
 
 
 # Keys tied to the accent colour — status colours (ACC, GREEN, RED…) stay fixed
 _HUE_LINKED = (
-    "BG", "PANEL", "PANEL2", "BORDER", "BORDER_B", "BORDER_A",
+    "BG", "PANEL", "PANEL2", "PANEL_HEAD", "BORDER", "BORDER_B", "BORDER_A",
     "PRI", "PRI_DIM", "PRI_GHO", "TEXT", "TEXT_DIM", "TEXT_MED",
     "WHITE", "DARK", "BAR_BG",
 )

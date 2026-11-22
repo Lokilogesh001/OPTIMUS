@@ -55,40 +55,40 @@ class SectionVision(QWidget):
 
         # ── 1. Top Header Row ────────────────────────────────────────────────
         hdr = QHBoxLayout()
-        title = QLabel("VISION COMMAND CENTER  ·  ALWAYS-ON DESKTOP AWARENESS")
-        title.setFont(px_font(13, QFont.Weight.Bold, spacing=2.0))
-        title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        title = QLabel("VISUAL AWARENESS & DESKTOP SUPERVISION")
+        title.setFont(px_font(12, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
         hdr.addWidget(title)
-        hdr.addSpacing(15)
+        hdr.addSpacing(12)
 
-        self.lbl_status_badge = QLabel("[STATUS: OBSERVING ACTIVE]")
+        self.lbl_status_badge = QLabel("OBSERVING ACTIVE")
         self.lbl_status_badge.setFont(mono_font(8))
-        self.lbl_status_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(0, 255, 128, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
+        self.lbl_status_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(16, 185, 129, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
         hdr.addWidget(self.lbl_status_badge)
 
-        self.lbl_supervisor_badge = QLabel("[SUPERVISOR: IDLE]")
+        self.lbl_supervisor_badge = QLabel("SUPERVISOR: IDLE")
         self.lbl_supervisor_badge.setFont(mono_font(8))
-        self.lbl_supervisor_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 212, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
+        self.lbl_supervisor_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 132, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
         hdr.addWidget(self.lbl_supervisor_badge)
 
         hdr.addStretch()
 
         # Pause / Resume / Clear buttons
-        self.btn_pause = QPushButton("⏸ PAUSE")
-        self.btn_pause.setFont(px_font(10, QFont.Weight.Bold))
-        self.btn_pause.setStyleSheet(btn_css(C.ACC))
+        self.btn_pause = QPushButton("Pause")
+        self.btn_pause.setFont(px_font(10, QFont.Weight.Medium))
+        self.btn_pause.setStyleSheet(btn_css("dim"))
         self.btn_pause.clicked.connect(self._toggle_pause)
         hdr.addWidget(self.btn_pause)
 
-        self.btn_clear = QPushButton("🗑 CLEAR CONTEXT")
-        self.btn_clear.setFont(px_font(10, QFont.Weight.Bold))
-        self.btn_clear.setStyleSheet(btn_css(C.TEXT_DIM))
+        self.btn_clear = QPushButton("Clear Context")
+        self.btn_clear.setFont(px_font(10, QFont.Weight.Medium))
+        self.btn_clear.setStyleSheet(btn_css("dim"))
         self.btn_clear.clicked.connect(self._clear_context)
         hdr.addWidget(self.btn_clear)
 
-        self.btn_refresh = QPushButton("⟳ REFRESH")
-        self.btn_refresh.setFont(px_font(10, QFont.Weight.Bold))
-        self.btn_refresh.setStyleSheet(btn_css(C.PRI))
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setFont(px_font(10, QFont.Weight.Medium))
+        self.btn_refresh.setStyleSheet(btn_css("primary"))
         self.btn_refresh.clicked.connect(self.refresh_vision)
         hdr.addWidget(self.btn_refresh)
 
@@ -252,7 +252,7 @@ class SectionVision(QWidget):
         self.txt_supervisor_log.setStyleSheet(scroll_css() + f"""
             QTextEdit {{
                 background: {C.PANEL};
-                color: {C.TEXT_BRIGHT};
+                color: {C.WHITE};
                 border: 1px solid {C.BORDER};
                 border-radius: 3px;
                 padding: 6px;
@@ -345,9 +345,9 @@ class SectionVision(QWidget):
             state_item.setForeground(QColor(C.GREEN if w.is_active else (C.ACC if w.is_minimized else C.WHITE)))
             self.table_windows.setItem(row, 3, state_item)
 
-            btn_act = QPushButton("FOCUS")
-            btn_act.setFont(px_font(8, QFont.Weight.Bold))
-            btn_act.setStyleSheet(btn_css(C.PRI))
+            btn_act = QPushButton("Focus")
+            btn_act.setFont(px_font(9, QFont.Weight.Medium))
+            btn_act.setStyleSheet(btn_css("primary"))
             btn_act.clicked.connect(lambda checked=False, target_hwnd=w.hwnd: self._on_activate_window(target_hwnd))
             self.table_windows.setCellWidget(row, 4, btn_act)
 
@@ -371,9 +371,9 @@ class SectionVision(QWidget):
             state_item.setForeground(QColor(C.GREEN if t.is_active else C.TEXT_DIM))
             self.table_tabs.setItem(row, 3, state_item)
 
-            btn_sw = QPushButton("SWITCH")
-            btn_sw.setFont(px_font(8, QFont.Weight.Bold))
-            btn_sw.setStyleSheet(btn_css(C.PRI))
+            btn_sw = QPushButton("Switch")
+            btn_sw.setFont(px_font(9, QFont.Weight.Medium))
+            btn_sw.setStyleSheet(btn_css("primary"))
             btn_sw.clicked.connect(lambda checked=False, tab_id=t.tab_id: self._on_switch_tab(tab_id))
             self.table_tabs.setCellWidget(row, 4, btn_sw)
 

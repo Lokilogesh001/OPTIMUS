@@ -293,6 +293,8 @@ class SectionPersonal(QWidget):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.sub_buttons):
             btn.setStyleSheet(self._subnav_btn_style(i == index))
+        if index == 4:
+            self._refresh_accounts()
 
     # ── View 0: Dashboard ────────────────────────────────────────────────────
 
@@ -802,7 +804,7 @@ class SectionPersonal(QWidget):
                 btn_disc.clicked.connect(lambda checked=False, aid=a.account_id: self._disconnect_account(aid))
                 act_box.addWidget(btn_disc)
             else:
-                btn_reconn = QPushButton("CONNECT / REAUTH")
+                btn_reconn = QPushButton(f"CONNECT / REAUTH {a.provider.value.upper()}")
                 btn_reconn.setFont(px_font(8, QFont.Weight.Bold))
                 btn_reconn.setStyleSheet(btn_css("primary"))
                 btn_reconn.setFixedHeight(26)
