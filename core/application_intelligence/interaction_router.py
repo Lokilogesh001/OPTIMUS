@@ -19,6 +19,8 @@ from typing import Any
 
 from core.application_intelligence.adapters import get_adapter
 from core.application_intelligence.desktop_lock import DesktopInteractionLock
+from core.application_intelligence.frameworks.base import ExecutionRequest
+from core.application_intelligence.frameworks.registry import ProviderRegistry
 from core.application_intelligence.registry import ApplicationRegistry
 from core.application_intelligence.types import (
     ActionContract,
@@ -32,8 +34,11 @@ logger = logging.getLogger("optimus.application_intelligence.router")
 class InteractionRouter:
     """Dynamic multi-tier execution coordinator for desktop applications."""
 
+    DEFAULT_TIMEOUT = 20.0
+
     def __init__(self) -> None:
         self.registry = ApplicationRegistry.instance()
+        self.provider_registry = ProviderRegistry.instance()
 
     def select_best_tier(self, contract: ActionContract) -> AppInteractionTier:
         """Determine the optimal interaction tier for an action contract."""
@@ -73,20 +78,104 @@ class InteractionRouter:
             tier_used=current_tier,
         )
 
-        with DesktopInteractionLock(owner=f"router_{contract.action_id}", timeout=20.0):
-            # Check UIPI Elevation Barrier (reconciles HIGH-6)
-            from core.application_intelligence.registry import ApplicationRegistry
-            app_def = ApplicationRegistry.instance().find_app(contract.target_app)
-            if app_def and app_def.integrity_level == "High":
-                logger.warning("UIPI barrier detected: '%s' has High Integrity (Admin)", contract.target_app)
+        # 1. Check UIPI Elevation Barrier (reconciles HIGH-6)
+        from core.application_intelligence.registry import ApplicationRegistry
+        app_def = ApplicationRegistry.instance().find_app(contract.target_app)
+        if app_def and app_def.integrity_level == "High":
+            logger.warning("UIPI barrier detected: '%s' has High Integrity (Admin)", contract.target_app)
+            return ExecutionEvidence(
+                action_id=contract.action_id,
+                status="failed",
+                tier_used=current_tier,
+                error_message=f"UIPI_ELEVATION_BARRIER: Target application '{contract.target_app}' is running with elevated (Administrator) privileges. OPTIMUS cannot actuate elevated windows from a standard integrity token.",
+            )
+
+        # 2. Authoritative PolicyEngine Gate for privileged operations (reconciles CRIT-2)
+        if contract.requires_approval or contract.is_destructive or any(op in contract.operation.lower() for op in ("send_message", "delete_", "wipe_", "format_", "pay_")):
+            from core.security.policy_engine import OperationRequest, PolicyEngine
+            pe = PolicyEngine.instance()
+            token_obj = None
+            if contract.approval_token:
+                token_obj = pe.get_token(contract.approval_token)
+
+            if token_obj is None and (contract.requires_approval or contract.is_destructive):
                 return ExecutionEvidence(
                     action_id=contract.action_id,
-                    status="failed",
+                    status="unverified",
                     tier_used=current_tier,
-                    error_message=f"UIPI_ELEVATION_BARRIER: Target application '{contract.target_app}' is running with elevated (Administrator) privileges. OPTIMUS cannot actuate elevated windows from a standard integrity token.",
+                    error_message="APPROVAL_REQUIRED: Operation is flagged as destructive/sensitive and requires an authentic PolicyEngine approval token.",
+                    evidence_data={"requires_approval": True},
                 )
 
-            # Attempt execution starting at current_tier, falling back down the ladder
+            verdict = pe.evaluate_operation(OperationRequest(
+                tool_name=contract.operation,
+                agent_name=contract.caller_identity or "application_agent",
+                arguments=contract.parameters,
+                approval_token=token_obj,
+            ))
+            if verdict.requires_approval or not verdict.is_authorized:
+                return ExecutionEvidence(
+                    action_id=contract.action_id,
+                    status="unverified",
+                    tier_used=current_tier,
+                    error_message=f"APPROVAL_REQUIRED: {verdict.reason}",
+                    evidence_data={
+                        "reason": verdict.reason,
+                        "challenge": verdict.approval_challenge,
+                    },
+                )
+
+        # 3. Dynamic Framework Provider Selection (M18)
+        provider = self.provider_registry.select_best_provider(contract, preferred_tier=current_tier)
+        if provider:
+            req = ExecutionRequest(
+                action_id=contract.action_id,
+                target_app=contract.target_app,
+                operation=contract.operation,
+                parameters=contract.parameters,
+                approval_token=contract.approval_token,
+                session_nonce=contract.session_nonce,
+                caller_identity=contract.caller_identity,
+            )
+
+            # Conditional lock acquisition: Headless and background COM do not stall foreground UX (MED-1)
+            if provider.requires_desktop_lock:
+                lock_ctx = DesktopInteractionLock(owner=f"router_{contract.action_id}", timeout=20.0)
+            else:
+                from contextlib import nullcontext
+                lock_ctx = nullcontext()
+
+            with lock_ctx:
+                try:
+                    resp = provider.execute(req)
+                    if resp.is_success:
+                        self.provider_registry.record_outcome(provider.name, True, resp.duration_ms)
+                        return ExecutionEvidence(
+                            action_id=contract.action_id,
+                            status="done",
+                            tier_used=current_tier,
+                            facts=resp.facts,
+                            evidence_data=resp.evidence_data,
+                        )
+                    else:
+                        self.provider_registry.record_outcome(provider.name, False, resp.duration_ms)
+                        # Polymorphic rollback (reconciles HIGH-4)
+                        provider.rollback(req, resp)
+                        if "APPROVAL_REQUIRED" in (resp.error_message or ""):
+                            return ExecutionEvidence(
+                                action_id=contract.action_id,
+                                status="unverified",
+                                tier_used=current_tier,
+                                error_message=resp.error_message,
+                                evidence_data=resp.evidence_data,
+                            )
+                except Exception as ex:
+                    logger.warning("Provider '%s' failed: %s. Falling back down ladder.", provider.name, ex)
+                    self.provider_registry.record_outcome(provider.name, False, 100.0)
+                    provider.rollback(req, ExecutionResponse(action_id=contract.action_id, status="failed", error_message=str(ex)))
+
+        # 4. Standard Tier Ladder Fallback
+        with DesktopInteractionLock(owner=f"router_{contract.action_id}", timeout=20.0):
             ladder = [
                 AppInteractionTier.TIER_1_NATIVE_API,
                 AppInteractionTier.TIER_2_ADAPTER,
@@ -228,3 +317,6 @@ class InteractionRouter:
             time.sleep(0.1)
         except Exception as ex:
             logger.debug("Rollback keypress failed: %s", ex)
+
+    # Convenience alias for test and external caller compatibility
+    route_and_execute = dispatch

@@ -31,9 +31,9 @@ logger = logging.getLogger("optimus.application_intelligence.adapter.browser")
 
 
 def _wrap_untrusted_web_content(content: str, url: str = "", title: str = "") -> str:
-    """Enclose web page content in structural XML delimiters to prevent prompt injection (HIGH-3)."""
-    sanitized = content.replace("<untrusted_external_content", "").replace("</untrusted_external_content>", "")
-    return f'<untrusted_external_content source="browser" url="{url}" title="{title}">\n{sanitized}\n</untrusted_external_content>'
+    """Enclose web page content using canonical core.outcome.untrusted sentinel (CRIT-3)."""
+    header = f"[{title}]({url})\n" if (url or title) else ""
+    return untrusted("web", f"{header}{content}")
 
 
 class BrowserAdapter(BaseApplicationAdapter):

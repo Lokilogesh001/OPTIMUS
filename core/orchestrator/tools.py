@@ -810,6 +810,77 @@ class ToolRegistry:
             is_mutating=True,
         ))
 
+        # ── Milestone 18: Advanced Execution Framework Integration Tools ──────────
+
+        def _app_provider_status_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.frameworks.registry import ProviderRegistry
+            reg = ProviderRegistry.instance()
+            providers = reg.list_providers()
+            lines = []
+            ev_list = []
+            for p in providers:
+                status = reg.check_and_update_health(p)
+                line = (
+                    f"[{p.name.upper()}] Status: {status.value.upper()} | "
+                    f"Successes: {p.success_count} | Failures: {p.consecutive_failures} | "
+                    f"Avg Latency: {p.get_average_latency_ms():.1f}ms | NeedsLock: {p.requires_desktop_lock}"
+                )
+                lines.append(line)
+                ev_list.append({
+                    "name": p.name,
+                    "status": status.value,
+                    "success_count": p.success_count,
+                    "consecutive_failures": p.consecutive_failures,
+                    "avg_latency_ms": p.get_average_latency_ms(),
+                    "requires_desktop_lock": p.requires_desktop_lock,
+                })
+
+            return ToolResult(
+                status="done",
+                output="\n".join(lines) if lines else "No execution framework providers registered.",
+                evidence={"providers": ev_list, "count": len(ev_list)},
+            )
+
+        self.register(ToolDefinition(
+            name="app_provider_status",
+            description="Query the operational status, circuit-breaker states, and latency metrics of execution framework providers (UFO, Playwright, Stagehand, pywinauto, OmniParser).",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_app_provider_status_handler,
+            is_mutating=False,
+        ))
+
+        def _app_benchmark_providers_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.application_intelligence.frameworks.omniparser.benchmark import OmniParserBenchmark
+            bench = OmniParserBenchmark.run_benchmark()
+            evidence_data = {
+                **bench,
+                "hardware_environment": bench.get("hardware", {}),
+                "benchmark": bench,
+            }
+            return ToolResult(
+                status="done",
+                output=(
+                    f"Framework Benchmark Complete:\n"
+                    f"- Device: {bench['hardware']['device_name']}\n"
+                    f"- CUDA Available: {bench['hardware']['cuda_available']}\n"
+                    f"- Free VRAM: {bench['hardware']['free_vram_mb']:.1f} MB (Meets 3GB: {bench['hardware']['meets_3gb_threshold']})\n"
+                    f"- Benchmark Latency: {bench['benchmark_latency_ms']:.1f} ms\n"
+                    f"- Adoption Decision: {bench['adoption_decision']}\n"
+                    f"- Recommendation: {bench['recommendation']}"
+                ),
+                evidence=evidence_data,
+            )
+
+        self.register(ToolDefinition(
+            name="app_benchmark_providers",
+            description="Benchmark execution providers (including OmniParser visual grounding on RTX 3050 / CPU) for latency, memory, and VRAM feasibility.",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_app_benchmark_providers_handler,
+            is_mutating=False,
+        ))
+
     def register(self, tool_def: ToolDefinition) -> None:
         """Register or update a tool definition in the registry."""
         self._tools[tool_def.name] = tool_def

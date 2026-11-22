@@ -201,6 +201,8 @@ class AgentRegistry:
                     "app_execute_action",
                     "app_resolve_entity",
                     "app_learn_workflow",
+                    "app_provider_status",
+                    "app_benchmark_providers",
                 ],
                 allowed_tiers=[
                     CapabilityTier.READ_ONLY,
@@ -276,6 +278,8 @@ class AgentRegistry:
                     "open_in_explorer",
                     "open_app",
                     "search_web",
+                    "app_provider_status",
+                    "app_benchmark_providers",
                 ],
                 allowed_tiers=[
                     CapabilityTier.READ_ONLY,

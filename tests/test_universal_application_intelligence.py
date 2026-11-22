@@ -286,8 +286,9 @@ def test_10_search_web_and_return_useful_sourced_results():
     assert res["source_count"] >= 2
     assert any("H100" in s["title"] or "Blackwell" in s["title"] for s in res["sources"])
     assert "### Web Intelligence Synthesis" in res["synthesized_comparison"]
-    # Verify indirect prompt injection protection (HIGH-3)
-    assert "<untrusted_external_content" in res["synthesized_comparison"]
+    # Verify indirect prompt injection protection (CRIT-3 canonical untrusted demarcator)
+    assert "<<<UNTRUSTED source=web>>>" in res["synthesized_comparison"]
+    assert "<<<END UNTRUSTED>>>" in res["synthesized_comparison"]
 
 
 # ── Scenario 11: Open a browser tab and navigate to a requested page ─────────

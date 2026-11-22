@@ -78,12 +78,14 @@ class WorkflowStore:
     def save_workflow(self, workflow: LearnedWorkflow) -> None:
         """Save a learned workflow and register into SkillRegistry as UNVERIFIED."""
         with self._lock:
+            # Reconciles HIGH-5: Newly saved workflows are ALWAYS UNVERIFIED initially
+            workflow.validation_state = "UNVERIFIED"
             self._workflows[workflow.workflow_id] = workflow
             self._save()
 
             # Bridge into SkillRegistry as SkillManifest (reconciles HIGH-5)
-            # Must remain UNVERIFIED initially
-            trust = SkillTrustLevel.UNVERIFIED if workflow.validation_state != "VERIFIED_SKILL" else SkillTrustLevel.TRUSTED
+            # Reconciles HIGH-5: Newly saved workflows are ALWAYS UNVERIFIED initially
+            trust = SkillTrustLevel.UNVERIFIED
             instructions = (
                 f"# Autonomous Application Workflow: {workflow.target_app} — {workflow.goal}\n\n"
                 f"**Application:** {workflow.target_app}\n"
@@ -112,6 +114,24 @@ class WorkflowStore:
             )
             self.skill_registry.register(manifest, overwrite=True)
             logger.info("Registered learned workflow '%s' into SkillRegistry with trust=%s", workflow.workflow_id, trust.value)
+
+    def promote_workflow(self, workflow_id: str, human_confirmed: bool = False) -> bool:
+        """Promote a verified workflow to TRUSTED after explicit human confirmation (HIGH-5)."""
+        if not human_confirmed:
+            logger.warning("Attempted workflow promotion without explicit human confirmation for '%s'", workflow_id)
+            return False
+        with self._lock:
+            wf = self._workflows.get(workflow_id)
+            if not wf:
+                return False
+            wf.validation_state = "VERIFIED_SKILL"
+            manifest = self.skill_registry.get(workflow_id)
+            if manifest:
+                manifest.trust_level = SkillTrustLevel.TRUSTED
+                self.skill_registry.register(manifest, overwrite=True)
+            self._save()
+            logger.info("Workflow '%s' promoted to TRUSTED with human confirmation", workflow_id)
+            return True
 
     def get_workflow(self, workflow_id: str) -> LearnedWorkflow | None:
         """Fetch a learned workflow by ID."""

@@ -20,6 +20,12 @@ class AppInteractionTier(str, Enum):
     TIER_4_BROWSER_DOM = "tier_4_browser_dom"        # Browser automation / CDP / DOM interaction
     TIER_5_VISUAL_ACTUATION = "tier_5_visual_act"    # Visual Computer Use / Screen observation & actuation
 
+    # Convenience aliases
+    DIRECT_API = "tier_1_native_api"
+    UI_AUTOMATION = "tier_3_ui_automation"
+    DOM_ACCESSIBILITY = "tier_4_browser_dom"
+    VISUAL_COMPUTER_USE = "tier_5_visual_act"
+
 
 class AppCategory(str, Enum):
     """Functional categorization of desktop applications."""
@@ -128,14 +134,24 @@ class ResolutionResult:
 @dataclass
 class ActionContract:
     """Pre-execution contract defining an operation on an application."""
-    action_id: str
-    target_app: str
-    operation: str
+    action_id: str = ""
+    target_app: str = ""
+    operation: str = ""
     parameters: dict[str, Any] = field(default_factory=dict)
     preconditions: list[str] = field(default_factory=list)
     expected_outcome: str = ""
     requires_approval: bool = False
+    approval_token: str | None = None          # Reconciles CRIT-2
+    session_nonce: str | None = None           # Reconciles CRIT-2
+    caller_identity: str = "orchestrator"      # Reconciles CRIT-2
     verification_strategy: str = "window_state"  # "window_state", "element_visible", "file_exists", "process_running"
+    tier: AppInteractionTier | None = None
+    is_destructive: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.action_id:
+            import uuid
+            self.action_id = f"act_{uuid.uuid4().hex[:12]}"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -146,6 +162,9 @@ class ActionContract:
             "preconditions": self.preconditions,
             "expected_outcome": self.expected_outcome,
             "requires_approval": self.requires_approval,
+            "approval_token": self.approval_token,
+            "session_nonce": self.session_nonce,
+            "caller_identity": self.caller_identity,
             "verification_strategy": self.verification_strategy,
         }
 

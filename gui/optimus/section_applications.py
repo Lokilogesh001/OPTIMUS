@@ -33,6 +33,12 @@ from PyQt6.QtWidgets import (
 
 from core.application_intelligence.adapters import get_adapter
 from core.application_intelligence.capabilities import STANDARD_CAPABILITIES
+from core.application_intelligence.frameworks import (
+    BaseExecutionProvider,
+    OmniParserBenchmark,
+    ProviderHealthStatus,
+    ProviderRegistry,
+)
 from core.application_intelligence.learning_engine import ApplicationLearningEngine
 from core.application_intelligence.registry import ApplicationRegistry
 from core.application_intelligence.types import LearnedWorkflow
@@ -98,7 +104,7 @@ class SectionApplications(QWidget):
         subnav_box = QHBoxLayout()
         subnav_box.setSpacing(6)
         self.sub_buttons: list[QPushButton] = []
-        tabs = ["APPLICATIONS", "RUNNING INSTANCES", "ADAPTERS", "LEARNED SKILLS"]
+        tabs = ["APPLICATIONS", "RUNNING INSTANCES", "ADAPTERS", "LEARNED SKILLS", "FRAMEWORK PROVIDERS"]
         for idx, tab_name in enumerate(tabs):
             btn = QPushButton(tab_name)
             btn.setFont(px_font(9, QFont.Weight.DemiBold))
@@ -115,10 +121,11 @@ class SectionApplications(QWidget):
         self.stack = QStackedWidget(self)
         root_lay.addWidget(self.stack, stretch=1)
 
-        self._init_apps_view()       # 0
-        self._init_running_view()    # 1
-        self._init_adapters_view()   # 2
-        self._init_skills_view()     # 3
+        self._init_apps_view()          # 0
+        self._init_running_view()       # 1
+        self._init_adapters_view()      # 2
+        self._init_skills_view()        # 3
+        self._init_frameworks_view()    # 4
 
         self._refresh_all()
 
@@ -139,6 +146,8 @@ class SectionApplications(QWidget):
             self._refresh_adapters_table()
         elif index == 3:
             self._refresh_skills_table()
+        elif index == 4:
+            self._refresh_frameworks_table()
 
     def _style_table(self, tbl: QTableWidget) -> None:
         tbl.setStyleSheet(f"""
@@ -221,6 +230,28 @@ class SectionApplications(QWidget):
         panel.body.addWidget(self.tbl_skills)
         self.stack.addWidget(panel)
 
+    # ── View 4: Framework Providers ───────────────────────────────────────────
+    def _init_frameworks_view(self) -> None:
+        panel = HoloPanel("EXECUTION FRAMEWORK PROVIDERS & CIRCUIT BREAKERS")
+        self.tbl_frameworks = QTableWidget(0, 6)
+        self.tbl_frameworks.setHorizontalHeaderLabels([
+            "PROVIDER NAME",
+            "TYPE / DOMAIN",
+            "HEALTH STATUS",
+            "CIRCUIT BREAKER",
+            "HARDWARE / BENCHMARK",
+            "ACTIONS",
+        ])
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.tbl_frameworks.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self._style_table(self.tbl_frameworks)
+        panel.body.addWidget(self.tbl_frameworks)
+        self.stack.addWidget(panel)
+
     # ── Refresh Logic ─────────────────────────────────────────────────────────
     def _refresh_all(self) -> None:
         self.registry.refresh(force=True)
@@ -228,6 +259,7 @@ class SectionApplications(QWidget):
         self._refresh_running_table()
         self._refresh_adapters_table()
         self._refresh_skills_table()
+        self._refresh_frameworks_table()
 
     def _refresh_apps_table(self) -> None:
         apps = self.registry.list_all_apps()
@@ -381,6 +413,134 @@ class SectionApplications(QWidget):
             f"Workflow: {wf.workflow_id}",
             f"Target: {wf.target_app}\nGoal: {wf.goal}\nValidation: {wf.validation_state}\n\nSteps:\n{steps_str}",
         )
+
+    def _refresh_frameworks_table(self) -> None:
+        reg = ProviderRegistry.instance()
+        providers = reg.list_providers()
+        self.tbl_frameworks.setRowCount(0)
+
+        domain_map = {
+            "ufo_desktop": "Windows WinCOM & AppAgent (Word/Excel/Settings)",
+            "pywinauto_uia": "Native UIA Pattern Automation (Desktop GUI)",
+            "playwright_browser": "Headless Browser Automation (DOM/Locators)",
+            "stagehand_intelligence": "Browser Intelligence (Natural Language/Extract)",
+            "omniparser_grounding": "Visual Grounding & Icon Parsing (Screen-aware)",
+        }
+
+        for row, prov in enumerate(providers):
+            self.tbl_frameworks.insertRow(row)
+            self.tbl_frameworks.setItem(row, 0, QTableWidgetItem(prov.name))
+            self.tbl_frameworks.setItem(row, 1, QTableWidgetItem(domain_map.get(prov.name, "Desktop Automation")))
+
+            # Health status with color
+            status_name = prov.health_status.value.upper()
+            avg_lat = prov.get_average_latency_ms()
+            lat_str = f" ({avg_lat:.0f}ms)" if avg_lat > 0 else ""
+            st_item = QTableWidgetItem(f"{status_name}{lat_str}")
+            if prov.health_status == ProviderHealthStatus.AVAILABLE:
+                st_item.setForeground(QColor(C.GREEN))
+            elif prov.health_status in (ProviderHealthStatus.DEGRADED, ProviderHealthStatus.PROBING):
+                st_item.setForeground(QColor(C.ACC))
+            else:
+                st_item.setForeground(QColor("#EF4444"))
+            self.tbl_frameworks.setItem(row, 2, st_item)
+
+            # Circuit breaker state
+            if prov.health_status == ProviderHealthStatus.AVAILABLE:
+                cb_str = "CLOSED (0 fails)"
+            elif prov.health_status == ProviderHealthStatus.UNAVAILABLE:
+                cb_str = f"OPEN ({prov.consecutive_failures} fails · cooldown)"
+            elif prov.health_status == ProviderHealthStatus.PROBING:
+                cb_str = "HALF_OPEN (probing)"
+            else:
+                cb_str = f"DEGRADED ({prov.consecutive_failures} fails)"
+            self.tbl_frameworks.setItem(row, 3, QTableWidgetItem(cb_str))
+
+            # Hardware / Capability column
+            if prov.name == "omniparser_grounding":
+                hw = OmniParserBenchmark.inspect_hardware_environment()
+                hw_desc = f"{hw.get('device_name', 'GPU')} · Free: {hw.get('free_vram_mb', 0):.0f}MB · Active: {'GPU' if hw.get('meets_3gb_threshold') else 'CPU/ONNX'}"
+            elif prov.name == "playwright_browser":
+                hw_desc = f"Headless: True · Desktop Lock: {prov.requires_desktop_lock} · Streamed Downloads: SHA-256"
+            elif prov.name == "ufo_desktop":
+                hw_desc = f"WinCOM: Active · Desktop Lock: {prov.requires_desktop_lock} · AppAgent: ms-settings/explorer"
+            elif prov.name == "pywinauto_uia":
+                hw_desc = f"COM Apartment: STA/MTA Safe · UIA Patterns: Active · Timeout: 5.0s"
+            elif prov.name == "stagehand_intelligence":
+                hw_desc = f"DOM Sanitizer: Active · Untrusted Output Wrapping: Active"
+            else:
+                hw_desc = f"Desktop Lock: {prov.requires_desktop_lock} · Successes: {prov.success_count}"
+            self.tbl_frameworks.setItem(row, 4, QTableWidgetItem(hw_desc))
+
+            # Actions widget
+            act_w = QWidget()
+            act_box = QHBoxLayout(act_w)
+            act_box.setContentsMargins(4, 2, 4, 2)
+            act_box.setSpacing(6)
+
+            btn_probe = QPushButton("PROBE")
+            btn_probe.setFont(px_font(8, QFont.Weight.Bold))
+            btn_probe.setStyleSheet(btn_css("secondary"))
+            btn_probe.setFixedHeight(24)
+            btn_probe.clicked.connect(lambda checked=False, p_name=prov.name: self._probe_provider(p_name))
+            act_box.addWidget(btn_probe)
+
+            btn_bench = QPushButton("BENCHMARK")
+            btn_bench.setFont(px_font(8))
+            btn_bench.setStyleSheet(btn_css("primary" if prov.name == "omniparser_grounding" else "secondary"))
+            btn_bench.setFixedHeight(24)
+            btn_bench.clicked.connect(lambda checked=False, p_name=prov.name: self._benchmark_provider(p_name))
+            act_box.addWidget(btn_bench)
+
+            act_box.addStretch()
+            self.tbl_frameworks.setCellWidget(row, 5, act_w)
+
+    def _probe_provider(self, provider_name: str) -> None:
+        reg = ProviderRegistry.instance()
+        prov = reg.get_provider(provider_name)
+        if not prov:
+            QMessageBox.warning(self, "Provider Probe", f"Provider '{provider_name}' not found.")
+            return
+
+        is_healthy = prov.health_probe()
+        self._refresh_frameworks_table()
+        QMessageBox.information(
+            self,
+            "Provider Health Probe",
+            f"Provider: {prov.name}\n"
+            f"Result: {'PASS (Healthy)' if is_healthy else 'FAIL (Unhealthy)'}\n"
+            f"Current Status: {prov.health_status.value.upper()}\n"
+            f"Total Successes: {prov.success_count}\n"
+            f"Consecutive Failures: {prov.consecutive_failures}",
+        )
+
+    def _benchmark_provider(self, provider_name: str) -> None:
+        if provider_name == "omniparser_grounding":
+            bench = OmniParserBenchmark.run_benchmark()
+            hw = bench.get("hardware", {})
+            QMessageBox.information(
+                self,
+                "OmniParser Hardware Benchmark",
+                f"Device: {hw.get('device_name')}\n"
+                f"Total VRAM: {hw.get('total_vram_mb', 0):.0f} MB\n"
+                f"Free VRAM: {hw.get('free_vram_mb', 0):.0f} MB\n"
+                f"Meets 3.0GB Threshold: {hw.get('meets_3gb_threshold')}\n"
+                f"Active Grounding Mode: {bench.get('mode')}\n"
+                f"Grounding Latency: {bench.get('latency_ms', 0):.1f} ms\n"
+                f"Safety Guard: {'RTX 3050 Protected (<3GB diverted to CPU)' if not hw.get('meets_3gb_threshold') else 'Sufficient VRAM'}",
+            )
+        else:
+            reg = ProviderRegistry.instance()
+            prov = reg.get_provider(provider_name)
+            avg_lat = prov.get_average_latency_ms() if prov else 0.0
+            QMessageBox.information(
+                self,
+                f"Provider Benchmark: {provider_name}",
+                f"Provider: {provider_name}\n"
+                f"Average Execution Latency: {avg_lat:.1f} ms\n"
+                f"Total Operations: {(prov.success_count + prov.consecutive_failures) if prov else 0}\n"
+                f"Lock Required: {prov.requires_desktop_lock if prov else 'N/A'}",
+            )
 
     def _open_learning_dialog(self) -> None:
         dlg = QDialog(self)

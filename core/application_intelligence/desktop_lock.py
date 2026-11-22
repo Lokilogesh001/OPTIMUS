@@ -59,17 +59,22 @@ class DesktopInteractionLock:
         return True
 
     def release(self) -> None:
-        """Release the desktop interaction lock."""
+        """Release the desktop interaction lock, preserving stack integrity under reentrancy."""
         if self._acquired:
             try:
-                self._lock.release()
-                logger.debug("DesktopInteractionLock released by %s", self.owner)
-            except RuntimeError:
-                pass
+                # Reconciles CRIT-1: Mutex is strictly held while popping/modifying the stack
+                if DesktopInteractionLock._owner_stack:
+                    if DesktopInteractionLock._owner_stack[-1] == self.owner:
+                        DesktopInteractionLock._owner_stack.pop()
+                    else:
+                        try:
+                            DesktopInteractionLock._owner_stack.remove(self.owner)
+                        except ValueError:
+                            pass
             finally:
                 self._acquired = False
-                if DesktopInteractionLock._owner_stack:
-                    DesktopInteractionLock._owner_stack.pop()
+                self._lock.release()
+                logger.debug("DesktopInteractionLock released by %s", self.owner)
 
     def __enter__(self) -> DesktopInteractionLock:
         self.acquire()
@@ -87,3 +92,10 @@ class DesktopInteractionLock:
     def get_current_owner(cls) -> str | None:
         """Return the current lock owner."""
         return cls._owner_stack[-1] if cls._owner_stack else None
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset lock state and re-initialize reentrant mutex (testing hook)."""
+        cls._owner_stack.clear()
+        cls._acquired_at = 0.0
+        cls._lock = threading.RLock()
