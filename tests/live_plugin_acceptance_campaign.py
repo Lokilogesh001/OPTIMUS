@@ -6,8 +6,6 @@ actual OPTIMUS application subsystems, UI overlays, registries, and configuratio
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
 from pathlib import Path
 
@@ -20,16 +18,15 @@ _qapp = QApplication.instance()
 if _qapp is None:
     _qapp = QApplication([])
 
-from core.orchestrator.tools import ToolRegistry, CapabilityTier
-from core.plugin_loader import discover_plugins, PluginRegistry, PluginASTValidator
+from core.orchestrator.tools import ToolRegistry
+from core.plugin_loader import PluginASTValidator, discover_plugins
 from gui.overlays import PluginManagerOverlay, PluginSettingsOverlay
 from memory.config_manager import (
-    get_plugin_enabled,
-    save_plugin_enabled,
-    get_plugin_config,
-    save_plugin_config,
-    get_plugin_setting,
     CONFIG_FILE,
+    get_plugin_enabled,
+    get_plugin_setting,
+    save_plugin_config,
+    save_plugin_enabled,
 )
 
 
@@ -216,9 +213,10 @@ def run(p): subprocess.run(["whoami"])
         tmp_bad = Path("plugins") / "_temp_bad.py"
         try:
             tmp_bad.write_text(src_bad_import, encoding="utf-8")
-            # Since tier is READ_ONLY, AST screener allows standard function body but top-level standalone calls fail
+            # Dangerous module import must be rejected by AST screener
             ok, err = PluginASTValidator.validate_source(tmp_bad)
-            assert ok is True  # Valid syntax and declarations
+            assert ok is False
+            assert "dangerous module 'subprocess'" in err
         finally:
             if tmp_bad.exists():
                 tmp_bad.unlink()

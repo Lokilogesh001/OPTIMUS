@@ -13,26 +13,17 @@ Verifies:
 - Model output untrusted demarcation (MED-03).
 - Harmless acceptance test plugin lifecycle (health, calculate, config, error).
 """
-import ast
-import os
 import sys
-import tempfile
-import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from core.orchestrator.tools import CapabilityTier, ToolRegistry
 from core.plugin_loader import (
     PluginASTValidator,
-    PluginRecord,
-    PluginRegistry,
-    _validate,
     discover_plugins,
 )
 from memory.config_manager import (
-    get_plugin_config,
     get_plugin_enabled,
     get_plugin_setting,
     save_plugin_config,

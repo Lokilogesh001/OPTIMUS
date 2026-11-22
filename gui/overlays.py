@@ -583,7 +583,8 @@ class PluginManagerOverlay(QWidget):
         else:
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self._style_toggle(btn, p["enabled"])
-            btn.clicked.connect(lambda _, name=p["name"], b=btn: self._toggle(name, b))
+            tier_val = str(p.get("tier", "READ_ONLY"))
+            btn.clicked.connect(lambda _, name=p["name"], tier=tier_val, b=btn: self._toggle(name, tier, b))
         row.addWidget(btn)
         return row
 
@@ -607,9 +608,9 @@ class PluginManagerOverlay(QWidget):
                 QPushButton:hover {{ color: {C.TEXT}; border-color: {C.BORDER_B}; }}
             """)
 
-    def _toggle(self, name: str, btn: QPushButton):
+    def _toggle(self, name: str, tier: str, btn: QPushButton):
         from memory.config_manager import get_plugin_enabled, save_plugin_enabled
-        new_val = not get_plugin_enabled(name)
+        new_val = not get_plugin_enabled(name, tier)
         save_plugin_enabled(name, new_val)
         self._style_toggle(btn, new_val)
 
@@ -1500,9 +1501,9 @@ class PluginSettingsOverlay(QWidget):
         form.addWidget(self._lbl(title, 10, True, C.PRI))
 
         for field in fields:
-            if not isinstance(field, dict) or not field.get("key"):
+            if not isinstance(field, dict) or not (field.get("key") or field.get("name")):
                 continue
-            key   = field["key"]
+            key   = str(field.get("key") or field.get("name"))
             ftype = (field.get("type") or "text").lower()
             label = field.get("label") or key
             default = field.get("default")
@@ -1624,19 +1625,23 @@ class PluginSettingsOverlay(QWidget):
             lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
 
         def worker():
-            from core.plugin_loader import PluginRegistry
             import concurrent.futures
+
+            from core.plugin_loader import PluginRegistry
+            ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                    fut = ex.submit(run_fn, values)
-                    res = fut.result(timeout=10.0)
-                    if isinstance(res, tuple) and len(res) == 2:
-                        ok, msg = bool(res[0]), str(res[1])
-                    else:
-                        ok, msg = bool(res), str(res)
+                fut = ex.submit(run_fn, values)
+                res = fut.result(timeout=10.0)
+                ex.shutdown(wait=False)
+                if isinstance(res, tuple) and len(res) == 2:
+                    ok, msg = bool(res[0]), str(res[1])
+                else:
+                    ok, msg = bool(res), str(res)
             except concurrent.futures.TimeoutError:
+                ex.shutdown(wait=False, cancel_futures=True)
                 ok, msg = False, "Action timed out after 10 seconds."
             except Exception as e:
+                ex.shutdown(wait=False)
                 ok, msg = False, str(e)
             # Redact secrets before UI emission (HIGH-01)
             sanitized_msg = PluginRegistry.sanitize_secrets(msg)

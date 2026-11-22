@@ -22,7 +22,6 @@ import importlib.util
 import inspect
 import re
 import sys
-import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -55,18 +54,20 @@ _DANGEROUS_MODULES = {"subprocess", "ctypes", "pty", "multiprocessing"}
 
 
 class PluginASTValidator:
-    """Pre-import syntactic AST screening gate (reconciles CRT-02)."""
+    """Pre-import syntactic AST screening gate (reconciles CRT-02 and VULN-01).
+    
+    Enforces deep syntactic checks across the AST:
+    1. Clean syntax without SyntaxError.
+    2. Root consists solely of safe declaration nodes.
+    3. Rejection of forbidden modules (_DANGEROUS_MODULES).
+    4. Forbids standalone root function calls and expressions.
+    5. Prohibits executable statements and calls inside ClassDef bodies.
+    6. Forbids dynamic call invocations in function or class decorators.
+    7. Forbids dangerous invocations inside assignments or comprehensions.
+    """
 
     @classmethod
     def validate_source(cls, path: Path) -> tuple[bool, str]:
-        """Verify plugin source code without executing any top-level statements.
-        
-        Enforces:
-        1. Clean syntax (must parse without SyntaxError).
-        2. Module root consists solely of whitelisted declaration nodes.
-        3. Zero standalone top-level function calls (ast.Expr wrapping ast.Call).
-        4. No top-level calls to dangerous builtins or system mutators.
-        """
         try:
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=path.name)
@@ -75,7 +76,19 @@ class PluginASTValidator:
         except Exception as ex:
             return False, f"AST Parse Error: {ex}"
 
-        # 1. Inspect top-level nodes
+        # 1. Global AST walk for dangerous imports
+        for subnode in ast.walk(tree):
+            if isinstance(subnode, ast.Import):
+                for alias in subnode.names:
+                    top_pkg = alias.name.split(".")[0]
+                    if top_pkg in _DANGEROUS_MODULES:
+                        return False, f"SECURITY_VIOLATION: Import of dangerous module '{alias.name}' is prohibited."
+            elif isinstance(subnode, ast.ImportFrom) and subnode.module:
+                top_pkg = subnode.module.split(".")[0]
+                if top_pkg in _DANGEROUS_MODULES:
+                    return False, f"SECURITY_VIOLATION: Import from dangerous module '{subnode.module}' is prohibited."
+
+        # 2. Inspect root level nodes
         for node in tree.body:
             # Allow docstrings or string constant expressions
             if isinstance(node, ast.Expr):
@@ -85,25 +98,51 @@ class PluginASTValidator:
                 if isinstance(node.value, ast.Call):
                     callee = ast.unparse(node.value.func) if hasattr(ast, "unparse") else "call"
                     return False, f"SECURITY_VIOLATION: Standalone top-level function call '{callee}' is prohibited."
-                # Other non-constant expressions at root are suspicious
                 return False, f"SECURITY_VIOLATION: Non-whitelisted root expression node '{type(node.value).__name__}' is prohibited."
 
             if not isinstance(node, _SAFE_ROOT_NODES):
                 return False, f"SECURITY_VIOLATION: Disallowed root node '{type(node).__name__}' at line {node.lineno}."
 
-            # Inspect calls inside assignments (e.g. X = os.system("..."))
+            # Inspect ClassDef bodies and decorators (reconciles VULN-01)
+            if isinstance(node, ast.ClassDef):
+                # Forbid dynamic decorator calls on classes
+                for dec in node.decorator_list:
+                    if isinstance(dec, ast.Call):
+                        return False, f"SECURITY_VIOLATION: Dynamic class decorator call on '{node.name}' is prohibited."
+                # Class body statements execute at import time!
+                for stmt in node.body:
+                    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    if isinstance(stmt, ast.Pass):
+                        continue
+                    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                        continue
+                    if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                        # Only allow assignments to simple constants or data structures
+                        for sub_stmt in ast.walk(stmt):
+                            if isinstance(sub_stmt, ast.Call):
+                                return False, f"SECURITY_VIOLATION: Call inside class body '{node.name}' at line {stmt.lineno} is prohibited."
+                        continue
+                    return False, f"SECURITY_VIOLATION: Executable statement '{type(stmt).__name__}' in class body '{node.name}' is prohibited."
+
+            # Inspect FunctionDef / AsyncFunctionDef decorators
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for dec in node.decorator_list:
+                    if isinstance(dec, ast.Call):
+                        return False, f"SECURITY_VIOLATION: Dynamic function decorator call on '{node.name}' is prohibited."
+
+            # Inspect calls inside assignments or comprehensions (e.g. X = os.system("..."))
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                val_node = node.value if isinstance(node, ast.Assign) else node.value
-                if val_node and isinstance(val_node, ast.Call):
-                    func_name = ""
-                    if isinstance(val_node.func, ast.Name):
-                        func_name = val_node.func.id
-                    elif isinstance(val_node.func, ast.Attribute):
-                        func_name = ast.unparse(val_node.func) if hasattr(ast, "unparse") else ""
-                    
-                    forbidden_calls = {"eval", "exec", "__import__", "os.system", "os.popen", "subprocess.run", "subprocess.Popen"}
-                    if func_name in forbidden_calls:
-                        return False, f"SECURITY_VIOLATION: Dangerous top-level invocation '{func_name}' is prohibited."
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Call):
+                        func_name = ""
+                        if isinstance(sub.func, ast.Name):
+                            func_name = sub.func.id
+                        elif isinstance(sub.func, ast.Attribute):
+                            func_name = ast.unparse(sub.func) if hasattr(ast, "unparse") else ""
+                        forbidden_calls = {"eval", "exec", "__import__", "os.system", "os.popen", "subprocess.run", "subprocess.Popen"}
+                        if func_name in forbidden_calls:
+                            return False, f"SECURITY_VIOLATION: Dangerous top-level invocation '{func_name}' is prohibited."
 
         return True, ""
 
@@ -217,21 +256,27 @@ class PluginRegistry:
                 if verdict.requires_approval or not verdict.is_authorized:
                     return f"APPROVAL_REQUIRED: Plugin '{name}' execution blocked: {verdict.reason}"
             except Exception as pe_ex:
-                self._logger(f"PolicyEngine check error for plugin '{name}': {pe_ex}")
+                err_msg = f"SECURITY_ERROR: PolicyEngine evaluation failed for '{name}': {pe_ex}"
+                self._logger(err_msg)
+                return err_msg
 
-        # 2. Timeout-Bounded Execution (reconciles HIGH-03)
+        # 2. Timeout-Bounded Execution (reconciles HIGH-03 and VULN-03)
         timeout_sec = rec.timeout or 30.0
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_call_run, rec.run, parameters or {}, player, session_memory)
-                result = future.result(timeout=timeout_sec)
-                return str(result or "Done.")
+            future = executor.submit(_call_run, rec.run, parameters or {}, player, session_memory)
+            result = future.result(timeout=timeout_sec)
+            executor.shutdown(wait=False)
+            # Redact secrets on successful return path (reconciles VULN-04)
+            return self.sanitize_secrets(str(result or "Done."))
         except concurrent.futures.TimeoutError:
+            executor.shutdown(wait=False, cancel_futures=True)
             msg = f"Sir, the '{name}' plugin timed out after {timeout_sec:.0f} seconds."
             self._logger(msg)
             self._notify(msg)
             return msg
         except Exception as e:
+            executor.shutdown(wait=False)
             raw_err = str(e)
             sanitized = self.sanitize_secrets(raw_err)
             self._logger(f"Plugin '{name}' crashed during run(): {sanitized}")

@@ -7,6 +7,7 @@ and secret-redacted error containment.
 from __future__ import annotations
 
 from typing import Any
+
 from memory.config_manager import get_plugin_setting
 
 PLUGIN = {
@@ -42,8 +43,8 @@ PLUGIN_SETTINGS = {
     "namespace": "acceptance_test_plugin",
     "title": "Acceptance Test Plugin Settings",
     "fields": [
-        {"name": "test_threshold", "type": "int", "default": 100, "label": "Test Threshold"},
-        {"name": "test_api_key", "type": "secret", "default": "", "label": "Simulated Secret Key"},
+        {"key": "test_threshold", "name": "test_threshold", "type": "int", "default": 100, "label": "Test Threshold"},
+        {"key": "test_api_key", "name": "test_api_key", "type": "secret", "default": "", "label": "Simulated Secret Key"},
     ],
     "action": {
         "label": "TEST",
