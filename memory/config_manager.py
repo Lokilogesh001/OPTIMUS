@@ -389,9 +389,19 @@ def save_output_device(name: str) -> None:
     _patch_config(output_device=(name or "").strip())
 
 
-def get_plugin_enabled(plugin_name: str) -> bool:
-    """Plugins are enabled by default the moment they're discovered (opt-out model)."""
-    return load_api_keys().get("plugins_enabled", {}).get(plugin_name, True)
+def get_plugin_enabled(plugin_name: str, default_tier: str = "READ_ONLY") -> bool:
+    """Plugins are enabled based on capability tier:
+    READ_ONLY plugins default to enabled (safe opt-out model).
+    Elevated capability tiers (WORKSPACE_WRITE, NETWORK_EXTERNAL, EXECUTION, SYSTEM_MUTATING)
+    default to disabled until explicitly activated by user in config or HUD (reconciles CRT-03).
+    """
+    cfg = load_api_keys().get("plugins_enabled", {})
+    if plugin_name in cfg:
+        return bool(cfg[plugin_name])
+    elevated = ("WORKSPACE_WRITE", "NETWORK_EXTERNAL", "EXECUTION", "SYSTEM_MUTATING", "SYSTEM_DESTRUCTIVE")
+    if str(default_tier).upper() in elevated:
+        return False
+    return True
 
 
 # ── Per-plugin settings ("tokens" / connection details) ───────────────────────
@@ -415,17 +425,28 @@ def get_plugin_setting(namespace: str, key: str, default=None):
 @_locked
 def save_plugin_config(namespace: str, values: dict) -> None:
     """Merge `values` into a namespace's stored config (read-modify-write, like
-    every other helper here). Only the provided keys are touched."""
+    every other helper here). Only the provided keys are touched.
+    Enforces namespace validation to prevent core config collisions (reconciles MED-01).
+    """
+    clean_ns = str(namespace or "").strip()
+    _PROTECTED_ROOT_KEYS = {
+        "gemini_api_key", "providers", "plugins_enabled", "input_device",
+        "output_device", "theme", "wake_word", "wake_word_engine", "local_only",
+        "cloud_llm_provider", "personal_intelligence", "api_keys",
+    }
+    if clean_ns.lower() in _PROTECTED_ROOT_KEYS:
+        raise ValueError(f"SECURITY_VIOLATION: Plugin namespace '{clean_ns}' collides with protected core configuration.")
+
     ensure_config_dir()
     data = _read_for_write()
     pc = data.get("plugin_config")
     if not isinstance(pc, dict):
         pc = {}
-    cur = pc.get(namespace)
+    cur = pc.get(clean_ns)
     if not isinstance(cur, dict):
         cur = {}
     cur.update(values)
-    pc[namespace] = cur
+    pc[clean_ns] = cur
     data["plugin_config"] = pc
     _write_config(data)
 

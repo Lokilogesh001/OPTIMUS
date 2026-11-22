@@ -1,5 +1,5 @@
 {
-  "saved_at": 1795360528.167597,
+  "saved_at": 1795363387.6658862,
   "workflows": [
     {
       "workflow_id": "wf_ufo_35053955",
@@ -207,6 +207,76 @@
       "recovery_hints": [],
       "expected_outcome": "Task completed successfully",
       "created_at": 1795360528.127848,
+      "execution_count": 0,
+      "success_count": 0,
+      "metadata": {}
+    },
+    {
+      "workflow_id": "wf_ufo_30a6f2e9",
+      "target_app": "WINWORD.EXE",
+      "goal": "extract_table_to_excel",
+      "action_sequence": [
+        {
+          "step": 1,
+          "action": "UICollector.get_desktop_app_info",
+          "target_element": "WINWORD.EXE",
+          "role": "application_control"
+        },
+        {
+          "step": 2,
+          "action": "HostUIExecutor.select_application_window",
+          "target_element": "WINWORD.EXE",
+          "role": "application_control"
+        },
+        {
+          "step": 3,
+          "action": "WordCOMExecutor.select_table",
+          "target_element": "WINWORD.EXE",
+          "role": "application_control"
+        },
+        {
+          "step": 4,
+          "action": "ExcelCOMExecutor.insert_excel_table",
+          "target_element": "WINWORD.EXE",
+          "role": "application_control"
+        }
+      ],
+      "validation_state": "UNVERIFIED",
+      "preconditions": [
+        "application_running"
+      ],
+      "recovery_hints": [],
+      "expected_outcome": "Task completed successfully",
+      "created_at": 1795363387.5706115,
+      "execution_count": 0,
+      "success_count": 0,
+      "metadata": {}
+    },
+    {
+      "workflow_id": "wf_ufo_19f1af0c",
+      "target_app": "Notepad",
+      "goal": "format_notes",
+      "action_sequence": [
+        {
+          "step": 1,
+          "action": "HostUIExecutor.select_application_window",
+          "target_element": "Notepad",
+          "role": "application_control"
+        },
+        {
+          "step": 2,
+          "action": "AppUIExecutor.set_edit_text",
+          "target_element": "Notepad",
+          "role": "application_control"
+        }
+      ],
+      "validation_state": "VERIFIED_SKILL",
+      "preconditions": [
+        "application_running"
+      ],
+      "recovery_hints": [],
+      "expected_outcome": "Task completed successfully",
+      "created_at": 1795363387.6284578,
       "execution_count": 0,
       "success_count": 0,
       "metadata": {}

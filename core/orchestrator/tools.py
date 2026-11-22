@@ -85,6 +85,7 @@ class ToolDefinition:
     capability_tier: CapabilityTier = CapabilityTier.READ_ONLY
     handler: Callable[..., Any] | None = None
     is_mutating: bool = False
+    is_plugin: bool = False
 
     @property
     def tier(self) -> CapabilityTier:
@@ -243,6 +244,10 @@ class ToolRegistry:
     def is_registered(self, name: str) -> bool:
         """Check if a tool is currently registered."""
         return name in self._tools
+
+    def core_tool_names(self) -> set[str]:
+        """Return names of core (non-plugin) tools to prevent self-collision on reload."""
+        return {name for name, t in self._tools.items() if not getattr(t, "is_plugin", False)}
 
     def _emit_audit(
         self,

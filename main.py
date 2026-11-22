@@ -724,8 +724,13 @@ class OptimusLive:
             logger=lambda msg: print(f"[Actions] {msg}"),
         )
 
-        # Plugins must not collide with either an inline tool or a discovered action.
-        _core_names = _inline_names | self._action_registry.names()
+        # Plugins must not collide with either an inline tool, a discovered action, or an orchestrator tool.
+        from core.orchestrator.tools import ToolRegistry
+        _core_names = (
+            _inline_names
+            | self._action_registry.names()
+            | ToolRegistry.instance().core_tool_names()
+        )
         self._plugin_registry = discover_plugins(
             plugins_dir=_base_dir / "plugins",
             core_tool_names=_core_names,
@@ -735,6 +740,8 @@ class OptimusLive:
             logger=lambda msg: print(f"[Plugins] {msg}"),
             notify=lambda msg: self.ui.write_log(f"SYS: {msg}"),
         )
+        # Bridge plugins into central ToolRegistry (SEC-05)
+        self._plugin_registry.bridge_to_tool_registry(ToolRegistry.instance())
         self.ui.get_plugins = self._plugin_registry.list_for_ui
         self.ui.get_plugin_settings = self._plugin_registry.settings_schemas  # ⚙ settings tab
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
@@ -1811,9 +1818,16 @@ class OptimusLive:
         _sched = (self._action_registry.scheduling(name)
                   or self._plugin_registry.scheduling(name))
         _extra = {"scheduling": _sched} if _sched else {}
+        # Demarcate plugin results for model serialization (reconciles MED-03)
+        from core import outcome
+        model_payload = (
+            outcome.untrusted(source=f"plugin:{name}", content=str(result))
+            if self._plugin_registry.has(name)
+            else result
+        )
         return types.FunctionResponse(
             id=fc.id, name=name,
-            response={"result": result},
+            response={"result": model_payload},
             **_extra
         )
 

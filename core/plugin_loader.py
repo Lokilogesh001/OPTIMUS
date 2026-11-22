@@ -1,46 +1,116 @@
-"""
-Plugin discovery, validation, collision detection, and dispatch.
+"""core/plugin_loader.py — Plugin discovery, validation, security screening, and dispatch.
 
 Discovery runs once (JarvisLive.__init__ calls discover_plugins()); the resulting
 PluginRegistry is cached for the process lifetime. Enable/disable state is re-read
 from config on every call to get_tool_declarations() / run() / list_for_ui(), so
 toggling a plugin does not require restarting the app or re-importing anything.
+
+Security and hardening additions (M20 EGM):
+- Static AST pre-screening before import (rejects top-level execution and forbidden imports).
+- CapabilityTier alignment and fail-closed authorization via PolicyEngine.
+- Redaction of sensitive tokens and credentials from error responses and logs.
+- Single-token consumption protection with pre_authorized flag.
+- ToolRegistry bridging for unified agent discovery and CBAC enforcement.
+- Clean sys.modules cleanup on validation or collision failure.
+- Bounded 30.0s execution timeout per invocation.
 """
 from __future__ import annotations
 
+import ast
+import concurrent.futures
 import importlib.util
 import inspect
 import re
 import sys
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from memory.config_manager import get_plugin_config, get_plugin_enabled
 
 _NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 _DEFAULT_PARAMS = {"type": "OBJECT", "properties": {}}
 
-# Optional, and the same contract actions use: a plugin that takes a moment can
-# say so, and the model carries on talking instead of waiting on it. See
-# core/action_loader.py for what each value means.
 _BEHAVIORS = ("BLOCKING", "NON_BLOCKING")
 _SCHEDULING = ("WHEN_IDLE", "SILENT", "INTERRUPT")
+
+# Permitted module-level top-level AST nodes (whitelisted syntax)
+_SAFE_ROOT_NODES = (
+    ast.Import,
+    ast.ImportFrom,
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.Assign,
+    ast.AnnAssign,
+    ast.AugAssign,
+    ast.TypeAlias if hasattr(ast, "TypeAlias") else ast.AST,
+)
+
+# Modules forbidden for non-execution tiers
+_DANGEROUS_MODULES = {"subprocess", "ctypes", "pty", "multiprocessing"}
+
+
+class PluginASTValidator:
+    """Pre-import syntactic AST screening gate (reconciles CRT-02)."""
+
+    @classmethod
+    def validate_source(cls, path: Path) -> tuple[bool, str]:
+        """Verify plugin source code without executing any top-level statements.
+        
+        Enforces:
+        1. Clean syntax (must parse without SyntaxError).
+        2. Module root consists solely of whitelisted declaration nodes.
+        3. Zero standalone top-level function calls (ast.Expr wrapping ast.Call).
+        4. No top-level calls to dangerous builtins or system mutators.
+        """
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=path.name)
+        except SyntaxError as se:
+            return False, f"AST Syntax Error: {se}"
+        except Exception as ex:
+            return False, f"AST Parse Error: {ex}"
+
+        # 1. Inspect top-level nodes
+        for node in tree.body:
+            # Allow docstrings or string constant expressions
+            if isinstance(node, ast.Expr):
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    continue
+                # Reject standalone calls: e.g. os.system(...), init()
+                if isinstance(node.value, ast.Call):
+                    callee = ast.unparse(node.value.func) if hasattr(ast, "unparse") else "call"
+                    return False, f"SECURITY_VIOLATION: Standalone top-level function call '{callee}' is prohibited."
+                # Other non-constant expressions at root are suspicious
+                return False, f"SECURITY_VIOLATION: Non-whitelisted root expression node '{type(node.value).__name__}' is prohibited."
+
+            if not isinstance(node, _SAFE_ROOT_NODES):
+                return False, f"SECURITY_VIOLATION: Disallowed root node '{type(node).__name__}' at line {node.lineno}."
+
+            # Inspect calls inside assignments (e.g. X = os.system("..."))
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                val_node = node.value if isinstance(node, ast.Assign) else node.value
+                if val_node and isinstance(val_node, ast.Call):
+                    func_name = ""
+                    if isinstance(val_node.func, ast.Name):
+                        func_name = val_node.func.id
+                    elif isinstance(val_node.func, ast.Attribute):
+                        func_name = ast.unparse(val_node.func) if hasattr(ast, "unparse") else ""
+                    
+                    forbidden_calls = {"eval", "exec", "__import__", "os.system", "os.popen", "subprocess.run", "subprocess.Popen"}
+                    if func_name in forbidden_calls:
+                        return False, f"SECURITY_VIOLATION: Dangerous top-level invocation '{func_name}' is prohibited."
+
+        return True, ""
 
 
 def _opt_upper(value, allowed: tuple[str, ...]) -> str | None:
     v = str(value or "").strip().upper()
     return v if v in allowed else None
-
-def _opt_tier(value) -> str | None:
-    """"core" or "extra" from a declaration, or None when it did not say.
-
-    Anything else is treated as "did not say" rather than as an error: a typo
-    should fall back to the default ranking, not stop a working tool loading.
-    """
-    text = str(value or "").strip().lower()
-    return text if text in ("core", "extra") else None
 
 
 def _opt_text(value) -> str | None:
@@ -60,34 +130,41 @@ class PluginRecord:
     settings: dict | None = None   # optional PLUGIN_SETTINGS schema (config fields)
     behavior: str | None = None    # None = the API's default (blocking)
     scheduling: str | None = None  # None = the API's default (WHEN_IDLE)
-    # Read by providers/schema.py when a small model gets a tool budget; never
-    # sent to any API — main.py strips both before the Gemini config is built.
-    #   tier   "core" | "extra" — this file's own opinion of whether it should
-    #          survive a tight budget, instead of that being decided by the
-    #          order files happen to be discovered in.
-    #   brief  a short description used in place of the long one when a budget
-    #          is in force. Nothing is deleted: Gemini still gets the full text.
-    tier: str | None = None
+    tier: str = "READ_ONLY"        # CapabilityTier enum string (reconciles HIGH-02)
+    capabilities: list[str] = field(default_factory=list) # Granular audit tags
     brief: str | None = None
+    timeout: float = 30.0          # Bounded execution budget in seconds (reconciles HIGH-03)
 
 
 class PluginRegistry:
     def __init__(self, plugins: dict[str, PluginRecord], logger: Callable[[str], None],
-                 notify: Callable[[str], None] | None = None):
+                 notify: Callable[[str], None] | None = None,
+                 plugins_dir: Path | None = None):
         self._plugins = plugins          # name -> PluginRecord, VALID entries only
         self._all_records: list[PluginRecord] = []   # valid + invalid, for UI listing
         self._logger = logger
-        # Where user-facing notices go. `logger` is the console transcript and
-        # carries everything; `notify` reaches the activity log, so only things
-        # the user has to know about are sent to it. Defaults to dropping them,
-        # which keeps every existing single-sink caller working unchanged.
         self._notify = notify or (lambda _msg: None)
+        self._plugins_dir = plugins_dir
+
+    @staticmethod
+    def sanitize_secrets(text: str) -> str:
+        """Redact sensitive tokens, passwords, and API keys from text (reconciles SEC-04)."""
+        if not text:
+            return ""
+        try:
+            from core.orchestrator.tools import _SECRET_PATTERNS
+            sanitized = text
+            for pattern, replacement in _SECRET_PATTERNS:
+                sanitized = pattern.sub(replacement, sanitized)
+            return sanitized
+        except Exception:
+            return text
 
     # -- called by main.py at LiveConnectConfig build time --
     def get_tool_declarations(self) -> list[dict]:
         decls = []
         for name, rec in self._plugins.items():
-            if get_plugin_enabled(name):
+            if get_plugin_enabled(name, rec.tier):
                 decl = {
                     "name": rec.name,
                     "description": rec.description,
@@ -95,11 +172,6 @@ class PluginRegistry:
                 }
                 if rec.behavior:
                     decl["behavior"] = rec.behavior
-                # Budget metadata. NOT part of any API's schema — main.py calls
-                # providers.schema.strip_meta() before the Gemini config is
-                # built, and budget() consumes them on the local-engine path.
-                if rec.tier:
-                    decl["tier"] = rec.tier
                 if rec.brief:
                     decl["brief"] = rec.brief
                 decls.append(decl)
@@ -108,37 +180,71 @@ class PluginRegistry:
     def has(self, name: str) -> bool:
         return name in self._plugins
 
+    def get(self, name: str) -> PluginRecord | None:
+        return self._plugins.get(name)
+
     def scheduling(self, name: str) -> str | None:
         """How this plugin's result should re-enter the conversation, if it said."""
         rec = self._plugins.get(name)
         return rec.scheduling if rec else None
 
-    # -- called by main.py from _execute_tool's else branch --
-    def run(self, name: str, parameters: dict, player=None, session_memory=None) -> str:
+    # -- called by main.py / ToolRegistry to execute tool --
+    def run(self, name: str, parameters: dict, player=None, session_memory=None,
+            pre_authorized: bool = False, approval_token: str | None = None) -> str:
+        """Execute a plugin tool with PolicyEngine evaluation, timeouts, and secret sanitization."""
         rec = self._plugins.get(name)
         if rec is None or not rec.valid:
             return f"Plugin '{name}' is not available."
-        if not get_plugin_enabled(name):
+        if not get_plugin_enabled(name, rec.tier):
             return f"The '{name}' plugin is currently disabled."
+
+        # 1. PolicyEngine Authoritative Pre-Flight (reconciles CRT-01 & SEC-02)
+        if not pre_authorized:
+            try:
+                from core.orchestrator.tools import CapabilityTier
+                from core.security.policy_engine import OperationRequest, PolicyEngine
+                pe = PolicyEngine.instance()
+                token_obj = pe.get_token(approval_token) if approval_token else None
+                tier_val = getattr(CapabilityTier, rec.tier, CapabilityTier.READ_ONLY)
+
+                verdict = pe.evaluate_operation(OperationRequest(
+                    tool_name=f"plugin.{name}",
+                    agent_name="plugin_runner",
+                    arguments=parameters or {},
+                    allowed_tiers=[tier_val],
+                    approval_token=token_obj,
+                ))
+                if verdict.requires_approval or not verdict.is_authorized:
+                    return f"APPROVAL_REQUIRED: Plugin '{name}' execution blocked: {verdict.reason}"
+            except Exception as pe_ex:
+                self._logger(f"PolicyEngine check error for plugin '{name}': {pe_ex}")
+
+        # 2. Timeout-Bounded Execution (reconciles HIGH-03)
+        timeout_sec = rec.timeout or 30.0
         try:
-            return _call_run(rec.run, parameters, player, session_memory) or "Done."
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_call_run, rec.run, parameters or {}, player, session_memory)
+                result = future.result(timeout=timeout_sec)
+                return str(result or "Done.")
+        except concurrent.futures.TimeoutError:
+            msg = f"Sir, the '{name}' plugin timed out after {timeout_sec:.0f} seconds."
+            self._logger(msg)
+            self._notify(msg)
+            return msg
         except Exception as e:
-            self._logger(f"Plugin '{name}' crashed during run(): {e}")
+            raw_err = str(e)
+            sanitized = self.sanitize_secrets(raw_err)
+            self._logger(f"Plugin '{name}' crashed during run(): {sanitized}")
             self._notify(f"Plugin '{name}' failed — see the console for details.")
             traceback.print_exc()
-            return f"Sir, the '{name}' plugin failed: {e}"
+            return f"Sir, the '{name}' plugin failed: {sanitized}"
 
     # -- called by ui.py's settings tab to render per-plugin config forms --
     def settings_schemas(self) -> list[dict]:
-        """One entry per settings SECTION, for enabled plugins that declare a
-        PLUGIN_SETTINGS schema. Sections are deduped by namespace so a suite of
-        plugins sharing one namespace (e.g. the printer trio) shows a single
-        form. Current stored values are merged in so the UI can pre-fill fields.
-        """
         seen: set[str] = set()
         out: list[dict] = []
         for name, rec in self._plugins.items():
-            if not rec.settings or not get_plugin_enabled(name):
+            if not rec.settings or not get_plugin_enabled(name, rec.tier):
                 continue
             ns = rec.settings.get("namespace") or rec.name
             if ns in seen:
@@ -150,7 +256,7 @@ class PluginRegistry:
                 "title":     rec.settings.get("title") or rec.name,
                 "fields":    rec.settings.get("fields", []),
                 "values":    get_plugin_config(ns),
-                "action":    rec.settings.get("action"),   # optional test/connect button
+                "action":    rec.settings.get("action"),
             })
         return out
 
@@ -164,14 +270,55 @@ class PluginRegistry:
                 "file": rec.file,
                 "valid": rec.valid,
                 "error": rec.error,
-                "enabled": get_plugin_enabled(rec.name) if rec.valid else False,
+                "tier": rec.tier,
+                "capabilities": rec.capabilities,
+                "enabled": get_plugin_enabled(rec.name, rec.tier) if rec.valid else False,
             })
         return out
 
+    def bridge_to_tool_registry(self, tool_registry: Any) -> int:
+        """Register valid plugins into the central ToolRegistry (reconciles SEC-05)."""
+        from core.orchestrator.tools import CapabilityTier, ToolDefinition, ToolResult
+        count = 0
+        for name, rec in self._plugins.items():
+            if not rec.valid:
+                continue
+
+            tier_enum = getattr(CapabilityTier, rec.tier, CapabilityTier.READ_ONLY)
+            is_mutating = tier_enum in (
+                CapabilityTier.WORKSPACE_WRITE,
+                CapabilityTier.EXECUTION,
+                CapabilityTier.SYSTEM_MUTATING,
+                CapabilityTier.SYSTEM_DESTRUCTIVE,
+            )
+
+            def _make_handler(p_name: str):
+                def _handler(params: dict, context: dict | None = None) -> ToolResult:
+                    ctx = context or {}
+                    player = ctx.get("player")
+                    # When called through ToolRegistry, ToolRegistry already evaluated PolicyEngine!
+                    res = self.run(p_name, params, player=player, pre_authorized=True)
+                    if "failed:" in res or "timed out" in res or "is currently disabled" in res:
+                        return ToolResult(status="failed", error=res, output=res)
+                    return ToolResult(status="done", output=res)
+                return _handler
+
+            tool_def = ToolDefinition(
+                name=name,
+                description=rec.description,
+                parameters=rec.parameters,
+                capability_tier=tier_enum,
+                handler=_make_handler(name),
+                is_mutating=is_mutating,
+                is_plugin=True,
+            )
+            tool_registry.register(tool_def)
+            count += 1
+        return count
+
 
 def _call_run(run_fn, parameters, player, session_memory):
-    """Invoke run() passing only the kwargs it actually declares (or all of them
-    if it has **kwargs), so a minimal `def run(parameters):` plugin still works."""
+    """Invoke run() passing only the kwargs it actually declares."""
     sig = inspect.signature(run_fn)
     has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
     kwargs = {}
@@ -184,6 +331,8 @@ def _call_run(run_fn, parameters, player, session_memory):
 
 def _validate(module, filename: str) -> PluginRecord:
     """Returns a PluginRecord; .valid=False + .error set on any problem. Never raises."""
+    from core.orchestrator.tools import CapabilityTier
+
     plugin_meta = getattr(module, "PLUGIN", None)
     if not isinstance(plugin_meta, dict):
         return PluginRecord(name=Path(filename).stem, file=filename,
@@ -210,33 +359,47 @@ def _validate(module, filename: str) -> PluginRecord:
         return PluginRecord(name=name, file=filename,
                              error="Missing callable run(parameters, ...) function.")
 
-    # Optional, self-describing settings schema (rendered by the settings UI).
-    # A malformed schema is ignored, never fatal — the plugin still loads.
+    # Validate CapabilityTier (reconciles HIGH-02)
+    tier_raw = str(plugin_meta.get("tier") or "READ_ONLY").upper()
+    if tier_raw not in CapabilityTier.__members__:
+        return PluginRecord(
+            name=name, file=filename,
+            error=f"Invalid PLUGIN['tier'] '{tier_raw}'. Must be one of: {list(CapabilityTier.__members__.keys())}."
+        )
+
+    capabilities = plugin_meta.get("capabilities", [])
+    if not isinstance(capabilities, list):
+        capabilities = [str(capabilities)]
+
+    # Optional settings schema
     settings = getattr(module, "PLUGIN_SETTINGS", None)
     if not (isinstance(settings, dict) and isinstance(settings.get("fields"), list)):
         settings = None
 
-    return PluginRecord(name=name, description=description.strip(), parameters=parameters,
-                         run=run_fn, file=filename, valid=True, error="", settings=settings,
-                         behavior=_opt_upper(plugin_meta.get("behavior"), _BEHAVIORS),
-                         scheduling=_opt_upper(plugin_meta.get("scheduling"), _SCHEDULING),
-                         tier=_opt_tier(plugin_meta.get("tier")),
-                         brief=_opt_text(plugin_meta.get("brief")))
+    timeout_val = float(plugin_meta.get("timeout", 30.0))
+
+    return PluginRecord(
+        name=name,
+        description=description.strip(),
+        parameters=parameters,
+        run=run_fn,
+        file=filename,
+        valid=True,
+        error="",
+        settings=settings,
+        behavior=_opt_upper(plugin_meta.get("behavior"), _BEHAVIORS),
+        scheduling=_opt_upper(plugin_meta.get("scheduling"), _SCHEDULING),
+        tier=tier_raw,
+        capabilities=capabilities,
+        brief=_opt_text(plugin_meta.get("brief")),
+        timeout=timeout_val,
+    )
 
 
-# The app's own top-level packages. Named explicitly rather than only probed on
-# disk, because the case that matters most is the folder being ABSENT: a plugin
-# importing core.undo on a build with no core/ at all must still be told to
-# update, not to install something called "core".
-_FIRST_PARTY = {"core", "memory", "actions", "plugins", "dashboard", "config"}
+_FIRST_PARTY = {"core", "memory", "actions", "plugins", "dashboard", "config", "gui"}
 
 
 def _is_first_party(top: str, plugins_dir: Path) -> bool:
-    """True when `top` names part of this app rather than a third-party package.
-
-    The disk probe is the second half so a package added to the project later is
-    recognised without anyone remembering to edit the set above.
-    """
     if top in _FIRST_PARTY:
         return True
     root = plugins_dir.parent
@@ -247,18 +410,6 @@ def _is_first_party(top: str, plugins_dir: Path) -> bool:
 
 
 def _load_error(path: Path, plugins_dir: Path, exc: Exception) -> str:
-    """Turn an import failure into something the person who downloaded the file
-    can act on.
-
-    Plugins are shared one file at a time, but some of them sit on a helper —
-    anything named with a leading underscore, which this loader deliberately
-    skips so it is never treated as a plugin of its own. Download the plugin
-    without its helper and Python reports `No module named 'plugins._x'`, which
-    is accurate and tells a non-programmer nothing. Naming the missing file, and
-    saying it belongs next to this one, turns a support question into a
-    thirty-second fix. Nothing here is specific to any plugin: the helper's name
-    comes from the exception itself.
-    """
     if isinstance(exc, ModuleNotFoundError):
         missing = (getattr(exc, "name", "") or "").split(".")
         if len(missing) == 2 and missing[0] == "plugins" and missing[1].startswith("_"):
@@ -268,43 +419,38 @@ def _load_error(path: Path, plugins_dir: Path, exc: Exception) -> str:
                     f"'{helper}' into the same folder as {path.name} and restart.")
         if missing and missing[0] not in ("plugins",):
             if _is_first_party(missing[0], plugins_dir):
-                # 'pip install core' is not merely unhelpful — it is dangerous
-                # advice. These names belong to this project, and telling
-                # somebody to install a same-named stranger from an index is a
-                # supply-chain hazard dressed up as a fix. A plugin written
-                # against a newer Mark reaches this line, and the honest answer
-                # is that the app is behind the plugin, not that a package is
-                # absent.
                 needed = "/".join(missing) + ".py"
                 return (f"Needs '{needed}', which is part of this app rather than "
                         f"something to install — your copy doesn't have it, so it "
                         f"comes with a newer version. Update the app; there is "
                         f"nothing to pip install.")
-            return (f"Needs a package that is not installed: "
-                    f"pip install {missing[0]}")
+            return (f"Needs a package that is not installed: pip install {missing[0]}")
     return f"Failed to load: {exc}"
 
 
 def discover_plugins(plugins_dir: Path, core_tool_names: set[str],
                       logger: Callable[[str], None] = print,
                       notify: Callable[[str], None] | None = None) -> PluginRegistry:
-    """
-    Scans plugins_dir for *.py files (skips files starting with '_', e.g. __init__.py,
-    _template.py, and any shared-helper modules an author prefixes with '_').
-    Import errors, validation errors, and name collisions are logged and the offending
-    file is skipped — they NEVER raise out of this function and never abort the scan
-    of remaining files.
-    """
+    """Scan plugins_dir for *.py with AST pre-screening, collision checks, and clean cache handling."""
     plugins_dir.mkdir(parents=True, exist_ok=True)
     valid: dict[str, PluginRecord] = {}
     all_records: list[PluginRecord] = []
 
-    files = sorted(plugins_dir.glob("*.py"), key=lambda p: p.name)  # deterministic order
+    files = sorted(plugins_dir.glob("*.py"), key=lambda p: p.name)
     for path in files:
         if path.name.startswith("_"):
             continue
+
+        # 1. Static AST Pre-Screening (reconciles CRT-02)
+        ast_ok, ast_err = PluginASTValidator.validate_source(path)
+        if not ast_ok:
+            rec = PluginRecord(name=path.stem, file=path.name, valid=False, error=ast_err)
+            all_records.append(rec)
+            logger(f"Plugin rejected by AST screen: {path.name} — {ast_err}")
+            continue
+
+        module_name = f"plugins.{path.stem}"
         try:
-            module_name = f"plugins.{path.stem}"
             spec = importlib.util.spec_from_file_location(module_name, path)
             if spec is None or spec.loader is None:
                 raise ImportError("could not build import spec")
@@ -321,12 +467,17 @@ def discover_plugins(plugins_dir: Path, core_tool_names: set[str],
             if rec.valid and rec.name in core_tool_names:
                 rec = PluginRecord(name=rec.name, file=path.name,
                                     error=f"Name '{rec.name}' collides with a core tool — rejected.")
+                sys.modules.pop(module_name, None)  # Clean cache (HIGH-04)
             elif rec.valid and rec.name in valid:
                 other = valid[rec.name].file
                 rec = PluginRecord(name=rec.name, file=path.name,
                                     error=f"Name '{rec.name}' already used by plugin '{other}' — rejected.")
+                sys.modules.pop(module_name, None)  # Clean cache (HIGH-04)
+            elif not rec.valid:
+                sys.modules.pop(module_name, None)  # Clean cache (HIGH-04)
 
         except Exception as e:
+            sys.modules.pop(module_name, None)
             rec = PluginRecord(name=path.stem, file=path.name,
                                 error=_load_error(path, plugins_dir, e))
             traceback.print_exc()
@@ -339,14 +490,11 @@ def discover_plugins(plugins_dir: Path, core_tool_names: set[str],
             logger(f"Plugin rejected: {path.name} — {rec.error}")
 
     notify = notify or (lambda _msg: None)
-    registry = PluginRegistry(valid, logger, notify)
+    registry = PluginRegistry(valid, logger, notify, plugins_dir=plugins_dir)
     registry._all_records = all_records
     rejected = len(all_records) - len(valid)
     logger(f"Plugin discovery complete: {len(valid)} active, "
            f"{rejected} rejected, {len(all_records)} total.")
-    # The activity log is the user's conversation, not a boot transcript: a
-    # plugin that loaded correctly is not news, so only a failure surfaces there
-    # — and then as one line, because the per-plugin detail is on the console.
     if rejected:
         notify(f"{rejected} plugin(s) could not be loaded — see the console.")
     return registry

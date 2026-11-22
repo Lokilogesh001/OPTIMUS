@@ -1624,15 +1624,23 @@ class PluginSettingsOverlay(QWidget):
             lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
 
         def worker():
+            from core.plugin_loader import PluginRegistry
+            import concurrent.futures
             try:
-                res = run_fn(values)
-                if isinstance(res, tuple) and len(res) == 2:
-                    ok, msg = bool(res[0]), str(res[1])
-                else:
-                    ok, msg = bool(res), str(res)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(run_fn, values)
+                    res = fut.result(timeout=10.0)
+                    if isinstance(res, tuple) and len(res) == 2:
+                        ok, msg = bool(res[0]), str(res[1])
+                    else:
+                        ok, msg = bool(res), str(res)
+            except concurrent.futures.TimeoutError:
+                ok, msg = False, "Action timed out after 10 seconds."
             except Exception as e:
                 ok, msg = False, str(e)
-            self._test_done.emit(ns, ok, msg)
+            # Redact secrets before UI emission (HIGH-01)
+            sanitized_msg = PluginRegistry.sanitize_secrets(msg)
+            self._test_done.emit(ns, ok, sanitized_msg)
 
         threading.Thread(target=worker, daemon=True).start()
 
