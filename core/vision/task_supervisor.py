@@ -176,10 +176,32 @@ class AutonomousTaskSupervisor:
                 evidence={"disabled": True},
             ))
 
-        # 6. Verify Successful Transition
-        evidence_hash = hashlib.sha256(
-            f"{task_id}_{step_index}_{pre_state.dhash}_{post_state.dhash}".encode()
-        ).hexdigest()
+        # 6. Verify Successful Transition with Cryptographic Ledger Provenance
+        from core.verification.engine import VerificationEngine
+        from core.verification.types import (
+            VerificationRecord,
+            VerificationStatus,
+            new_evidence_id,
+        )
+
+        ve = VerificationEngine()
+        evidence_id = new_evidence_id("evd_sup")
+        rec = VerificationRecord(
+            evidence_id=evidence_id,
+            task_id=task_id,
+            subtask_id=f"step_{step_index}",
+            verifier_identity="verifier:task_supervisor",
+            expected_postcondition={"expected_state": expected_state, "target_element": target_element},
+            actual_observed_result={
+                "pre_dhash": pre_state.dhash,
+                "post_dhash": post_state.dhash,
+                "ui_elements": post_state.ui_elements_count,
+                "active_window": post_state.active_window.title if post_state.active_window else None,
+            },
+            status=VerificationStatus.COMPLETED_VERIFIED,
+            verdict=f"Visual transition verified: dHash {pre_state.dhash[:8]} -> {post_state.dhash[:8]}.",
+        )
+        ve.ledger.record(rec)
 
         return self._record_result(SupervisionStepResult(
             step_index=step_index,
@@ -193,8 +215,8 @@ class AutonomousTaskSupervisor:
             retry_count=retry_count,
             is_idempotent=is_idempotent,
             evidence={
-                "evidence_id": f"ev_vis_{evidence_hash[:12]}",
-                "sha256": evidence_hash,
+                "evidence_id": rec.evidence_id,
+                "sha256": rec.integrity_hash,
                 "verified": True,
             },
         ))

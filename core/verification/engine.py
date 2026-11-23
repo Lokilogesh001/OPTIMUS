@@ -21,10 +21,14 @@ from core.verification.types import (
 )
 from core.verification.verifiers import (
     BaseVerifier,
+    BrowserPageVerifier,
     CommandVerifier,
     DataVerifier,
+    DesktopWindowVerifier,
     FilesystemVerifier,
+    MediaPlaybackVerifier,
     ProcessVerifier,
+    UIControlVerifier,
 )
 
 
@@ -48,11 +52,15 @@ class VerificationEngine:
         self._register_default_verifiers()
 
     def _register_default_verifiers(self) -> None:
-        """Register the 4 standard built-in verifiers."""
+        """Register the 8 standard built-in verifiers."""
         self.register_verifier(FilesystemVerifier())
         self.register_verifier(ProcessVerifier())
         self.register_verifier(DataVerifier())
         self.register_verifier(CommandVerifier())
+        self.register_verifier(DesktopWindowVerifier())
+        self.register_verifier(BrowserPageVerifier())
+        self.register_verifier(MediaPlaybackVerifier())
+        self.register_verifier(UIControlVerifier())
 
     def register_verifier(self, verifier: BaseVerifier) -> None:
         """Register or override a pluggable verifier for a postcondition type."""
@@ -300,16 +308,17 @@ class VerificationEngine:
                 self.ledger.record(rec)
                 return rec.is_pass, rec.verdict, [rec], {}
 
-            # Pure reasoning or conversational subtask: record a logical verification entry
+            # Subtask had side effects but no postconditions could be independently verified
+            status = VerificationStatus.ACTION_EXECUTED_UNVERIFIED if side_effects else VerificationStatus.COMPLETED_VERIFIED
             rec = VerificationRecord(
                 evidence_id=new_evidence_id("evd_logical"),
                 task_id=task_id,
                 subtask_id=subtask_id,
                 verifier_identity="engine:logical",
                 expected_postcondition={"type": "logical_completion"},
-                actual_observed_result={"output_summary_length": len(output_summary)},
-                status=VerificationStatus.PASS,
-                verdict="Logical subtask output verified (pure reasoning, no physical artifacts required).",
+                actual_observed_result={"output_summary_length": len(output_summary), "side_effects_count": len(side_effects or [])},
+                status=status,
+                verdict="Action executed unverified (no physical postconditions declared or observable)." if side_effects else "Logical subtask output verified (pure reasoning, no physical artifacts required).",
             )
             self.ledger.record(rec)
             return True, rec.verdict, [rec], {}

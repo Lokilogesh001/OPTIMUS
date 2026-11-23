@@ -98,6 +98,8 @@ class SectionCommandCenter(QWidget):
         # Chat history display
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
+        self.chat_history.document().setMaximumBlockCount(800)
+        self.chat_history.document().setDocumentMargin(4)
         self.chat_history.setFont(px_font(10))
         self.chat_history.setStyleSheet(f"""
             QTextEdit {{
@@ -204,6 +206,8 @@ class SectionCommandCenter(QWidget):
         p_out = HoloPanel("EXECUTION OUTPUT & DELIVERABLES", "STDOUT")
         self.out_display = QTextEdit()
         self.out_display.setReadOnly(True)
+        self.out_display.document().setMaximumBlockCount(800)
+        self.out_display.document().setDocumentMargin(4)
         self.out_display.setFont(mono_font(10))
         self.out_display.setStyleSheet(f"""
             QTextEdit {{

@@ -253,12 +253,47 @@ class InteractionRouter:
             if target_el:
                 from core.screenact import click
                 act_res = click(target_el)
+                time.sleep(0.25)
+                # Check post-action screen settle
+                post_view = look()
+                has_changed = (post_view.digest != view.digest)
+
+                # If postcondition is declared in parameters, verify via VerificationEngine
+                pc_spec = contract.parameters.get("postcondition")
+                is_verified = False
+                verdict = "Action dispatched"
+
+                if pc_spec:
+                    from core.verification.engine import VerificationEngine
+                    from core.verification.types import Postcondition
+                    ve = VerificationEngine()
+                    pc = Postcondition.from_dict(pc_spec) if isinstance(pc_spec, dict) else pc_spec
+                    rec = ve.verify_postcondition(contract.action_id, f"uia_{int(time.time())}", pc)
+                    is_verified = rec.is_pass
+                    verdict = rec.verdict
+                    status = "done" if is_verified else "failed"
+                else:
+                    status = "done" if (act_res.ok and has_changed) else ("unverified" if act_res.ok else "failed")
+                    verdict = "UI transition verified" if (act_res.ok and has_changed) else "Click input dispatched but UI state did not transition"
+
                 return ExecutionEvidence(
                     action_id=contract.action_id,
-                    status="done" if act_res.ok else "unverified",
+                    status=status,
                     tier_used=tier,
-                    facts=[f"uia_element_clicked: name='{target_el.name}', role='{target_el.role}'"],
-                    evidence_data={"element": target_el.name, "result": act_res.ok},
+                    facts=[
+                        f"uia_element_clicked: name='{target_el.name}', role='{target_el.role}'",
+                        f"input_delivered={act_res.ok}",
+                        f"ui_transition_observed={has_changed}",
+                        f"verdict='{verdict}'",
+                    ],
+                    evidence_data={
+                        "element": target_el.name,
+                        "result": act_res.ok,
+                        "ui_transition": has_changed,
+                        "pre_digest": view.digest,
+                        "post_digest": post_view.digest,
+                    },
+                    error_message=None if status == "done" else verdict,
                 )
             else:
                 return ExecutionEvidence(

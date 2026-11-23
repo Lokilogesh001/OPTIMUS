@@ -1369,18 +1369,43 @@ class CentralOrchestrator:
                     title=fast_subtask.title,
                     allowed_tools=[],
                 ))
-                fast_subtask.status = SubtaskStatus.COMPLETED
+
+                # Transition to VERIFYING and independently verify physical outcomes
+                fast_subtask.status = SubtaskStatus.VERIFYING
+                is_verified, verdict, evidence = self._verify_deliverables(
+                    subtask=fast_subtask,
+                    side_effects=side_effects,
+                    output_summary=summary,
+                )
+
+                fast_subtask.status = SubtaskStatus.COMPLETED if (success and is_verified) else SubtaskStatus.FAILED
                 fast_subtask.output_summary = summary
-                fast_subtask.verification_verdict = "VERIFIED_DETERMINISTIC"
+                fast_subtask.verification_verdict = verdict
 
                 self.event_bus.publish(SubtaskVerifiedEvent(
                     task_id=t_id,
                     subtask_id=fast_subtask.subtask_id,
                     agent_name=agent_name,
-                    is_verified=True,
-                    verdict="VERIFIED_DETERMINISTIC",
-                    evidence={},
+                    is_verified=is_verified and success,
+                    verdict=verdict,
+                    evidence=evidence,
                 ))
+
+                if not (success and is_verified):
+                    now_finish = time.time()
+                    task.status = TaskStatus.FAILED
+                    task.error = f"Deterministic verification failed: {verdict}"
+                    task.finished_at = now_finish
+                    task.duration_seconds = round(now_finish - task.started_at, 4)
+                    self.task_store.save_task(task)
+                    self.event_bus.publish(TaskFailedEvent(
+                        task_id=t_id,
+                        goal=goal,
+                        error=task.error,
+                        duration_seconds=task.duration_seconds,
+                    ))
+                    return task
+
                 self.event_bus.publish(SubtaskCompletedEvent(
                     task_id=t_id,
                     subtask_id=fast_subtask.subtask_id,
@@ -1402,7 +1427,7 @@ class CentralOrchestrator:
                     key="step_1",
                     output=summary,
                     is_verified=True,
-                    verification_verdict="VERIFIED_DETERMINISTIC",
+                    verification_verdict=verdict,
                 )
 
                 self.event_bus.publish(TaskCompletedEvent(

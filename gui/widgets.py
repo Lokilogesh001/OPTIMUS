@@ -237,19 +237,42 @@ class LogWidget(QTextEdit):
         self._fmt.setForeground(QBrush(text_col))
         self.setTextCursor(cur)
         self.ensureCursorVisible()
-        self._tmr.start(6)
+
+        # Coalesce: If queue has items pending, flush immediately to eliminate lag
+        if len(self._queue) > 1:
+            cur.insertText(words, self._fmt)
+            self.setTextCursor(cur)
+            self.ensureCursorVisible()
+            self._typing = False
+            QTimer.singleShot(0, self._next)
+            return
+
+        # Smooth, stutter-free chunk animation (16ms 60Hz tick instead of 6ms thrash)
+        self._tmr.start(16)
 
     def _step(self):
         if self._pos < len(self._text):
+            # Adaptive chunk size: if queue is backed up, flush immediately
+            if self._queue:
+                chunk = self._text[self._pos:]
+                self._pos = len(self._text)
+            else:
+                remaining = len(self._text) - self._pos
+                # Adaptive chunk: ~4-8 chars per 16ms frame (~250-500 cps), completes long text in < 300ms
+                chunk_len = max(4, min(remaining, len(self._text) // 25 + 2))
+                chunk = self._text[self._pos:self._pos + chunk_len]
+                self._pos += len(chunk)
+
             cur = self.textCursor()
             cur.movePosition(cur.MoveOperation.End)
-            cur.insertText(self._text[self._pos], self._fmt)
+            cur.insertText(chunk, self._fmt)
             self.setTextCursor(cur)
             self.ensureCursorVisible()
-            self._pos += 1
         else:
             self._tmr.stop()
-            QTimer.singleShot(20, self._next)
+            # Fast transition to next queued item
+            delay = 0 if self._queue else 15
+            QTimer.singleShot(delay, self._next)
 
 _FILE_ICONS = {
     "image":   ("🖼", "#00d4ff"), "video":   ("🎬", "#ff6b00"),

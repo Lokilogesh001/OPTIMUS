@@ -24,12 +24,22 @@ class PostconditionType(str, Enum):
     PROCESS = "PROCESS"        # Process status, application launch/exit, local ports
     DATA = "DATA"              # JSON/schema validation, tabular/CSV integrity, numerical assertions
     COMMAND = "COMMAND"        # Exit codes, stdout/stderr patterns, execution timeouts
+    DESKTOP_WINDOW = "DESKTOP_WINDOW"    # Native window existence, visibility, focus, responsiveness
+    BROWSER_PAGE = "BROWSER_PAGE"        # Browser active tab, URL, domain, loaded state
+    MEDIA_PLAYBACK = "MEDIA_PLAYBACK"    # Audio/video player state, temporal time progress, ad absence
+    UI_CONTROL = "UI_CONTROL"            # Specific UI Automation element role, value, enabled state
 
 
 class VerificationStatus(str, Enum):
     """Verdict status of a postcondition check."""
     PASS = "PASS"
+    COMPLETED_VERIFIED = "COMPLETED_VERIFIED"
+    COMPLETED_WITH_LIMITATIONS = "COMPLETED_WITH_LIMITATIONS"
+    ACTION_EXECUTED_UNVERIFIED = "ACTION_EXECUTED_UNVERIFIED"
     FAIL = "FAIL"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    CANCELLED = "CANCELLED"
     ERROR = "ERROR"
 
 
@@ -45,6 +55,7 @@ class Postcondition:
     spec: dict[str, Any]
     description: str = ""
     critical: bool = True     # If critical=True, failure prevents subtask/task completion
+    is_idempotent: bool = True # Safe to retry if failure occurs (non-idempotent never auto-retries)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,12 +63,15 @@ class Postcondition:
             "spec": self.spec,
             "description": self.description,
             "critical": self.critical,
+            "is_idempotent": self.is_idempotent,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Postcondition:
         d = dict(data)
         d["postcondition_type"] = PostconditionType(d["postcondition_type"])
+        if "is_idempotent" not in d:
+            d["is_idempotent"] = True
         return cls(**d)
 
 
@@ -82,7 +96,11 @@ class VerificationRecord:
 
     @property
     def is_pass(self) -> bool:
-        return self.status == VerificationStatus.PASS
+        return self.status in (VerificationStatus.PASS, VerificationStatus.COMPLETED_VERIFIED)
+
+    @property
+    def is_verified(self) -> bool:
+        return self.status in (VerificationStatus.PASS, VerificationStatus.COMPLETED_VERIFIED)
 
     def compute_integrity_hash(self) -> str:
         """Compute SHA-256 cryptographic hash over normalized core verification fields."""
@@ -122,5 +140,12 @@ class VerificationRecord:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VerificationRecord:
         d = dict(data)
-        d["status"] = VerificationStatus(d["status"])
+        raw_status = d.get("status")
+        try:
+            d["status"] = VerificationStatus(raw_status)
+        except ValueError:
+            if str(raw_status).upper() in ("PASS", "COMPLETED_VERIFIED"):
+                d["status"] = VerificationStatus.COMPLETED_VERIFIED
+            else:
+                d["status"] = VerificationStatus.FAILED
         return cls(**d)

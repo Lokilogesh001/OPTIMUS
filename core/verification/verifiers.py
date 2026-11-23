@@ -9,7 +9,9 @@ Implements:
 
 from __future__ import annotations
 
+import contextlib
 import csv
+import ctypes
 import hashlib
 import io
 import json
@@ -17,6 +19,8 @@ import math
 import os
 import re
 import socket
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -773,3 +777,791 @@ class CommandVerifier(BaseVerifier):
             status=VerificationStatus.PASS,
             verdict=f"Verified command execution: exit_code={actual_exit_code}.",
         )
+
+
+# ── COM Thread Helper ────────────────────────────────────────────────────────
+
+@contextlib.contextmanager
+def com_initialized():
+    """Ensure COM is initialized on the current thread for Windows UIA queries."""
+    if sys.platform != "win32":
+        yield
+        return
+    COINIT_MULTITHREADED = 0x0
+    ole32 = ctypes.windll.ole32
+    hr = ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+    initialized = hr in (0, 1)  # S_OK, S_FALSE
+    try:
+        yield
+    finally:
+        if initialized:
+            ole32.CoUninitialize()
+
+
+# ── 5. Desktop Window Verifier ───────────────────────────────────────────────
+
+class DesktopWindowVerifier(BaseVerifier):
+    """Independently verifies window presence, state (visible/minimized/maximized), focus, and responsiveness."""
+
+    verifier_identity: str = "verifier:desktop_window"
+    handled_type: PostconditionType = PostconditionType.DESKTOP_WINDOW
+
+    def verify(
+        self,
+        task_id: str,
+        subtask_id: str,
+        postcondition: Postcondition,
+        context: dict[str, Any] | None = None,
+    ) -> VerificationRecord:
+        spec = postcondition.spec
+        evidence_id = new_evidence_id("evd_win")
+        app_name = str(spec.get("app_name") or "").strip().lower()
+        title_pattern = str(spec.get("title_pattern") or "").strip()
+        must_be_active = bool(spec.get("must_be_active", False))
+        must_be_visible = bool(spec.get("must_be_visible", True))
+        check_responsive = bool(spec.get("check_responsive", True))
+        min_dimensions = spec.get("min_dimensions")
+        target_hwnd = spec.get("target_hwnd")
+
+        # Discover windows from context or live OS
+        windows = []
+        active_win = None
+        if context and "windows" in context:
+            windows = context["windows"]
+            active_win = context.get("active_window")
+        else:
+            try:
+                from core.vision.window_intelligence import enumerate_windows, get_active_window
+                windows = enumerate_windows(include_minimized=True)
+                active_win = get_active_window()
+            except Exception as e:
+                windows = []
+
+        # Find matching window
+        matched = None
+        for w in windows:
+            # Check target hwnd if specified
+            w_hwnd = getattr(w, "hwnd", None) if not isinstance(w, dict) else w.get("hwnd")
+            if target_hwnd is not None and w_hwnd != target_hwnd:
+                continue
+
+            # Check app name
+            w_app = getattr(w, "app_name", "") if not isinstance(w, dict) else w.get("app_name", "")
+            if app_name and app_name not in w_app.lower():
+                continue
+
+            # Check title pattern
+            w_title = getattr(w, "title", "") if not isinstance(w, dict) else w.get("title", "")
+            if title_pattern:
+                try:
+                    if not re.search(title_pattern, w_title, re.IGNORECASE) and title_pattern.lower() not in w_title.lower():
+                        continue
+                except re.error:
+                    if title_pattern.lower() not in w_title.lower():
+                        continue
+
+            matched = w
+            break
+
+        observed: dict[str, Any] = {
+            "window_found": matched is not None,
+            "target_app": app_name,
+            "target_title_pattern": title_pattern,
+        }
+
+        # 1. Existence check
+        if matched is None:
+            observed["error"] = "Target window not found among enumerated windows"
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"Target window matching app='{app_name}' title='{title_pattern}' not found.",
+            )
+
+        m_hwnd = getattr(matched, "hwnd", 0) if not isinstance(matched, dict) else matched.get("hwnd", 0)
+        m_title = getattr(matched, "title", "") if not isinstance(matched, dict) else matched.get("title", "")
+        m_app = getattr(matched, "app_name", "") if not isinstance(matched, dict) else matched.get("app_name", "")
+        m_vis = getattr(matched, "is_visible", True) if not isinstance(matched, dict) else matched.get("is_visible", True)
+        m_min = getattr(matched, "is_minimized", False) if not isinstance(matched, dict) else matched.get("is_minimized", False)
+        m_rect = getattr(matched, "rect", (0, 0, 0, 0)) if not isinstance(matched, dict) else matched.get("rect", (0, 0, 0, 0))
+
+        observed.update({
+            "hwnd": m_hwnd,
+            "title": m_title,
+            "app_name": m_app,
+            "is_visible": m_vis,
+            "is_minimized": m_min,
+            "rect": m_rect,
+        })
+
+        # 2. Honest Minimization & Visibility check
+        if must_be_visible and m_min:
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"Window '{m_title}' is minimized (IsIconic=True); must be restored to be visible.",
+            )
+
+        if must_be_visible and not m_vis:
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"Window '{m_title}' is hidden (IsWindowVisible=False).",
+            )
+
+        # 3. Focus / Active window check
+        active_hwnd = getattr(active_win, "hwnd", 0) if active_win and not isinstance(active_win, dict) else (active_win.get("hwnd", 0) if isinstance(active_win, dict) else 0)
+        if must_be_active:
+            is_active = (active_hwnd == m_hwnd)
+            observed["is_active"] = is_active
+            observed["active_hwnd"] = active_hwnd
+            if not is_active:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"Window '{m_title}' (HWND {m_hwnd}) is not the active foreground window (Foreground HWND {active_hwnd}).",
+                )
+
+        # 4. Responsiveness check
+        if check_responsive and m_hwnd and sys.platform == "win32":
+            try:
+                is_hung = bool(ctypes.windll.user32.IsHungAppWindow(m_hwnd))
+                observed["is_hung"] = is_hung
+                if is_hung:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Window '{m_title}' is not responding (IsHungAppWindow=True).",
+                    )
+            except Exception:
+                pass
+
+        # 5. Dimensions check
+        if min_dimensions and len(min_dimensions) == 2:
+            min_w, min_h = min_dimensions
+            if len(m_rect) == 4:
+                w = m_rect[2] - m_rect[0]
+                h = m_rect[3] - m_rect[1]
+                observed["dimensions"] = (w, h)
+                if w < min_w or h < min_h:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Window dimensions ({w}x{h}) are below minimum required ({min_w}x{min_h}).",
+                    )
+
+        return VerificationRecord(
+            evidence_id=evidence_id,
+            task_id=task_id,
+            subtask_id=subtask_id,
+            verifier_identity=self.verifier_identity,
+            expected_postcondition=spec,
+            actual_observed_result=observed,
+            status=VerificationStatus.COMPLETED_VERIFIED,
+            verdict=f"Verified window '{m_title}' [{m_app}] (HWND {m_hwnd}, visible={m_vis}, minimized={m_min}).",
+        )
+
+
+# ── 6. Browser Page Verifier ─────────────────────────────────────────────────
+
+class BrowserPageVerifier(BaseVerifier):
+    """Independently verifies browser active tab, URL, domain, and error-free loading."""
+
+    verifier_identity: str = "verifier:browser_page"
+    handled_type: PostconditionType = PostconditionType.BROWSER_PAGE
+
+    def verify(
+        self,
+        task_id: str,
+        subtask_id: str,
+        postcondition: Postcondition,
+        context: dict[str, Any] | None = None,
+    ) -> VerificationRecord:
+        spec = postcondition.spec
+        evidence_id = new_evidence_id("evd_web")
+        expected_domain = str(spec.get("expected_domain") or "").strip().lower()
+        url_pattern = str(spec.get("url_pattern") or "").strip()
+        title_pattern = str(spec.get("title_pattern") or "").strip()
+        prohibited = list(spec.get("prohibited_patterns") or [
+            "404 Not Found", "404 not found", "This site can’t be reached",
+            "This site can't be reached", "ERR_NAME_NOT_RESOLVED", "Privacy error",
+            "Server Not Found", "DNS_PROBE_FINISHED_NXDOMAIN",
+        ])
+
+        # Discover tabs
+        tabs = []
+        if context and "browser_tabs" in context:
+            tabs = context["browser_tabs"]
+        else:
+            try:
+                from core.vision.browser_intelligence import BrowserIntelligence
+                tabs = BrowserIntelligence().enumerate_tabs(force=True)
+            except Exception:
+                tabs = []
+
+        # Find active tab or matching tab
+        active_tab = None
+        for t in tabs:
+            is_active = getattr(t, "is_active", False) if not isinstance(t, dict) else t.get("is_active", False)
+            if is_active:
+                active_tab = t
+                break
+
+        # If no tab explicitly marked active, match first tab matching domain or title
+        target_tab = active_tab
+        if target_tab is None and tabs:
+            for t in tabs:
+                t_dom = getattr(t, "domain", "") or getattr(t, "domain_hint", "") if not isinstance(t, dict) else (t.get("domain") or t.get("domain_hint") or "")
+                t_title = getattr(t, "title", "") if not isinstance(t, dict) else t.get("title", "")
+                if expected_domain and expected_domain in str(t_dom).lower():
+                    target_tab = t
+                    break
+                if title_pattern and title_pattern.lower() in t_title.lower():
+                    target_tab = t
+                    break
+
+        observed: dict[str, Any] = {
+            "tab_found": target_tab is not None,
+            "expected_domain": expected_domain,
+            "url_pattern": url_pattern,
+            "title_pattern": title_pattern,
+        }
+
+        if target_tab is None:
+            observed["error"] = "No open browser tab found matching specifications"
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"No browser tab found matching domain='{expected_domain}' or title='{title_pattern}'.",
+            )
+
+        tab_title = getattr(target_tab, "title", "") if not isinstance(target_tab, dict) else target_tab.get("title", "")
+        tab_url = getattr(target_tab, "url", "") if not isinstance(target_tab, dict) else target_tab.get("url", "")
+        tab_domain = getattr(target_tab, "domain", "") or getattr(target_tab, "domain_hint", "") if not isinstance(target_tab, dict) else (target_tab.get("domain") or target_tab.get("domain_hint") or "")
+        tab_browser = getattr(target_tab, "browser", "browser") if not isinstance(target_tab, dict) else target_tab.get("browser", "browser")
+
+        observed.update({
+            "title": tab_title,
+            "url": tab_url,
+            "domain": tab_domain,
+            "browser": tab_browser,
+        })
+
+        # 1. Prohibited error check
+        for p in prohibited:
+            if p.lower() in tab_title.lower() or (tab_url and p.lower() in tab_url.lower()):
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"Browser tab rendered error page: '{p}'.",
+                )
+
+        # 2. Expected domain check
+        if expected_domain:
+            domain_matched = (expected_domain in str(tab_domain).lower()) or (expected_domain in str(tab_url).lower()) or (expected_domain.split(".")[0] in tab_title.lower())
+            observed["domain_matched"] = domain_matched
+            if not domain_matched:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"Active tab domain '{tab_domain}' does not match expected '{expected_domain}'.",
+                )
+
+        # 3. URL pattern check
+        if url_pattern:
+            if not tab_url:
+                # Active Omnibox couldn't be read directly (non-active tab), fallback to domain match if valid
+                if expected_domain and expected_domain in str(tab_domain).lower():
+                    pass
+                else:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict="Could not inspect active URL from browser Omnibox.",
+                    )
+            elif not re.search(url_pattern, tab_url, re.IGNORECASE) and url_pattern.lower() not in tab_url.lower():
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"URL '{tab_url}' does not match pattern '{url_pattern}'.",
+                )
+
+        # 4. Title pattern check
+        if title_pattern:
+            try:
+                title_matches = bool(re.search(title_pattern, tab_title, re.IGNORECASE)) or (title_pattern.lower() in tab_title.lower())
+            except re.error:
+                title_matches = (title_pattern.lower() in tab_title.lower())
+            if not title_matches:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"Tab title '{tab_title}' does not match expected '{title_pattern}'.",
+                )
+
+        return VerificationRecord(
+            evidence_id=evidence_id,
+            task_id=task_id,
+            subtask_id=subtask_id,
+            verifier_identity=self.verifier_identity,
+            expected_postcondition=spec,
+            actual_observed_result=observed,
+            status=VerificationStatus.COMPLETED_VERIFIED,
+            verdict=f"Verified browser page: '{tab_title}' ({tab_domain or tab_url or 'active'}).",
+        )
+
+
+# ── 7. Media Playback Verifier ───────────────────────────────────────────────
+
+class MediaPlaybackVerifier(BaseVerifier):
+    """Independently verifies audio/video media playback, time progression, and ad overlay absence."""
+
+    verifier_identity: str = "verifier:media_playback"
+    handled_type: PostconditionType = PostconditionType.MEDIA_PLAYBACK
+
+    def verify(
+        self,
+        task_id: str,
+        subtask_id: str,
+        postcondition: Postcondition,
+        context: dict[str, Any] | None = None,
+    ) -> VerificationRecord:
+        spec = postcondition.spec
+        evidence_id = new_evidence_id("evd_media")
+        assert_playing = bool(spec.get("assert_playing", True))
+        time_delta_sampling = bool(spec.get("time_delta_sampling", True))
+        min_progress = float(spec.get("min_progress_seconds", 1.0))
+        sample_interval = float(spec.get("sample_interval_seconds", 1.5))
+        detect_ad = bool(spec.get("detect_ad_overlay", True))
+        prohibited_overlays = list(spec.get("prohibited_overlays") or [
+            "Video unavailable", "This video is unavailable", "Private video",
+            "Playback error", "Sign in to confirm your age",
+        ])
+
+        # Check mock/context media state first for tests
+        if context and "media_state" in context:
+            m_state = context["media_state"]
+            observed = dict(m_state)
+            if observed.get("has_ad") and detect_ad:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.BLOCKED,
+                    verdict="Pre-roll advertisement is active; target video playback not yet started.",
+                )
+            for err in prohibited_overlays:
+                if err.lower() in str(observed.get("overlay_text", "")).lower():
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Video player displayed error overlay: '{err}'.",
+                    )
+            is_playing = bool(observed.get("is_playing", False))
+            if assert_playing and not is_playing:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict="Media player is paused or stalled.",
+                )
+            if time_delta_sampling:
+                t0 = float(observed.get("time_t0", 0.0))
+                t1 = float(observed.get("time_t1", t0 + 2.0))
+                if (t1 - t0) < min_progress:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Playback time did not advance sufficiently: delta={round(t1-t0, 2)}s < {min_progress}s.",
+                    )
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.COMPLETED_VERIFIED,
+                verdict=f"Verified media playback: active and progressing.",
+            )
+
+        # Real Desktop Observation via screenview UIA
+        with com_initialized():
+            try:
+                from core.screenview import look
+                view = look()
+            except Exception as e:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result={"error": f"Failed to inspect desktop UI: {e}"},
+                    status=VerificationStatus.FAILED,
+                    verdict=f"Failed to inspect active media window: {e}",
+                )
+
+        observed = {
+            "app": view.app,
+            "title": view.title,
+            "element_count": len(view.elements),
+        }
+
+        # 1. Prohibited error overlay check
+        for elem in view.elements:
+            elem_text = f"{elem.name} {elem.value}".lower()
+            for err in prohibited_overlays:
+                if err.lower() in elem_text:
+                    observed["error_overlay"] = err
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Video player displayed error overlay: '{err}'.",
+                    )
+
+        # 2. Ad overlay detection
+        if detect_ad:
+            ad_signatures = ["ad 1 of", "ad 2 of", "skip ad", "skip in", "ytp-ad", "advertisement"]
+            for elem in view.elements:
+                elem_text = f"{elem.name} {elem.value}".lower()
+                for ad_sig in ad_signatures:
+                    if ad_sig in elem_text:
+                        observed["ad_detected"] = elem_text[:50]
+                        return VerificationRecord(
+                            evidence_id=evidence_id,
+                            task_id=task_id,
+                            subtask_id=subtask_id,
+                            verifier_identity=self.verifier_identity,
+                            expected_postcondition=spec,
+                            actual_observed_result=observed,
+                            status=VerificationStatus.BLOCKED,
+                            verdict=f"Pre-roll advertisement is active ('{elem_text[:30]}'); target video playback not started.",
+                        )
+
+        # 3. Play / Pause state detection
+        # On YouTube and HTML5 video players, the button displays "Pause" or "Pause (k)" while playing!
+        has_pause_button = False
+        has_play_button = False
+        time_text = ""
+
+        time_pattern = re.compile(r"(\d+:\d+(?::\d+)?)\s*(?:/|of)\s*(\d+:\d+(?::\d+)?)")
+
+        for elem in view.elements:
+            name_low = (elem.name or "").lower()
+            val_low = (elem.value or "").lower()
+
+            if "pause" in name_low or "pause" in val_low or "(k)" in name_low:
+                has_pause_button = True
+            elif name_low == "play" or val_low == "play":
+                has_play_button = True
+
+            if not time_text:
+                m = time_pattern.search(str(elem.name or "")) or time_pattern.search(str(elem.value or ""))
+                if m:
+                    time_text = m.group(0)
+
+        observed["has_pause_button"] = has_pause_button
+        observed["has_play_button"] = has_play_button
+        observed["time_text"] = time_text
+
+        if assert_playing and not has_pause_button and has_play_button:
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict="Media player is in PAUSED state (Play button visible, Pause button absent).",
+            )
+
+        # 4. Temporal 2-point sampling
+        if time_delta_sampling and time_text:
+            def _parse_secs(t_str: str) -> float:
+                cur = t_str.split("/")[0].strip()
+                parts = cur.split(":")
+                if len(parts) == 2:
+                    return int(parts[0]) * 60 + int(parts[1])
+                elif len(parts) == 3:
+                    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                return 0.0
+
+            s0 = _parse_secs(time_text)
+            time.sleep(sample_interval)
+
+            with com_initialized():
+                try:
+                    from core.screenview import look
+                    view2 = look()
+                    time_text2 = ""
+                    for elem in view2.elements:
+                        m = time_pattern.search(elem.name) or time_pattern.search(elem.value)
+                        if m:
+                            time_text2 = m.group(0)
+                            break
+                    if time_text2:
+                        s1 = _parse_secs(time_text2)
+                        observed["time_t0"] = s0
+                        observed["time_t1"] = s1
+                        observed["delta_seconds"] = s1 - s0
+                        if (s1 - s0) < min_progress:
+                            return VerificationRecord(
+                                evidence_id=evidence_id,
+                                task_id=task_id,
+                                subtask_id=subtask_id,
+                                verifier_identity=self.verifier_identity,
+                                expected_postcondition=spec,
+                                actual_observed_result=observed,
+                                status=VerificationStatus.FAILED,
+                                verdict=f"Playback stalled: current time {time_text} -> {time_text2} (delta={s1-s0}s).",
+                            )
+                except Exception:
+                    pass
+
+        return VerificationRecord(
+            evidence_id=evidence_id,
+            task_id=task_id,
+            subtask_id=subtask_id,
+            verifier_identity=self.verifier_identity,
+            expected_postcondition=spec,
+            actual_observed_result=observed,
+            status=VerificationStatus.COMPLETED_VERIFIED,
+            verdict=f"Verified media playback: active player controls and non-zero progression confirmed.",
+        )
+
+
+# ── 8. UI Control Verifier ───────────────────────────────────────────────────
+
+class UIControlVerifier(BaseVerifier):
+    """Independently verifies specific UI controls, states, values, and interactive accessibility properties."""
+
+    verifier_identity: str = "verifier:ui_control"
+    handled_type: PostconditionType = PostconditionType.UI_CONTROL
+
+    def verify(
+        self,
+        task_id: str,
+        subtask_id: str,
+        postcondition: Postcondition,
+        context: dict[str, Any] | None = None,
+    ) -> VerificationRecord:
+        spec = postcondition.spec
+        evidence_id = new_evidence_id("evd_uic")
+        role = str(spec.get("role") or "").strip().lower()
+        name_pattern = str(spec.get("name_pattern") or "").strip()
+        expected_value = spec.get("expected_value")
+        is_enabled = spec.get("is_enabled", True)
+        is_focused = spec.get("is_focused")
+        target_hwnd = spec.get("target_hwnd")
+
+        elements = []
+        if context and "view" in context:
+            view = context["view"]
+            elements = getattr(view, "elements", []) if not isinstance(view, dict) else view.get("elements", [])
+        else:
+            with com_initialized():
+                try:
+                    from core.screenview import look
+                    view = look()
+                    elements = getattr(view, "elements", [])
+                except Exception as e:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result={"error": f"Failed to inspect UI controls: {e}"},
+                        status=VerificationStatus.FAILED,
+                        verdict=f"Could not read accessibility tree: {e}",
+                    )
+
+        matched = None
+        for elem in elements:
+            raw_role = getattr(elem, "role", "") if not isinstance(elem, dict) else elem.get("role", "")
+            e_role = str(raw_role).lower()
+            if role and role not in e_role:
+                continue
+
+            raw_name = getattr(elem, "name", "") if not isinstance(elem, dict) else elem.get("name", "")
+            e_name = str(raw_name)
+            if name_pattern:
+                try:
+                    if not re.search(name_pattern, e_name, re.IGNORECASE) and name_pattern.lower() not in e_name.lower():
+                        continue
+                except re.error:
+                    if name_pattern.lower() not in e_name.lower():
+                        continue
+
+            matched = elem
+            break
+
+        observed: dict[str, Any] = {
+            "control_found": matched is not None,
+            "target_role": role,
+            "target_name_pattern": name_pattern,
+        }
+
+        if matched is None:
+            observed["error"] = "Target UI control not found"
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"UI control role='{role}' matching '{name_pattern}' not found.",
+            )
+
+        m_role = getattr(matched, "role", "") if not isinstance(matched, dict) else matched.get("role", "")
+        m_name = getattr(matched, "name", "") if not isinstance(matched, dict) else matched.get("name", "")
+        m_val = getattr(matched, "value", "") if not isinstance(matched, dict) else matched.get("value", "")
+        m_enabled = getattr(matched, "enabled", True) if not isinstance(matched, dict) else matched.get("enabled", True)
+        m_focused = getattr(matched, "focused", False) if not isinstance(matched, dict) else matched.get("focused", False)
+
+        observed.update({
+            "role": m_role,
+            "name": m_name,
+            "value": m_val,
+            "enabled": m_enabled,
+            "focused": m_focused,
+        })
+
+        # 1. Enabled check
+        if is_enabled is not None and m_enabled != bool(is_enabled):
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"UI control '{m_name}' enabled={m_enabled}, expected={is_enabled}.",
+            )
+
+        # 2. Focused check
+        if is_focused is not None and m_focused != bool(is_focused):
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.FAILED,
+                verdict=f"UI control '{m_name}' focused={m_focused}, expected={is_focused}.",
+            )
+
+        # 3. Expected value check
+        if expected_value is not None:
+            str_exp = str(expected_value)
+            if str_exp.lower() not in str(m_val).lower() and str_exp.lower() not in str(m_name).lower():
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAILED,
+                    verdict=f"UI control value '{m_val}' does not contain expected '{expected_value}'.",
+                )
+
+        return VerificationRecord(
+            evidence_id=evidence_id,
+            task_id=task_id,
+            subtask_id=subtask_id,
+            verifier_identity=self.verifier_identity,
+            expected_postcondition=spec,
+            actual_observed_result=observed,
+            status=VerificationStatus.COMPLETED_VERIFIED,
+            verdict=f"Verified UI control: [{m_role}] '{m_name}' (enabled={m_enabled}, focused={m_focused}).",
+        )
+

@@ -640,10 +640,28 @@ class MREOutcomeVerifier:
             return True, "Git repository status retrieved."
 
         if ctype == "process_running":
-            return True, f"Application launch validated for target '{contract.target}'."
+            target = (contract.target or "").lower().strip()
+            import psutil
+            is_running = any(target in (p.info.get("name") or "").lower() for p in psutil.process_iter(['name']))
+            if is_running:
+                return True, f"Application launch validated for target '{contract.target}' (Process running)."
+            return False, f"Application process '{contract.target}' not found in active system processes."
 
         if ctype == "window_focused":
-            return tool_result.is_success, f"Window focus/restore validated for '{contract.target}'."
+            if evidence and evidence.get("focused") is not None:
+                return bool(evidence.get("focused") and tool_result.is_success), f"Window focus validated for '{contract.target}'."
+            from core.verification.types import Postcondition, PostconditionType
+            from core.verification.verifiers import DesktopWindowVerifier
+            wv = DesktopWindowVerifier()
+            rec = wv.verify(
+                task_id=f"mre_{int(time.time())}",
+                subtask_id="win_focus",
+                postcondition=Postcondition(
+                    postcondition_type=PostconditionType.DESKTOP_WINDOW,
+                    spec={"title_pattern": contract.target, "app_name": contract.target, "must_be_active": True},
+                ),
+            )
+            return (rec.is_pass or (tool_result.is_success and "focused" in (tool_result.output or "").lower())), rec.verdict
 
         if ctype == "windows_listed":
             return tool_result.is_success, "Window inventory retrieved successfully."
@@ -652,7 +670,20 @@ class MREOutcomeVerifier:
             return tool_result.is_success, "Browser tab inventory retrieved successfully."
 
         if ctype == "tab_switched":
-            return tool_result.is_success, f"Browser tab selection validated for '{contract.target}'."
+            if evidence and (evidence.get("switched") is not None or evidence.get("focused") is not None):
+                return bool(tool_result.is_success), f"Browser tab selection validated for '{contract.target}'."
+            from core.verification.types import Postcondition, PostconditionType
+            from core.verification.verifiers import BrowserPageVerifier
+            bv = BrowserPageVerifier()
+            rec = bv.verify(
+                task_id=f"mre_{int(time.time())}",
+                subtask_id="tab_switch",
+                postcondition=Postcondition(
+                    postcondition_type=PostconditionType.BROWSER_PAGE,
+                    spec={"title_pattern": contract.target, "expected_domain": contract.target},
+                ),
+            )
+            return (rec.is_pass or (tool_result.is_success and any(w in (tool_result.output or "").lower() for w in ("switched", "success")))), rec.verdict
 
         if ctype == "desktop_explained":
             return tool_result.is_success, "Desktop visual state explanation retrieved."

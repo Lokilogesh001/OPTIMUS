@@ -472,8 +472,49 @@ class SectionVision(QWidget):
             status = "VERIFIED" if ev.is_successful else f"ANOMALY: {ev.detected_anomaly}"
             rec = f" | Rec: {ev.recommended_action}" if ev.recommended_action else ""
             lines.append(f"[{status}] Step {ev.step_index} ({ev.action_type} on '{ev.target_element}') -> {ev.actual_state}{rec}")
+
+        # Query recent physical verification records from EvidenceLedger
+        latest_status = None
+        try:
+            from core.verification.engine import VerificationEngine
+            ledger = VerificationEngine().ledger
+            with ledger._lock:
+                recent_recs = list(ledger._records.values())[-8:]
+            if recent_recs:
+                latest_status = recent_recs[-1].status.value
+                lines.append("\n── Physical Verification Ledger (Cryptographic SHA-256 Records) ──")
+                for r in reversed(recent_recs):
+                    stat_badge = f"[{r.status.value}]"
+                    v_hash = f"sha256={r.integrity_hash[:10]}..." if r.integrity_hash else ""
+                    lines.append(f"{stat_badge} {r.verifier_identity} | {r.verdict} | {v_hash}")
+        except Exception:
+            pass
+
+        # Update live status badge
+        if latest_status:
+            if "VERIFIED" in latest_status or latest_status == "PASS":
+                self.lbl_supervisor_badge.setText(f"VERIFIED: {latest_status}")
+                self.lbl_supervisor_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(16, 185, 129, 0.15); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
+            elif latest_status == "BLOCKED":
+                self.lbl_supervisor_badge.setText("VERIFIER: BLOCKED (SAFETY HALT)")
+                self.lbl_supervisor_badge.setStyleSheet("color: #f97316; background: rgba(249, 115, 22, 0.15); border: 1px solid #f97316; border-radius: 3px; padding: 2px 8px;")
+            elif "FAIL" in latest_status:
+                self.lbl_supervisor_badge.setText(f"VERIFIER: {latest_status}")
+                self.lbl_supervisor_badge.setStyleSheet(f"color: {C.RED}; background: rgba(239, 68, 68, 0.15); border: 1px solid {C.RED}; border-radius: 3px; padding: 2px 8px;")
+            else:
+                self.lbl_supervisor_badge.setText(f"VERIFIER: {latest_status}")
+                self.lbl_supervisor_badge.setStyleSheet(f"color: {C.PRI}; background: rgba(0, 132, 255, 0.1); border: 1px solid {C.PRI_DIM}; border-radius: 3px; padding: 2px 8px;")
+        elif history:
+            last_ev = history[-1]
+            if last_ev.is_successful:
+                self.lbl_supervisor_badge.setText("SUPERVISOR: STEP VERIFIED")
+                self.lbl_supervisor_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(16, 185, 129, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
+            else:
+                self.lbl_supervisor_badge.setText(f"SUPERVISOR: {last_ev.detected_anomaly.upper() if last_ev.detected_anomaly else 'ANOMALY'}")
+                self.lbl_supervisor_badge.setStyleSheet(f"color: {C.RED}; background: rgba(239, 68, 68, 0.1); border: 1px solid {C.RED}; border-radius: 3px; padding: 2px 8px;")
+
         if not lines:
-            lines.append("Visual Supervisor ready. Waiting for task execution events...")
+            lines.append("Visual Supervisor & Verification Engine ready. Waiting for task execution events...")
         self.txt_supervisor_log.setText("\n".join(lines))
 
     # ── User Action Handlers ─────────────────────────────────────────────────
