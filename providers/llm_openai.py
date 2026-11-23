@@ -68,6 +68,7 @@ PRESETS: dict[str, str] = {
     "Together":             "https://api.together.xyz/v1",
     "Cerebras":             "https://api.cerebras.ai/v1",
     "MiniMax":              "https://api.minimax.io/v1",
+    "NVIDIA NIM":           "https://integrate.api.nvidia.com/v1",
     "Google Gemini":        "https://generativelanguage.googleapis.com/v1beta/openai",
 }
 
@@ -164,6 +165,10 @@ CATALOG = (
     {"id": "cerebras",   "label": "Cerebras",
      "note": "cloud · needs a key", "local": False,
      "values": {"base_url": PRESETS["Cerebras"], **_CLOUD}},
+    {"id": "nvidia_nim", "label": "NVIDIA NIM",
+     "note": "cloud · accelerated inference · needs key", "local": False,
+     "values": {"base_url": PRESETS["NVIDIA NIM"], **_CLOUD,
+                "model": "meta/llama-3.1-70b-instruct"}},
     {"id": "custom",     "label": "Something else",
      "note": "type the address yourself", "local": None,
      "values": {}},
@@ -361,15 +366,22 @@ class OpenAICompatLLM:
         self.base = _normalise(cfg.get("base_url") or "")
         self.model = (cfg.get("model") or "").strip()
         self.key = (cfg.get("api_key") or "").strip()
-        if not self.key and "generativelanguage.googleapis.com" in self.base:
-            # The Gemini entry needs no second key: the one Gemini Live already
-            # uses is the natural choice, and a different key pasted here is how
-            # a free-tier project ends up behind a paid one (20 requests a day).
-            try:
-                from memory.config_manager import get_gemini_key
-                self.key = (get_gemini_key() or "").strip()
-            except Exception:
-                pass
+        if not self.key:
+            if "generativelanguage.googleapis.com" in self.base:
+                # The Gemini entry needs no second key: the one Gemini Live already
+                # uses is the natural choice, and a different key pasted here is how
+                # a free-tier project ends up behind a paid one (20 requests a day).
+                try:
+                    from memory.config_manager import get_gemini_key
+                    self.key = (get_gemini_key() or "").strip()
+                except Exception:
+                    pass
+            elif "nvidia.com" in self.base:
+                try:
+                    from core.security.credentials import get_credential
+                    self.key = (get_credential("nvidia") or get_credential("nvidia_nim") or "").strip()
+                except Exception:
+                    pass
         self.timeout = float(cfg.get("timeout") or 60.0)
 
         # A budget on a model running on your own hardware, unless the user
@@ -454,9 +466,24 @@ class OpenAICompatLLM:
         try:
             with self._httpx.Client(timeout=timeout or self.timeout,
                                     trust_env=self._trust_env) as cl:
+                body = self._body(messages, tools, False, temperature)
                 r = cl.post(f"{self.base}/chat/completions",
                             headers=self._headers(),
-                            json=self._body(messages, tools, False, temperature))
+                            json=body)
+                if r.status_code == 400 and "nvidia.com" in self.base:
+                    import re
+                    err_text = r.text
+                    match = re.search(
+                        r"(?:unrecognized|unknown|unsupported)\s+(?:request\s+)?argument[:\s=]+['\"]?([a-zA-Z0-9_]+)",
+                        err_text,
+                        re.IGNORECASE,
+                    )
+                    if match and match.group(1).lower() in body:
+                        bad_k = match.group(1).lower()
+                        body.pop(bad_k, None)
+                        r = cl.post(f"{self.base}/chat/completions",
+                                    headers=self._headers(),
+                                    json=body)
                 if r.status_code >= 400:
                     raise RuntimeError(f"{r.status_code} {_terse(r.text)}")
                 data = r.json()

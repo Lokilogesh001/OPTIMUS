@@ -85,7 +85,14 @@ class CircuitBreaker:
             self._last_error = str(error) if error else "Unknown error"
 
             err_str = self._last_error.lower()
-            is_unrecoverable = any(kw in err_str for kw in ("insufficient_quota", "credit_balance_exhausted", "quota", "auth failed", "invalid api key"))
+            is_auth_error = (
+                (error is not None and error.__class__.__name__ == "AuthenticationError")
+                or any(kw in err_str for kw in (
+                    "401", "unauthorized", "invalid bearer", "bearer token",
+                    "auth failed", "invalid api key", "refused the key"
+                ))
+            )
+            is_unrecoverable = is_auth_error or any(kw in err_str for kw in ("insufficient_quota", "credit_balance_exhausted", "quota"))
 
             if self._state == CircuitState.HALF_OPEN or is_unrecoverable:
                 # Immediate trip back to OPEN on probe failure or unrecoverable error

@@ -13,6 +13,7 @@ from __future__ import annotations
 from core.intelligence.providers.anthropic import AnthropicProvider
 from core.intelligence.providers.base import ModelProvider
 from core.intelligence.providers.local_custom import LocalCustomProvider
+from core.intelligence.providers.nvidia_nim import NvidiaNimProvider
 from core.intelligence.providers.ollama import OllamaProvider
 from core.intelligence.providers.openai import OpenAIProvider
 
@@ -20,6 +21,7 @@ __all__ = [
     "AnthropicProvider",
     "LocalCustomProvider",
     "ModelProvider",
+    "NvidiaNimProvider",
     "OllamaProvider",
     "OpenAIProvider",
 ]

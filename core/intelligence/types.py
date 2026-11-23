@@ -26,6 +26,7 @@ class ModelProviderType(str, Enum):
     OPENAI_COMPATIBLE = "OPENAI_COMPATIBLE"
     LOCAL_CUSTOM = "LOCAL_CUSTOM"
     GEMINI = "GEMINI"
+    NVIDIA_NIM = "NVIDIA_NIM"
 
 
 class ModelExecutionBackend(str, Enum):
@@ -243,6 +244,10 @@ class ProviderError(IntelligenceError):
         super().__init__(f"[{provider}] {message}" if provider else message)
         self.provider = provider
         self.status_code = status_code
+
+
+class AuthenticationError(ProviderError):
+    """Raised when API key is missing, invalid, or rejected by upstream endpoint (HTTP 401/403)."""
 
 
 class TimeoutError(IntelligenceError):

@@ -719,6 +719,15 @@ class ProvidersOverlay(_HudOverlay):
             if f.key == "api_key" and entry.get("local") is False:
                 f = replace(f, required=True,
                             hint=f"Needed — create one in your {entry['label']} account")
+                if not stored.get(f.key):
+                    try:
+                        from core.security.credentials import get_credential
+                        k_id = entry.get("id") or pid
+                        if get_credential(k_id) or (k_id == "nvidia_nim" and get_credential("nvidia")):
+                            stored = dict(stored)
+                            stored["api_key"] = "••••••••"
+                    except Exception:
+                        pass
             if f.key == "backend":
                 carried[f.key] = (self._line(
                     str(entry.get("values", {}).get("backend")
@@ -999,6 +1008,14 @@ class ProvidersOverlay(_HudOverlay):
                 value = self._combo_value(w)
             else:
                 value = w.text().strip()
+            # If masked placeholder was shown, resolve to real stored secret in-memory for testing
+            if key == "api_key" and value == "••••••••":
+                try:
+                    from core.security.credentials import get_credential
+                    base, entry = self._registry.split_id(pid)
+                    value = get_credential(entry) or get_credential(base) or ""
+                except Exception:
+                    pass
             # A field nobody can see must never blank out a setting that has
             # one. These widgets are rebuilt on every redraw, and a redraw that
             # raced a background fetch could recreate a hidden address as empty
@@ -1019,7 +1036,19 @@ class ProvidersOverlay(_HudOverlay):
         from memory.config_manager import save_provider_config
         for pid in list(self._edits):
             try:
-                save_provider_config(pid, self._values(pid))
+                vals = dict(self._values(pid))
+                raw_key = vals.get("api_key", "")
+                if raw_key and raw_key != "••••••••":
+                    try:
+                        from core.security.credentials import store_credential
+                        base, entry = self._registry.split_id(pid)
+                        store_credential(entry, raw_key)
+                    except Exception:
+                        pass
+                # Zero-plaintext invariant: never write secret to config json
+                if "api_key" in vals:
+                    vals["api_key"] = ""
+                save_provider_config(pid, vals)
             except Exception:
                 pass
 
@@ -1129,7 +1158,21 @@ class ProvidersOverlay(_HudOverlay):
         from memory.config_manager import save_providers
 
         # ONE write, not five. See save_providers for what the five cost.
-        creds = {sid: self._values(sid) for sid in list(self._edits)}
+        creds = {}
+        for sid in list(self._edits):
+            vals = dict(self._values(sid))
+            raw_key = vals.get("api_key", "")
+            if raw_key and raw_key != "••••••••":
+                try:
+                    from core.security.credentials import store_credential
+                    base, entry = self._registry.split_id(sid)
+                    store_credential(entry, raw_key)
+                except Exception:
+                    pass
+            # Zero-plaintext invariant: secrets are kept in OS Keyring / vault, not config file
+            if "api_key" in vals:
+                vals["api_key"] = ""
+            creds[sid] = vals
 
         save_providers(
             mode=self._mode,

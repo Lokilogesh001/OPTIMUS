@@ -12,6 +12,7 @@ from typing import Any
 from core.intelligence.providers.anthropic import AnthropicProvider
 from core.intelligence.providers.base import ModelProvider
 from core.intelligence.providers.local_custom import LocalCustomProvider
+from core.intelligence.providers.nvidia_nim import NvidiaNimProvider
 from core.intelligence.providers.ollama import OllamaProvider
 from core.intelligence.providers.openai import OpenAIProvider
 from core.intelligence.types import (
@@ -38,6 +39,7 @@ class ModelRegistry:
             OllamaProvider(),
             OpenAIProvider(),
             AnthropicProvider(),
+            NvidiaNimProvider(),
         ]
         for p in default_providers:
             self.register_provider(p)

@@ -189,7 +189,15 @@ def missing_fields(provider_id: str, cfg: dict) -> list[str]:
     # not optional for a hosted service, which refuses every request without
     # one. Reporting it here keeps a keyless MiniMax off the ladder instead of
     # spending a round trip on a 401 each time.
-    if (catalog_entry(provider_id).get("local") is False
-            and not str(cfg.get("api_key", "")).strip()):
-        out.append("API key")
+    if catalog_entry(provider_id).get("local") is False:
+        has_key = bool(str(cfg.get("api_key", "")).strip())
+        if not has_key:
+            base, entry = split_id(provider_id)
+            try:
+                from core.security.credentials import get_credential
+                has_key = bool(get_credential(entry) or get_credential(base))
+            except Exception:
+                has_key = False
+        if not has_key:
+            out.append("API key")
     return out
