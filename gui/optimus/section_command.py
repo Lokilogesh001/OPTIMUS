@@ -35,7 +35,7 @@ from core.interaction.types import ImageAttachment
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import btn_css, mono_font, px_font, scroll_css
 from gui.theme import C
-from gui.widgets import HoloPanel
+from gui.widgets import HoloPanel, StreamConsoleWidget
 
 
 class SectionCommandCenter(QWidget):
@@ -95,21 +95,8 @@ class SectionCommandCenter(QWidget):
         # Panel 1: Conversation & Interaction Panel
         p_interact = HoloPanel("SOVEREIGN INTERACTION & DIRECTIVES", "CONV")
 
-        # Chat history display
-        self.chat_history = QTextEdit()
-        self.chat_history.setReadOnly(True)
-        self.chat_history.document().setMaximumBlockCount(800)
-        self.chat_history.document().setDocumentMargin(4)
-        self.chat_history.setFont(px_font(10))
-        self.chat_history.setStyleSheet(f"""
-            QTextEdit {{
-                background: {C.PANEL2};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER};
-                border-radius: 3px;
-                padding: 8px;
-            }}
-        """ + scroll_css())
+        # Chat history display (Mandate M-5: StreamConsoleWidget)
+        self.chat_history = StreamConsoleWidget(self)
         p_interact.body.addWidget(self.chat_history, stretch=1)
 
         # Attachment preview strip
@@ -202,22 +189,9 @@ class SectionCommandCenter(QWidget):
         p_interact.body.addLayout(ctrl_row)
         left_lay.addWidget(p_interact, stretch=3)
 
-        # Panel 2: Execution Details & Deliverables Console
+        # Panel 2: Execution Details & Deliverables Console (Mandate M-5: StreamConsoleWidget)
         p_out = HoloPanel("EXECUTION OUTPUT & DELIVERABLES", "STDOUT")
-        self.out_display = QTextEdit()
-        self.out_display.setReadOnly(True)
-        self.out_display.document().setMaximumBlockCount(800)
-        self.out_display.document().setDocumentMargin(4)
-        self.out_display.setFont(mono_font(10))
-        self.out_display.setStyleSheet(f"""
-            QTextEdit {{
-                background: {C.PANEL2};
-                color: {C.TEXT};
-                border: 1px solid {C.BORDER};
-                border-radius: 3px;
-                padding: 6px;
-            }}
-        """ + scroll_css())
+        self.out_display = StreamConsoleWidget(self)
         p_out.body.addWidget(self.out_display)
         left_lay.addWidget(p_out, stretch=2)
 
@@ -342,20 +316,14 @@ class SectionCommandCenter(QWidget):
         self._append_system_msg("Directive cancellation requested.")
 
     def _append_user_msg(self, text: str, has_image: bool = False) -> None:
-        att_tag = " <font color='#00d4ff'>[📎 Image Attached]</font>" if has_image else ""
-        self.chat_history.append(
-            f"<p style='margin:4px 0;'><font color='{C.PRI}'><b>USER:</b></font> {text}{att_tag}</p>"
-        )
+        att = " [📎 Image Attached]" if has_image else ""
+        self.chat_history.append_line("USER", f"{text}{att}", tag="user")
 
     def _append_assistant_msg(self, text: str) -> None:
-        self.chat_history.append(
-            f"<p style='margin:4px 0;'><font color='{C.GREEN}'><b>OPTIMUS:</b></font> {text}</p>"
-        )
+        self.chat_history.append_line("OPTIMUS", text, tag="assistant")
 
     def _append_system_msg(self, text: str) -> None:
-        self.chat_history.append(
-            f"<p style='margin:4px 0;'><font color='{C.TEXT_DIM}'><i>[SYSTEM] {text}</i></font></p>"
-        )
+        self.chat_history.append_line("SYSTEM", text, tag="system")
 
     def _on_user_message_received(self, data: dict[str, Any]) -> None:
         pass  # Handled directly on dispatch

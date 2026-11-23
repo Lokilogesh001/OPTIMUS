@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import (
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import btn_css, mono_font, px_font, scroll_css
 from gui.theme import C
-from gui.widgets import HoloPanel
+from gui.widgets import HoloPanel, StreamConsoleWidget
 
 
 class TelemetryMetricBar(QWidget):
@@ -82,12 +82,11 @@ class TelemetryMetricBar(QWidget):
         return self._v
 
     def _update_bar_style(self) -> None:
-        if self._v > 85:
-            chunk_color = C.RED
-        elif self._v > 65:
-            chunk_color = C.ACC
-        else:
-            chunk_color = C.PRI
+        tier = "red" if self._v > 85 else "acc" if self._v > 65 else "pri"
+        if tier == getattr(self, "_current_tier", None):
+            return
+        self._current_tier = tier
+        chunk_color = C.RED if tier == "red" else C.ACC if tier == "acc" else C.PRI
 
         self.bar.setStyleSheet(f"""
             QProgressBar {{
@@ -225,23 +224,14 @@ class OptimusDashboardView(QWidget):
         self.active_goal_lbl.setWordWrap(True)
         lay.addWidget(self.active_goal_lbl)
 
-        # Transcript stream container
-        self.chat_transcript = QTextEdit()
-        self.chat_transcript.setReadOnly(True)
+        # Transcript stream container (Mandate M-5: StreamConsoleWidget)
+        self.chat_transcript = StreamConsoleWidget(self)
         self.chat_transcript.setFont(px_font(10))
         self.chat_transcript.setFixedHeight(110)
-        self.chat_transcript.setStyleSheet(f"""
-            QTextEdit {{
-                background: {C.PANEL2};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER};
-                border-radius: 4px;
-                padding: 6px;
-            }}
-        """ + scroll_css())
-        self.chat_transcript.append(
-            f"<font color='{C.TEXT_DIM}'>[OPTIMUS ONLINE]</font> "
-            f"<font color='{C.WHITE}'>Autonomous Agentic AI Assistant ready. Directives are validated via policy engine.</font>"
+        self.chat_transcript.append_line(
+            "OPTIMUS ONLINE",
+            "Autonomous Agentic AI Assistant ready. Directives are validated via policy engine.",
+            tag="sys",
         )
         lay.addWidget(self.chat_transcript)
 

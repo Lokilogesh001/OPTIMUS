@@ -81,6 +81,20 @@ _RIGHT_W = 340
 _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
 
+def get_system_reduced_motion() -> bool:
+    """Detect whether Windows 11 / OS has animations disabled for accessibility."""
+    if _OS == "Windows":
+        try:
+            import ctypes
+            anim = ctypes.c_bool()
+            # SPI_GETCLIENTAREAANIMATION = 0x1042
+            if ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(anim), 0):
+                return not anim.value
+        except Exception:
+            pass
+    return False
+
+
 class C:
     BG        = "#070b14"  # Deep midnight navy primary background
     PANEL     = "#0c1322"  # Secondary surface: dark blue-gray
@@ -104,6 +118,67 @@ class C:
     WHITE     = "#f8fafc"  # Crisp cool white
     DARK      = "#05080f"  # Deepest background
     BAR_BG    = "#0f1728"  # Track / progress background
+
+
+class OptimusTheme:
+    """Unified, hardware-accelerated design token namespace for OPTIMUS UI 2.0.
+    
+    Acts as a high-level design token superset while preserving 100% backward
+    compatibility with legacy class C.
+    """
+    BG_VOID        = "#04070d"
+    BG_BASE        = "#070b14"
+    BG_PANEL       = "#0c1322"
+    BG_ELEVATED    = "#111a2e"
+    BG_HEADER      = "#0f172a"
+    ACCENT_PRI     = "#0084ff"
+    ACCENT_CYAN    = "#38bdf8"
+    ACCENT_AMBER   = "#f59e0b"
+    ACCENT_GREEN   = "#10b981"
+    ACCENT_RED     = "#ef4444"
+    TEXT_PRIMARY   = "#f8fafc"
+    TEXT_SECONDARY = "#94a3b8"
+    TEXT_MUTED     = "#64748b"
+    BORDER_HAIRLINE= "#1e293b"
+    BORDER_ACTIVE  = "#38bdf8"
+    TRACK_BG       = "#0f1728"
+
+
+# Bidirectional backward compatibility aliases (Mandate M-6)
+OptimusTheme.BG = OptimusTheme.BG_BASE
+OptimusTheme.PANEL = OptimusTheme.BG_PANEL
+OptimusTheme.PANEL2 = OptimusTheme.BG_ELEVATED
+OptimusTheme.PANEL_HEAD = OptimusTheme.BG_HEADER
+OptimusTheme.PRI = OptimusTheme.ACCENT_PRI
+OptimusTheme.ACC = OptimusTheme.ACCENT_AMBER
+OptimusTheme.ACC2 = OptimusTheme.ACCENT_CYAN
+OptimusTheme.GREEN = OptimusTheme.ACCENT_GREEN
+OptimusTheme.RED = OptimusTheme.ACCENT_RED
+OptimusTheme.TEXT = OptimusTheme.TEXT_PRIMARY
+OptimusTheme.TEXT_MED = OptimusTheme.TEXT_SECONDARY
+OptimusTheme.TEXT_DIM = OptimusTheme.TEXT_MUTED
+OptimusTheme.BORDER = OptimusTheme.BORDER_HAIRLINE
+OptimusTheme.BORDER_B = OptimusTheme.BORDER_ACTIVE
+OptimusTheme.WHITE = OptimusTheme.TEXT_PRIMARY
+OptimusTheme.BAR_BG = OptimusTheme.TRACK_BG
+
+C.BG_VOID = OptimusTheme.BG_VOID
+C.BG_BASE = C.BG
+C.BG_PANEL = C.PANEL
+C.BG_ELEVATED = C.PANEL2
+C.BG_HEADER = C.PANEL_HEAD
+C.ACCENT_PRI = C.PRI
+C.ACCENT_CYAN = C.ACC2
+C.ACCENT_AMBER = C.ACC
+C.ACCENT_GREEN = C.GREEN
+C.ACCENT_RED = C.RED
+C.TEXT_PRIMARY = C.TEXT
+C.TEXT_SECONDARY = C.TEXT_MED
+C.TEXT_MUTED = C.TEXT_DIM
+C.BORDER_HAIRLINE = C.BORDER
+C.BORDER_ACTIVE = C.BORDER_B
+C.TRACK_BG = C.BAR_BG
+
 
 
 # Keys tied to the accent colour — status colours (ACC, GREEN, RED…) stay fixed

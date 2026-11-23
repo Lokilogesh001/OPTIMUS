@@ -147,6 +147,7 @@ class SectionSystem(QWidget):
 
         # Wire telemetry signal
         self.bridge.telemetry_updated.connect(self._on_telemetry_update)
+        self.bridge.processes_snapshot_ready.connect(self._on_processes_snapshot)
 
         # Property aliases for testing & external APIs
         self.gauge_ram = self.gauge_mem
@@ -218,6 +219,35 @@ class SectionSystem(QWidget):
             self.table_procs.setItem(row, 2, cpu_item)
             self.table_procs.setItem(row, 3, ram_item)
 
+    def _on_processes_snapshot(self, top_procs: list[dict[str, Any]]) -> None:
+        """Slot for asynchronously delivered process snapshots from background bridge worker."""
+        if not self.isVisible():
+            return
+        self._populate_proc_table(top_procs)
+
+    def _populate_proc_table(self, top_procs: list[dict[str, Any]]) -> None:
+        self.table_procs.setRowCount(len(top_procs))
+        for row, pr in enumerate(top_procs):
+            pid_item = QTableWidgetItem(str(pr.get("pid", 0)))
+            pid_item.setFont(mono_font(9))
+
+            name_item = QTableWidgetItem(str(pr.get("name", "unknown")))
+            name_item.setFont(px_font(9, QFont.Weight.Bold))
+
+            cpu_val = pr.get("cpu_percent", pr.get("cpu", 0.0))
+            cpu_item = QTableWidgetItem(f"{cpu_val:.1f}%")
+            cpu_item.setFont(mono_font(9))
+
+            ram_val = pr.get("memory_mb", pr.get("ram_mb", 0.0))
+            ram_item = QTableWidgetItem(f"{ram_val:.1f} MB")
+            ram_item.setFont(mono_font(9))
+            ram_item.setForeground(QColor(C.PRI))
+
+            self.table_procs.setItem(row, 0, pid_item)
+            self.table_procs.setItem(row, 1, name_item)
+            self.table_procs.setItem(row, 2, cpu_item)
+            self.table_procs.setItem(row, 3, ram_item)
+
     def refresh_processes(self) -> None:
         # Per-core breakdown
         cores = psutil.cpu_percent(percpu=True)
@@ -231,41 +261,6 @@ class SectionSystem(QWidget):
             bar.set_value(c_val, f"{c_val:.0f}%")
             self.core_bars_lay.addWidget(bar)
 
-        # Process list
-        procs = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']):
-            try:
-                info = p.info
-                mem_mb = info['memory_info'].rss / (1024 * 1024) if info.get('memory_info') else 0.0
-                procs.append({
-                    "pid": info['pid'],
-                    "name": info['name'] or "unknown",
-                    "cpu": info.get('cpu_percent') or 0.0,
-                    "ram_mb": mem_mb,
-                })
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-
-        # Sort by RAM usage
-        procs.sort(key=lambda x: x["ram_mb"], reverse=True)
-        top_procs = procs[:50]
-
-        self.table_procs.setRowCount(len(top_procs))
-        for row, pr in enumerate(top_procs):
-            pid_item = QTableWidgetItem(str(pr["pid"]))
-            pid_item.setFont(mono_font(9))
-
-            name_item = QTableWidgetItem(pr["name"])
-            name_item.setFont(px_font(9, QFont.Weight.Bold))
-
-            cpu_item = QTableWidgetItem(f"{pr['cpu']:.1f}%")
-            cpu_item.setFont(mono_font(9))
-
-            ram_item = QTableWidgetItem(f"{pr['ram_mb']:.1f} MB")
-            ram_item.setFont(mono_font(9))
-            ram_item.setForeground(QColor(C.PRI))
-
-            self.table_procs.setItem(row, 0, pid_item)
-            self.table_procs.setItem(row, 1, name_item)
-            self.table_procs.setItem(row, 2, cpu_item)
-            self.table_procs.setItem(row, 3, ram_item)
+        # Retrieve process snapshot asynchronously/cached from bridge (Mandate M-8: Zero UI-thread stall)
+        top_procs = self.bridge.get_top_processes(limit=50)
+        self._populate_proc_table(top_procs)

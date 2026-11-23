@@ -40,6 +40,7 @@ from PyQt6.QtGui import (
     QRadialGradient,
     QTextBlockFormat,
     QTextCharFormat,
+    QTextCursor,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -49,6 +50,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLayout,
     QMenu,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QTextEdit,
@@ -56,10 +58,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from gui.style import blend, chamfer, hud_font, px_font, scroll_css, with_alpha
+from gui.style import blend, chamfer, hud_font, mono_font, px_font, scroll_css, with_alpha
 from gui.theme import (
     _OS,
     C,
+    OptimusTheme,
+    get_system_reduced_motion,
     qcol,
 )
 
@@ -126,6 +130,109 @@ class MetricBar(QWidget):
 
         p.end()
 
+class StreamConsoleWidget(QPlainTextEdit):
+    """Hardware-accelerated, stutter-free streaming console widget (OPTIMUS UI 2.0).
+
+    Uses double-buffered FIFO queuing, adaptive 30 Hz (33 ms) flush throttling,
+    programmatic QTextCursor formatting (zero HTML parsing overhead),
+    and beginEditBlock/endEditBlock batching.
+    """
+
+    def __init__(self, parent=None, max_blocks: int = 2000):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.setMaximumBlockCount(max_blocks)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background: {C.PANEL2};
+                color: {C.TEXT};
+                border: 1px solid {C.BORDER};
+                border-radius: 4px;
+                padding: 6px;
+                selection-background-color: {C.PRI_GHO};
+            }}
+        """ + scroll_css())
+        self.setFont(mono_font(10))
+
+        self._queue: deque[tuple[str, str, str]] = deque()
+        self._reduced_motion: bool = get_system_reduced_motion()
+
+        # 30 Hz adaptive throttle timer (Mandates M-4, M-5)
+        self._flush_timer = QTimer(self)
+        self._flush_timer.setInterval(33)
+        self._flush_timer.timeout.connect(self._flush_queue)
+        self._flush_timer.start()
+
+    def set_reduced_motion(self, enabled: bool) -> None:
+        self._reduced_motion = bool(enabled)
+
+    def append_chunk(self, speaker: str, chunk: str, tag: str = "ai") -> None:
+        """Enqueue streaming token chunk for batch processing."""
+        self._queue.append((speaker, chunk, tag))
+        if self._reduced_motion or len(self._queue) > 10:
+            self._flush_queue()
+
+    def append_line(self, speaker: str, text: str, tag: str = "ai") -> None:
+        """Enqueue complete message line."""
+        self._queue.append((speaker, text + "\n", tag))
+        if self._reduced_motion or len(self._queue) <= 2:
+            self._flush_queue()
+
+    def append(self, text: str) -> None:
+        """Drop-in compatibility for legacy QTextEdit.append callers."""
+        import re
+        clean_text = re.sub(r"<[^>]+>", "", text).strip()
+        self.append_line("", clean_text)
+
+    def _flush_queue(self) -> None:
+        if not self._queue:
+            return
+
+        batch: list[tuple[str, str, str]] = []
+        while self._queue:
+            batch.append(self._queue.popleft())
+
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.beginEditBlock()
+        try:
+            for speaker, text, tag in batch:
+                if speaker:
+                    hf = QTextCharFormat()
+                    hf.setFont(px_font(9, QFont.Weight.Bold, mono=True))
+                    tag_lc = (tag or "").lower()
+                    if tag_lc in ("user", "you"):
+                        hf.setForeground(QBrush(qcol(C.WHITE)))
+                    elif tag_lc in ("ai", "assistant", "optimus"):
+                        hf.setForeground(QBrush(qcol(C.PRI)))
+                    elif tag_lc in ("err", "error"):
+                        hf.setForeground(QBrush(qcol(C.RED)))
+                    else:
+                        hf.setForeground(QBrush(qcol(C.TEXT_DIM)))
+                    cursor.insertText(f"[{speaker}] ", hf)
+
+                bf = QTextCharFormat()
+                bf.setFont(px_font(10))
+                tag_lc = (tag or "").lower()
+                if tag_lc in ("err", "error"):
+                    bf.setForeground(QBrush(qcol(C.RED)))
+                elif tag_lc in ("sys", "system"):
+                    bf.setForeground(QBrush(qcol(C.TEXT_MED)))
+                else:
+                    bf.setForeground(QBrush(qcol(C.TEXT)))
+                cursor.insertText(text, bf)
+        finally:
+            cursor.endEditBlock()
+
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
+
+    def flush_now(self) -> None:
+        """Instant synchronous flush for stream completion."""
+        self._flush_queue()
+
+
 class LogWidget(QTextEdit):
     """The activity log, laid out as a transcript.
 
@@ -164,9 +271,16 @@ class LogWidget(QTextEdit):
         self._tag     = "sys"
         self._fmt     = QTextCharFormat()
         self._ai_name_lc = "optimus"   # updated when assistant name changes
+        self._reduced_motion = get_system_reduced_motion()
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
+
+    def set_reduced_motion(self, enabled: bool) -> None:
+        self._reduced_motion = bool(enabled)
+        if self._reduced_motion and self._tmr.isActive():
+            self._tmr.stop()
+            self._typing = False
 
     def append_log(self, text: str):
         self._sig.emit(text)
@@ -215,32 +329,40 @@ class LogWidget(QTextEdit):
 
         cur = self.textCursor()
         cur.movePosition(cur.MoveOperation.End)
-        head = QTextBlockFormat()
-        if self.document().isEmpty():
-            cur.setBlockFormat(head)
-        else:
-            head.setTopMargin(9)
-            cur.insertBlock(head)
-        lf = QTextCharFormat()
-        lf.setFont(px_font(10, QFont.Weight.DemiBold, spacing=1.6))
-        lf.setForeground(QBrush(label_col))
-        cur.insertText(label, lf)
-        sf = QTextCharFormat()
-        sf.setFont(px_font(10, mono=True))
-        sf.setForeground(QBrush(qcol(C.TEXT_DIM)))
-        cur.insertText("   " + time.strftime("%H:%M:%S"), sf)
-        body = QTextBlockFormat()
-        body.setTopMargin(1)
-        cur.insertBlock(body)
-        self._fmt = QTextCharFormat()
-        self._fmt.setFont(px_font(13))
-        self._fmt.setForeground(QBrush(text_col))
+        cur.beginEditBlock()
+        try:
+            head = QTextBlockFormat()
+            if self.document().isEmpty():
+                cur.setBlockFormat(head)
+            else:
+                head.setTopMargin(9)
+                cur.insertBlock(head)
+            lf = QTextCharFormat()
+            lf.setFont(px_font(10, QFont.Weight.DemiBold, spacing=1.6))
+            lf.setForeground(QBrush(label_col))
+            cur.insertText(label, lf)
+            sf = QTextCharFormat()
+            sf.setFont(px_font(10, mono=True))
+            sf.setForeground(QBrush(qcol(C.TEXT_DIM)))
+            cur.insertText("   " + time.strftime("%H:%M:%S"), sf)
+            body = QTextBlockFormat()
+            body.setTopMargin(1)
+            cur.insertBlock(body)
+            self._fmt = QTextCharFormat()
+            self._fmt.setFont(px_font(13))
+            self._fmt.setForeground(QBrush(text_col))
+        finally:
+            cur.endEditBlock()
         self.setTextCursor(cur)
         self.ensureCursorVisible()
 
-        # Coalesce: If queue has items pending, flush immediately to eliminate lag
-        if len(self._queue) > 1:
-            cur.insertText(words, self._fmt)
+        # Reduced motion or Coalesce: If queue has items pending, flush immediately to eliminate lag
+        if self._reduced_motion or len(self._queue) > 1:
+            cur.beginEditBlock()
+            try:
+                cur.insertText(words, self._fmt)
+            finally:
+                cur.endEditBlock()
             self.setTextCursor(cur)
             self.ensureCursorVisible()
             self._typing = False
@@ -253,7 +375,7 @@ class LogWidget(QTextEdit):
     def _step(self):
         if self._pos < len(self._text):
             # Adaptive chunk size: if queue is backed up, flush immediately
-            if self._queue:
+            if self._queue or self._reduced_motion:
                 chunk = self._text[self._pos:]
                 self._pos = len(self._text)
             else:
@@ -265,7 +387,11 @@ class LogWidget(QTextEdit):
 
             cur = self.textCursor()
             cur.movePosition(cur.MoveOperation.End)
-            cur.insertText(chunk, self._fmt)
+            cur.beginEditBlock()
+            try:
+                cur.insertText(chunk, self._fmt)
+            finally:
+                cur.endEditBlock()
             self.setTextCursor(cur)
             self.ensureCursorVisible()
         else:
@@ -354,8 +480,8 @@ class FileDropZone(QWidget):
 
     def _animate(self):
         # The marching-ants dashed border is only meaningful while the user is
-        # hovering or dragging a file over the zone. When idle, timer is stopped.
-        if not (self._hovering or self._drag_over):
+        # hovering or dragging a file over the zone. When idle or reduced motion, timer is stopped.
+        if get_system_reduced_motion() or not (self._hovering or self._drag_over):
             if self._anim_tmr.isActive():
                 self._anim_tmr.stop()
             return
@@ -366,7 +492,7 @@ class FileDropZone(QWidget):
         if e.mimeData().hasUrls():
             e.acceptProposedAction()
             self._drag_over = True
-            if not self._anim_tmr.isActive():
+            if not get_system_reduced_motion() and not self._anim_tmr.isActive():
                 self._anim_tmr.start(40)
             self._canvas.update()
 
@@ -620,10 +746,12 @@ class _CameraPreview(QWidget):
 # edge, and painting reads the palette at paint time, so every one of these
 # re-themes live with the accent picker at no cost.
 
-class HoloPanel(QWidget):
-    """A glass "screen": a translucent panel with two cut corners, lit edges and
-    a header strip carrying a title and a short code. Children go in `body`;
-    small buttons can sit at the right of the header (add_header_widget)."""
+class OptimusCard(QWidget):
+    """Modernized high-contrast card container for OPTIMUS UI 2.0.
+
+    Provides clean hairline borders, dark midnight navy background,
+    and responsive layout containment without visual artifacts.
+    """
 
     HEADER = 30
 
@@ -683,9 +811,9 @@ class HoloPanel(QWidget):
         W = self.width()
         H = self.height()
 
-        # 1. Precision rectangular card with subtle 4px radius and dark blue-gray surface
-        p.setBrush(QBrush(qcol(C.PANEL)))
-        p.setPen(QPen(qcol(C.BORDER), 1))
+        # Precision rectangular card with subtle 4px radius and dark blue-gray surface
+        p.setBrush(QBrush(qcol(OptimusTheme.BG_PANEL)))
+        p.setPen(QPen(qcol(OptimusTheme.BORDER_HAIRLINE), 1))
         p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 4, 4)
 
         if self._title:
@@ -694,21 +822,26 @@ class HoloPanel(QWidget):
             if self._code:
                 p.setFont(px_font(9, mono=True))
                 code_w = p.fontMetrics().horizontalAdvance(self._code) + 12
-                p.setPen(QPen(qcol(C.TEXT_DIM)))
+                p.setPen(QPen(qcol(OptimusTheme.TEXT_MUTED)))
                 p.drawText(QRectF(right - code_w, 5, code_w, 20),
                            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, self._code)
 
-            # Title in crisp cool white without artificial wide tracking
+            # Title in crisp cool white
             p.setFont(px_font(11, QFont.Weight.DemiBold))
-            p.setPen(QPen(qcol(C.WHITE)))
+            p.setPen(QPen(qcol(OptimusTheme.TEXT_PRIMARY)))
             room = max(10.0, right - code_w - 20)
             p.drawText(QRectF(12, 5, room, 20), Qt.AlignmentFlag.AlignVCenter,
                        p.fontMetrics().elidedText(self._title, Qt.TextElideMode.ElideRight, int(room)))
 
             # Clean subtle hairline separator
-            p.setPen(QPen(qcol(C.BORDER_A), 1))
+            p.setPen(QPen(qcol(OptimusTheme.BORDER_HAIRLINE), 1))
             p.drawLine(QLineF(1, self.HEADER, W - 1, self.HEADER))
         p.end()
+
+
+class HoloPanel(OptimusCard):
+    """Backward-compatible alias and subclass of OptimusCard."""
+    pass
 
 
 class PanelText:

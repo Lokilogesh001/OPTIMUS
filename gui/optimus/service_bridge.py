@@ -136,6 +136,8 @@ class OptimusServiceBridge(QObject):
     timeline_event = pyqtSignal(dict)
     telemetry_updated = pyqtSignal(dict)
     agent_states_updated = pyqtSignal(list)
+    reduced_motion_changed = pyqtSignal(bool)
+    processes_snapshot_ready = pyqtSignal(list)
 
     _instance: OptimusServiceBridge | None = None
     _lock = threading.Lock()
@@ -183,6 +185,9 @@ class OptimusServiceBridge(QObject):
         self._cached_gpu_name: str | None = None
         self._cached_wr_active: bool = False
         self._cached_wr_t: float = 0.0
+
+        from gui.theme import get_system_reduced_motion
+        self._reduced_motion: bool = get_system_reduced_motion()
 
         # Wire event listeners to bridge
         self._bind_orchestrator_events()
@@ -859,6 +864,15 @@ class OptimusServiceBridge(QObject):
 
         return base_telem
 
+    def is_reduced_motion(self) -> bool:
+        """Return true if reduced motion / zero-animation mode is active."""
+        return getattr(self, "_reduced_motion", False)
+
+    def set_reduced_motion(self, enabled: bool) -> None:
+        """Toggle reduced motion mode and notify all listening UI views."""
+        self._reduced_motion = bool(enabled)
+        self.reduced_motion_changed.emit(self._reduced_motion)
+
     def _poll_telemetry(self) -> None:
         """Periodic slot triggered by QTimer to publish real telemetry with adaptive throttling."""
         try:
@@ -872,6 +886,8 @@ class OptimusServiceBridge(QObject):
 
         telem = self.get_system_telemetry()
         self.telemetry_updated.emit(telem)
+        procs = self.get_top_processes(limit=50)
+        self.processes_snapshot_ready.emit(procs)
 
     def get_memory_summary(self) -> dict[str, Any]:
         """Query persistent memory store and context bus."""

@@ -457,6 +457,25 @@ class MainWindow(QMainWindow):
         self._clipboard_panel.action_requested.connect(self._on_clipboard_action)
         QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
+        # Reduced motion synchronization (Mandate M-7)
+        try:
+            from gui.theme import get_system_reduced_motion
+            from gui.optimus.service_bridge import OptimusServiceBridge
+            bridge = OptimusServiceBridge.instance()
+            is_red = bridge.is_reduced_motion() or get_system_reduced_motion()
+            if hasattr(self, "hud") and hasattr(self.hud, "set_reduced_motion"):
+                self.hud.set_reduced_motion(is_red)
+            if hasattr(self, "_log") and hasattr(self._log, "set_reduced_motion"):
+                self._log.set_reduced_motion(is_red)
+            bridge.reduced_motion_changed.connect(
+                lambda red: (
+                    self.hud.set_reduced_motion(red) if hasattr(self, "hud") else None,
+                    self._log.set_reduced_motion(red) if hasattr(self, "_log") else None,
+                )
+            )
+        except Exception:
+            pass
+
         self._overlay: SetupOverlay | None = None
         self._ready = self._check_config()
         if not self._ready:

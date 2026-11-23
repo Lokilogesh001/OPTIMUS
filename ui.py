@@ -82,10 +82,20 @@ def _auto_ui_scale() -> float:
 
 
 def _apply_ui_scale() -> None:
-    """Set Qt's global scale factor. Must run before QApplication exists.
+    """Set Qt's global scale factor and hardware RHI backend. Must run before QApplication exists.
 
     `ui_scale` in config/api_keys.json overrides the automatic choice (0.5 to
     3); QT_SCALE_FACTOR set by the user is never overridden."""
+    if sys.platform == "win32":
+        # Retain native Direct3D 11 RHI on Windows 11 (Mandates M-1, M-2)
+        os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
+        try:
+            from PyQt6.QtCore import Qt
+            if hasattr(Qt, "HighDpiScaleFactorRoundingPolicy") and hasattr(Qt.HighDpiScaleFactorRoundingPolicy, "PassThrough"):
+                QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        except Exception:
+            pass
+
     if QApplication.instance() is not None or os.environ.get("QT_SCALE_FACTOR"):
         return              # too late, or the user set it themselves
     try:

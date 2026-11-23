@@ -113,18 +113,31 @@ class HudCanvas(QWidget):
         self._vis_i = None        # first schedule frame not yet handed to the mouth
         self._base_scale = 1.0    # slow "breathing" target; amp is added per-frame
         self._base_halo  = 55.0
+        self._reduced_motion = False
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
-        if self.isVisible():
+        if self.isVisible() and not self._reduced_motion:
             self._tmr.start(16)
+
+    def set_reduced_motion(self, enabled: bool) -> None:
+        """Toggle reduced-motion mode (Mandate M-7). Halts animation timer."""
+        self._reduced_motion = bool(enabled)
+        if self._reduced_motion:
+            if self._tmr.isActive():
+                self._tmr.stop()
+            self.update()
+        else:
+            if self.isVisible() and not self._tmr.isActive():
+                self._step_t = time.time()
+                self._tmr.start(16)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._step_t = time.time()
         self._visemes = None
         self._vis_i = None
-        if not self._tmr.isActive():
+        if not self._reduced_motion and not self._tmr.isActive():
             self._tmr.start(16)
         self.update()
 
