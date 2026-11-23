@@ -104,13 +104,35 @@ class SectionSelfImprovement(QWidget):
         self._build_logs_panel(self.panel_logs.body)
         c_layout.addWidget(self.panel_logs)
 
-        # Periodic refresh timer (every 5 seconds)
+        # Periodic refresh timer (every 5 seconds, active only when visible)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.refresh_data)
-        self._timer.start(5000)
+        if self.isVisible():
+            self._timer.start(5000)
 
         # Initial load
         self.refresh_data()
+
+    # ── Lifecycle Control ────────────────────────────────────────────────────
+
+    def pause_polling(self) -> None:
+        """Pause 5.0s refresh timer when tab is hidden."""
+        if hasattr(self, "_timer") and self._timer.isActive():
+            self._timer.stop()
+
+    def resume_polling(self) -> None:
+        """Resume 5.0s refresh timer when tab becomes visible."""
+        if hasattr(self, "_timer") and not self._timer.isActive():
+            self._timer.start(5000)
+        self.refresh_data()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.resume_polling()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.pause_polling()
 
     def _build_gaps_panel(self, body_layout: QVBoxLayout) -> None:
         self.table_gaps = QTableWidget(0, 5, self)

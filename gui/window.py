@@ -484,12 +484,69 @@ class MainWindow(QMainWindow):
     def show_optimus(self, section: str = "dashboard") -> None:
         self._body_stack.setCurrentIndex(1)
         self._optimus_btn.setChecked(True)
+        if hasattr(self, "hud") and hasattr(self.hud, "_tmr") and self.hud._tmr.isActive():
+            self.hud._tmr.stop()
+        if hasattr(self, "_metric_tmr") and self._metric_tmr.isActive():
+            self._metric_tmr.stop()
+        if hasattr(self, "_tasks_tmr") and self._tasks_tmr.isActive():
+            self._tasks_tmr.stop()
         if hasattr(self, "_optimus_control_center") and hasattr(self._optimus_control_center, "show_section"):
             self._optimus_control_center.show_section(section)
 
     def show_classic_hud(self) -> None:
         self._body_stack.setCurrentIndex(0)
         self._optimus_btn.setChecked(False)
+        if hasattr(self, "hud") and hasattr(self.hud, "_tmr") and not self.hud._tmr.isActive():
+            self.hud._step_t = time.time()
+            self.hud._tmr.start(16)
+            self.hud.update()
+        if hasattr(self, "_metric_tmr") and not self._metric_tmr.isActive():
+            self._metric_tmr.start(2000)
+            self._update_metrics()
+        if hasattr(self, "_tasks_tmr") and not self._tasks_tmr.isActive():
+            self._tasks_tmr.start(2000)
+            self._refresh_tasks()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                if hasattr(self, "hud") and hasattr(self.hud, "_tmr") and self.hud._tmr.isActive():
+                    self.hud._tmr.stop()
+                if hasattr(self, "_metric_tmr") and self._metric_tmr.isActive():
+                    self._metric_tmr.stop()
+                if hasattr(self, "_tasks_tmr") and self._tasks_tmr.isActive():
+                    self._tasks_tmr.stop()
+                if hasattr(self, "_optimus_control_center"):
+                    curr = getattr(self._optimus_control_center, "stack", None)
+                    curr_w = curr.currentWidget() if curr else None
+                    if curr_w and hasattr(curr_w, "pause_polling"):
+                        try:
+                            curr_w.pause_polling()
+                        except Exception:
+                            pass
+            else:
+                if hasattr(self, "_body_stack") and self._body_stack.currentIndex() == 0:
+                    if hasattr(self, "hud") and hasattr(self.hud, "_tmr") and not self.hud._tmr.isActive():
+                        self.hud._step_t = time.time()
+                        self.hud._tmr.start(16)
+                        self.hud.update()
+                    if hasattr(self, "_metric_tmr") and not self._metric_tmr.isActive():
+                        self._metric_tmr.start(2000)
+                        self._update_metrics()
+                    if hasattr(self, "_tasks_tmr") and not self._tasks_tmr.isActive():
+                        self._tasks_tmr.start(2000)
+                        self._refresh_tasks()
+                elif hasattr(self, "_body_stack") and self._body_stack.currentIndex() == 1:
+                    if hasattr(self, "_optimus_control_center"):
+                        curr = getattr(self._optimus_control_center, "stack", None)
+                        curr_w = curr.currentWidget() if curr else None
+                        if curr_w and hasattr(curr_w, "resume_polling"):
+                            try:
+                                curr_w.resume_polling()
+                            except Exception:
+                                pass
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""

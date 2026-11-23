@@ -118,13 +118,35 @@ class SectionProactive(QWidget):
         self.bridge.recommendation_created.connect(lambda _: self.refresh_dashboard())
         self.bridge.notification_received.connect(lambda _: self.refresh_notifications())
 
-        # Auto-refresh timer (every 10 seconds)
+        # Auto-refresh timer (every 10 seconds, active only when visible)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.refresh_all)
-        self._timer.start(10000)
+        if self.isVisible():
+            self._timer.start(10000)
 
         # Initial load
         self.refresh_all()
+
+    # ── Lifecycle Control ────────────────────────────────────────────────────
+
+    def pause_polling(self) -> None:
+        """Pause 10.0s refresh timer when tab is hidden."""
+        if hasattr(self, "_timer") and self._timer.isActive():
+            self._timer.stop()
+
+    def resume_polling(self) -> None:
+        """Resume 10.0s refresh timer when tab becomes visible."""
+        if hasattr(self, "_timer") and not self._timer.isActive():
+            self._timer.start(10000)
+        self.refresh_all()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.resume_polling()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.pause_polling()
 
     def _subnav_btn_style(self, active: bool) -> str:
         if active:

@@ -1,18 +1,20 @@
 """gui/metrics.py — System telemetry for the HUD: CPU, memory, network, GPU and temperature.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Unified with WindowsSystemMonitorAdapter: zero duplicate background polling threads,
+providing O(1) non-blocking snapshots for HUD and presentation layers.
+"""
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
-import psutil
+logger = logging.getLogger("optimus.gui.metrics")
 
-from gui.theme import (
-    _OS,
-)
+from core.system_monitor.adapter import WindowsSystemMonitorAdapter
+from gui.theme import _OS
 
-# ── Windows GPU via NVML DLL (no subprocess, no console window) ──────────────
+# ── Windows GPU via NVML DLL (for backward compatibility) ──────────────────────
 _nvml_lib: object = None   # cached ctypes DLL
 _nvml_ok:  object = None   # None=untested, True=works, False=unavailable
 
@@ -57,156 +59,65 @@ def _nvml_gpu_windows() -> float:
 
 
 class _SysMetrics:
+    """Unified telemetry translation facade over authoritative WindowsSystemMonitorAdapter.
+
+    Eliminates redundant background thread and lock contention while preserving
+    the exact dict structure expected by callers of _metrics.snapshot().
+    """
+
     def __init__(self):
-        self.cpu  = 0.0
-        self.mem  = 0.0
-        self.net  = 0.0   
-        self.gpu  = -1.0  
-        self.tmp  = -1.0  
+        self._adapter = WindowsSystemMonitorAdapter.instance()
         self._lock = threading.Lock()
-        self._last_net = psutil.net_io_counters()
-        self._last_net_t = time.time()
-        self._running = True
-        # Probe caches — GPU (NVML) and temperature (WMI) are the expensive
-        # queries; initialise their handles once and reuse them instead of
-        # rebuilding a connection on every poll.
-        self._slow_tick = 0            # gpu/temp refreshed every 3rd cycle
-        self._pynvml    = None         # cached pynvml module + device handle
-        self._pynvml_h  = None
-        self._pynvml_ok = None         # None=untested, False=unavailable here
-        self._nv_unix   = None         # cached (lib, dev) for Linux/macOS NVML
-        self._wmi_conn  = None         # cached WMI connection (creating one is slow)
-        self._wmi_ok    = None         # None=untested, False=unavailable here
-        t = threading.Thread(target=self._loop, daemon=True)
-        t.start()
+        self._last_net_mb: float = 0.0
+        self._last_net_t: float = time.time()
+        self._cached_net_rate: float = 0.0
 
-    def _loop(self):
-        while self._running:
-            try:
-                self._update()
-            except Exception:
-                pass
-            time.sleep(3.0)
+    def snapshot(self) -> dict[str, float]:
+        """Return instantaneous telemetry dictionary in O(1) time from cached snapshot."""
+        snap = self._adapter.get_snapshot()
 
-    def _update(self):
-        cpu = psutil.cpu_percent(interval=None)
-        mem = psutil.virtual_memory().percent
-
-        nc  = psutil.net_io_counters()
         now = time.time()
-        dt  = now - self._last_net_t
-        if dt > 0:
-            sent = (nc.bytes_sent - self._last_net.bytes_sent) / dt
-            recv = (nc.bytes_recv - self._last_net.bytes_recv) / dt
-            net  = (sent + recv) / (1024 * 1024)
-        else:
-            net = 0.0
-        self._last_net   = nc
-        self._last_net_t = now
-
-        # GPU and temperature change slowly and are the most expensive probes
-        # (NVML / WMI) — refresh them every 3rd cycle (~6 s) instead of every
-        # cycle, reusing the previous reading in between.
-        self._slow_tick = (self._slow_tick + 1) % 3
-        if self._slow_tick == 1:
-            gpu = self._get_gpu()
-            tmp = self._get_temp()
-        else:
-            gpu = self.gpu
-            tmp = self.tmp
-
         with self._lock:
-            self.cpu = cpu
-            self.mem = mem
-            self.net = net
-            self.gpu = gpu
-            self.tmp = tmp
+            dt = now - self._last_net_t
+            tot_mb = snap.network.bytes_sent_mb + snap.network.bytes_recv_mb
+            if dt >= 1.0 and self._last_net_t > 0:
+                if self._last_net_mb > 0 and tot_mb >= self._last_net_mb:
+                    self._cached_net_rate = (tot_mb - self._last_net_mb) / dt
+                self._last_net_mb = tot_mb
+                self._last_net_t = now
 
-    def _get_gpu(self) -> float:
-        # Windows: nvml.dll via ctypes (already cached in _nvml_gpu_windows)
-        if _OS == "Windows":
-            return _nvml_gpu_windows()
+            net_rate = self._cached_net_rate
 
-        # pynvml — subprocess-free; initialise once and reuse the handle.
-        # Re-initialising NVML on every poll is slow, so cache it and stop
-        # retrying pynvml entirely once it proves unavailable here.
-        if self._pynvml_ok is not False:
-            try:
-                if self._pynvml_h is None:
-                    import pynvml  # type: ignore
-                    pynvml.nvmlInit()
-                    self._pynvml    = pynvml
-                    self._pynvml_h  = pynvml.nvmlDeviceGetHandleByIndex(0)
-                    self._pynvml_ok = True
-                return float(self._pynvml.nvmlDeviceGetUtilizationRates(self._pynvml_h).gpu)
-            except Exception:
-                self._pynvml_ok = False
+        gpu_val = snap.gpu.gpu_percent if snap.gpu.has_gpu else -1.0
+        tmp_val = snap.gpu.temperature_c if (snap.gpu.has_gpu and snap.gpu.temperature_c is not None) else -1.0
 
-        # Linux / macOS: libnvidia-ml shared lib via ctypes — init once, reuse
-        try:
-            import ctypes
+        return {
+            "cpu": snap.cpu.total_percent,
+            "mem": snap.memory.percent_used,
+            "net": round(net_rate, 2),
+            "gpu": round(gpu_val, 1),
+            "tmp": round(tmp_val, 1),
+        }
 
-            class _Util(ctypes.Structure):
-                _fields_ = [("gpu", ctypes.c_uint), ("memory", ctypes.c_uint)]
+    @property
+    def cpu(self) -> float:
+        return self.snapshot()["cpu"]
 
-            if self._nv_unix is None:
-                _lib = "libnvidia-ml.so.1" if _OS == "Linux" else "libnvidia-ml.dylib"
-                nv = ctypes.CDLL(_lib)
-                nv.nvmlInit_v2()
-                dev = ctypes.c_void_p()
-                nv.nvmlDeviceGetHandleByIndex_v2(0, ctypes.byref(dev))
-                self._nv_unix = (nv, dev)
+    @property
+    def mem(self) -> float:
+        return self.snapshot()["mem"]
 
-            nv, dev = self._nv_unix
-            u = _Util()
-            nv.nvmlDeviceGetUtilizationRates(dev, ctypes.byref(u))
-            return float(u.gpu)
-        except Exception:
-            pass
+    @property
+    def net(self) -> float:
+        return self.snapshot()["net"]
 
-        return -1.0   # N/A — zero subprocess on all platforms
+    @property
+    def gpu(self) -> float:
+        return self.snapshot()["gpu"]
 
-    def _get_temp(self) -> float:
-        # psutil — works on Linux; occasionally Windows with driver support
-        try:
-            temps = psutil.sensors_temperatures()
-            for name in ["coretemp", "k10temp", "cpu_thermal", "acpitz",
-                         "cpu-thermal", "zenpower", "it8688"]:
-                if temps.get(name):
-                    return temps[name][0].current
-            for entries in temps.values():
-                if entries:
-                    return entries[0].current
-        except Exception:
-            pass
-
-        # Windows: wmi module (pure Python COM, zero subprocess). Reuse a single
-        # connection — building a fresh wmi.WMI() on every poll spins up a COM
-        # connection each time and is very slow. Give up after one failure.
-        if _OS == "Windows" and self._wmi_ok is not False:
-            try:
-                if self._wmi_conn is None:
-                    import wmi  # type: ignore
-                    self._wmi_conn = wmi.WMI(namespace="root/wmi")
-                tz = self._wmi_conn.MSAcpi_ThermalZoneTemperature()
-                if tz:
-                    return (tz[0].CurrentTemperature / 10.0) - 273.15
-            except Exception:
-                self._wmi_ok   = False
-                self._wmi_conn = None
-
-        return -1.0   # N/A — zero subprocess on all platforms
-
-    def snapshot(self) -> dict:
-        with self._lock:
-            return {
-                "cpu": self.cpu,
-                "mem": self.mem,
-                "net": self.net,
-                "gpu": self.gpu,
-                "tmp": self.tmp,
-            }
+    @property
+    def tmp(self) -> float:
+        return self.snapshot()["tmp"]
 
 
 _metrics = _SysMetrics()
-

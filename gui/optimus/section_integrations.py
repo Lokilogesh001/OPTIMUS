@@ -243,11 +243,33 @@ class SectionIntegrations(QWidget):
         self.ui_timer = QTimer(self)
         self.ui_timer.setInterval(2000)
         self.ui_timer.timeout.connect(self.update_telemetry_ui)
-        self.ui_timer.start()
+        if self.isVisible():
+            self.ui_timer.start()
 
         # Initial UI populate
         self.update_telemetry_ui()
         self.refresh_workspace_ui()
+
+    # ── Lifecycle Control ────────────────────────────────────────────────────
+
+    def pause_polling(self) -> None:
+        """Pause 2.0s refresh timer when tab is hidden."""
+        if hasattr(self, "ui_timer") and self.ui_timer.isActive():
+            self.ui_timer.stop()
+
+    def resume_polling(self) -> None:
+        """Resume 2.0s refresh timer when tab becomes visible."""
+        if hasattr(self, "ui_timer") and not self.ui_timer.isActive():
+            self.ui_timer.start(2000)
+        self.update_telemetry_ui()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.resume_polling()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.pause_polling()
 
     # ── UI Refresh Logic ─────────────────────────────────────────────────────
 

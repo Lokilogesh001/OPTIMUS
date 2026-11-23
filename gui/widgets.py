@@ -322,7 +322,7 @@ class FileDropZone(QWidget):
         self._dash_offset = 0.0
         self._anim_tmr = QTimer(self)
         self._anim_tmr.timeout.connect(self._animate)
-        self._anim_tmr.start(40)
+        # Timer is gated: starts only when hovering or dragging, stops when idle
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -331,10 +331,10 @@ class FileDropZone(QWidget):
 
     def _animate(self):
         # The marching-ants dashed border is only meaningful while the user is
-        # hovering or dragging a file over the zone. When idle, skip the repaint
-        # entirely instead of redrawing the whole zone 25×/s forever — that idle
-        # repaint held the GIL and stole time from the audio/response threads.
+        # hovering or dragging a file over the zone. When idle, timer is stopped.
         if not (self._hovering or self._drag_over):
+            if self._anim_tmr.isActive():
+                self._anim_tmr.stop()
             return
         self._dash_offset = (self._dash_offset + 0.8) % 20
         self._canvas.update()
@@ -342,13 +342,21 @@ class FileDropZone(QWidget):
     def dragEnterEvent(self, e: QDragEnterEvent):
         if e.mimeData().hasUrls():
             e.acceptProposedAction()
-            self._drag_over = True; self._canvas.update()
+            self._drag_over = True
+            if not self._anim_tmr.isActive():
+                self._anim_tmr.start(40)
+            self._canvas.update()
 
     def dragLeaveEvent(self, e):
-        self._drag_over = False; self._canvas.update()
+        self._drag_over = False
+        if not self._hovering and self._anim_tmr.isActive():
+            self._anim_tmr.stop()
+        self._canvas.update()
 
     def dropEvent(self, e: QDropEvent):
         self._drag_over = False
+        if not self._hovering and self._anim_tmr.isActive():
+            self._anim_tmr.stop()
         urls = e.mimeData().urls()
         if urls:
             path = urls[0].toLocalFile()
@@ -361,10 +369,16 @@ class FileDropZone(QWidget):
             self._browse()
 
     def enterEvent(self, e):
-        self._hovering = True; self._canvas.update()
+        self._hovering = True
+        if not self._anim_tmr.isActive():
+            self._anim_tmr.start(40)
+        self._canvas.update()
 
     def leaveEvent(self, e):
-        self._hovering = False; self._canvas.update()
+        self._hovering = False
+        if not self._drag_over and self._anim_tmr.isActive():
+            self._anim_tmr.stop()
+        self._canvas.update()
 
     def current_file(self) -> str | None:
         return self._current_file

@@ -1,0 +1,214 @@
+{
+  "timestamp": 1795441715.5747838,
+  "platform": {
+    "system": "Windows",
+    "release": "11",
+    "python": "3.13.16 (main, Oct 14 2026, 01:05:56) [MSC v.1944 64 bit (AMD64)]",
+    "logical_cpus": 16,
+    "physical_cpus": 8,
+    "total_ram_gb": 15.82
+  },
+  "startup": {
+    "qapplication_init_ms": 35.26,
+    "service_bridge_init_ms": 2586.49,
+    "total_section_init_ms": 9355.59,
+    "optimus_ui_full_init_ms": 12506.74,
+    "total_startup_duration_ms": 25220.04
+  },
+  "per_section_init": {
+    "Dashboard": 576.09,
+    "Command": 21.66,
+    "Workflows": 13.71,
+    "Agents": 14.31,
+    "Intelligence": 18.29,
+    "Memory": 13.68,
+    "Verification": 12.51,
+    "Approvals": 10.0,
+    "System": 498.39,
+    "Settings": 12.21,
+    "Planning": 32.73,
+    "Developer": 341.46,
+    "Skills": 48.42,
+    "Missions": 23.19,
+    "Proactive": 30.93,
+    "Personal": 52.29,
+    "SelfImprovement": 28.41,
+    "Vision": 262.38,
+    "Applications": 3434.82,
+    "Integrations": 3910.11
+  },
+  "idle_metrics": {
+    "duration_seconds": 10.0,
+    "avg_process_cpu_pct": 46.91,
+    "max_process_cpu_pct": 101.2,
+    "start_ram_rss_mb": 424.68,
+    "end_ram_rss_mb": 447.26,
+    "avg_ram_rss_mb": 446.05,
+    "rss_drift_10s_mb": 22.58,
+    "rss_drift_kb_per_sec": 2312.0,
+    "gpu_vitals": {
+      "has_gpu": true,
+      "gpu_percent": 7.0,
+      "vram_used_mb": 874.7,
+      "vram_total_mb": 4096.0
+    },
+    "avg_gpu_percent": 8.4
+  },
+  "event_loop_latency": {
+    "target_interval_ms": 10,
+    "samples_collected": 94,
+    "mean_jitter_ms": 33.79,
+    "p95_jitter_ms": 83.15,
+    "max_jitter_ms": 1443.27
+  },
+  "concurrency_and_timers": {
+    "thread_count": 6,
+    "threads": [
+      {
+        "name": "MainThread",
+        "daemon": false,
+        "alive": true
+      },
+      {
+        "name": "Thread-1 (_loop)",
+        "daemon": true,
+        "alive": true
+      },
+      {
+        "name": "OptimusSystemMonitorWorker",
+        "daemon": true,
+        "alive": true
+      },
+      {
+        "name": "WorkspaceMCP_StdoutReader",
+        "daemon": true,
+        "alive": true
+      },
+      {
+        "name": "WorkspaceMCP_StderrDrainer",
+        "daemon": true,
+        "alive": true
+      },
+      {
+        "name": "wake-state-warm",
+        "daemon": true,
+        "alive": true
+      }
+    ],
+    "qtimer_count": 15,
+    "qtimers": [
+      {
+        "parent_widget": "FileDropZone",
+        "interval_ms": 40,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "ClipboardPanel",
+        "interval_ms": 0,
+        "is_active": false,
+        "single_shot": true
+      },
+      {
+        "parent_widget": "_CameraPreview",
+        "interval_ms": 0,
+        "is_active": false,
+        "single_shot": true
+      },
+      {
+        "parent_widget": "SectionProactive",
+        "interval_ms": 10000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "HudCanvas",
+        "interval_ms": 16,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "SectionProactive",
+        "interval_ms": 10000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "LogWidget",
+        "interval_ms": 0,
+        "is_active": false,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "SectionVision",
+        "interval_ms": 1500,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "MainWindow",
+        "interval_ms": 2000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "MainWindow",
+        "interval_ms": 1000,
+        "is_active": false,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "MainWindow",
+        "interval_ms": 1000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "MainWindow",
+        "interval_ms": 2000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "SectionSelfImprovement",
+        "interval_ms": 5000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "SectionIntegrations",
+        "interval_ms": 2000,
+        "is_active": true,
+        "single_shot": false
+      },
+      {
+        "parent_widget": "SectionIntegrations",
+        "interval_ms": 2000,
+        "is_active": true,
+        "single_shot": false
+      }
+    ]
+  },
+  "telemetry_sampling": {
+    "system_monitor_adapter_mean_ms": 0.0,
+    "system_monitor_adapter_max_ms": 0.002,
+    "gui_metrics_mean_ms": 0.0,
+    "gui_metrics_max_ms": 0.003,
+    "bridge_get_telemetry_mean_ms": 1.202,
+    "bridge_get_telemetry_max_ms": 1.786
+  },
+  "mre_orchestration": {
+    "mre_plan_mean_ms": 0.18,
+    "mre_plan_max_ms": 0.61,
+    "tool_exec_mean_ms": 34.19,
+    "tool_exec_max_ms": 37.15
+  },
+  "workload_metrics": {
+    "total_tab_switches": 60,
+    "mean_tab_switch_latency_ms": 172.69,
+    "p95_tab_switch_latency_ms": 1586.64,
+    "max_tab_switch_latency_ms": 2041.07,
+    "active_workload_cpu_pct": 78.7,
+    "active_workload_ram_mb": 454.77
+  }
+}

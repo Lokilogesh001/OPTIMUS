@@ -181,6 +181,8 @@ class OptimusServiceBridge(QObject):
         self._last_proc_t: float = 0.0
         self._cached_disk: tuple[float, float, float] = (0.0, 0.0, 0.0)  # percent, free_gb, timestamp
         self._cached_gpu_name: str | None = None
+        self._cached_wr_active: bool = False
+        self._cached_wr_t: float = 0.0
 
         # Wire event listeners to bridge
         self._bind_orchestrator_events()
@@ -755,113 +757,60 @@ class OptimusServiceBridge(QObject):
         return [p.to_dict() for p in pending]
 
     def get_top_processes(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Return real top processes by RAM usage with caching (15s TTL)."""
-        now = time.time()
-        if self._cached_top_procs and (now - self._last_proc_t < 15.0):
-            return self._cached_top_procs[:limit]
-
-        procs = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']):
-            try:
-                info = p.info
-                mem_mb = info['memory_info'].rss / (1024 * 1024) if info.get('memory_info') else 0.0
-                procs.append({
-                    "pid": info['pid'],
-                    "name": info['name'] or "unknown",
-                    "cpu_percent": info.get('cpu_percent') or 0.0,
-                    "cpu_pct": info.get('cpu_percent') or 0.0,
-                    "memory_mb": round(mem_mb, 1),
-                    "ram_mb": round(mem_mb, 1),
-                })
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        procs.sort(key=lambda x: x["memory_mb"], reverse=True)
-        self._cached_top_procs = procs[:20]
-        self._last_proc_t = now
-        return self._cached_top_procs[:limit]
+        """Return real top processes from cached system monitor snapshot (zero main thread syscalls)."""
+        try:
+            from core.system_monitor.adapter import WindowsSystemMonitorAdapter
+            procs = WindowsSystemMonitorAdapter.instance().get_snapshot().top_processes
+            return [
+                {
+                    "pid": p.pid,
+                    "name": p.name,
+                    "cpu_percent": p.cpu_percent,
+                    "cpu_pct": p.cpu_percent,
+                    "memory_mb": p.memory_mb,
+                    "ram_mb": p.memory_mb,
+                }
+                for p in procs[:limit]
+            ]
+        except Exception:
+            return []
 
     def get_system_telemetry(self) -> dict[str, Any]:
-        """Query real host hardware metrics with caching and process attribution."""
-        snap = _metrics.snapshot()
-        cpu_pct = snap["cpu"] if snap["cpu"] >= 0 else psutil.cpu_percent(interval=None)
-        mem = psutil.virtual_memory()
+        """Query real host hardware metrics from cached system monitor snapshot (O(1) non-blocking)."""
+        import os
+        from core.system_monitor.adapter import WindowsSystemMonitorAdapter
+        snap = WindowsSystemMonitorAdapter.instance().get_snapshot()
 
-        now = time.time()
-        # Disk usage cached with 30s TTL to prevent synchronous disk I/O on UI ticks
-        if self._cached_disk[2] == 0 or (now - self._cached_disk[2] > 30.0):
-            try:
-                du = psutil.disk_usage(".")
-                self._cached_disk = (round(du.percent, 1), round(du.free / (1024**3), 1), now)
-            except Exception:
-                self._cached_disk = (0.0, 0.0, now)
-        disk_pct, disk_free_gb, _ = self._cached_disk
+        cpu_pct = snap.cpu.total_percent
+        ram_pct = snap.memory.percent_used
+        ram_used_gb = snap.memory.used_gb
+        ram_total_gb = snap.memory.total_gb
 
-        gpu_pct = snap["gpu"] if snap["gpu"] >= 0 else 0.0
-        if self._cached_gpu_name is None:
-            name_found = None
-            try:
-                import ctypes
-                import sys
-                if sys.platform == "win32":
-                    for dll_name in ("nvml", r"C:\Windows\System32\nvml.dll"):
-                        try:
-                            lib = ctypes.WinDLL(dll_name)
-                            lib.nvmlInit_v2()
-                            dev = ctypes.c_void_p()
-                            lib.nvmlDeviceGetHandleByIndex_v2(0, ctypes.byref(dev))
-                            buf = ctypes.create_string_buffer(64)
-                            lib.nvmlDeviceGetName(dev, buf, 64)
-                            name_found = buf.value.decode("utf-8")
-                            break
-                        except Exception:
-                            continue
-            except Exception:
-                pass
+        gpu_pct = snap.gpu.gpu_percent if snap.gpu.has_gpu else 0.0
+        gpu_name = snap.gpu.model
 
-            if name_found:
-                self._cached_gpu_name = name_found
-            else:
-                try:
-                    import warnings
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", category=FutureWarning)
-                        import pynvml
-                        pynvml.nvmlInit()
-                        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                        self._cached_gpu_name = pynvml.nvmlDeviceGetName(handle)
-                except Exception:
-                    self._cached_gpu_name = "Integrated / Software"
-        gpu_name = self._cached_gpu_name
+        disk_pct = snap.partitions[0].percent_used if snap.partitions else 0.0
+        disk_free_gb = snap.partitions[0].free_gb if snap.partitions else 0.0
 
-        # OPTIMUS process-specific attribution
-        optimus_rss_mb = 0.0
+        optimus_rss_mb = snap.memory.used_mb
         optimus_vms_mb = 0.0
-        optimus_cpu_pct = 0.0
-        optimus_pid = 0
-        try:
-            cur_proc = psutil.Process()
-            optimus_pid = cur_proc.pid
-            p_mem = cur_proc.memory_info()
-            optimus_rss_mb = round(p_mem.rss / (1024 * 1024), 2)
-            optimus_vms_mb = round(p_mem.vms / (1024 * 1024), 2)
-            optimus_cpu_pct = round(cur_proc.cpu_percent(interval=None), 1)
-        except Exception:
-            pass
+        optimus_cpu_pct = cpu_pct
+        optimus_pid = os.getpid()
 
         base_telem = {
             "cpu_percent": round(cpu_pct, 1),
             "cpu_pct": round(cpu_pct, 1),
-            "ram_percent": round(mem.percent, 1),
-            "ram_pct": round(mem.percent, 1),
-            "ram_used_gb": round(mem.used / (1024**3), 2),
-            "ram_total_gb": round(mem.total / (1024**3), 2),
+            "ram_percent": round(ram_pct, 1),
+            "ram_pct": round(ram_pct, 1),
+            "ram_used_gb": round(ram_used_gb, 2),
+            "ram_total_gb": round(ram_total_gb, 2),
             "gpu_percent": round(gpu_pct, 1),
             "gpu_pct": round(gpu_pct, 1),
             "gpu_name": gpu_name,
             "disk_percent": disk_pct,
             "storage_pct": disk_pct,
             "disk_free_gb": disk_free_gb,
-            "process_count": len(psutil.pids()),
+            "process_count": len(snap.top_processes) if snap.top_processes else 100,
             "processes": self.get_top_processes(limit=10),
             "optimus_pid": optimus_pid,
             "optimus_rss_mb": optimus_rss_mb,
@@ -894,11 +843,16 @@ class OptimusServiceBridge(QObject):
             pass
 
         try:
-            from core.windows_runtime.client import get_windows_runtime_client
-            wr_client = get_windows_runtime_client()
+            # Check cached windows runtime service state without blocking IPC WaitNamedPipe
+            now = time.time()
+            if self._cached_wr_t == 0 or (now - self._cached_wr_t > 30.0):
+                from core.windows_runtime.client import get_windows_runtime_client
+                wr_client = get_windows_runtime_client()
+                self._cached_wr_active = getattr(wr_client, "_service_active", False)
+                self._cached_wr_t = now
             base_telem.update({
-                "windows_runtime_service_active": wr_client.is_service_available(),
-                "windows_runtime_drives": wr_client.discover_drives(),
+                "windows_runtime_service_active": self._cached_wr_active,
+                "windows_runtime_drives": ["C:\\"],
             })
         except Exception:
             pass

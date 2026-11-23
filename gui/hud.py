@@ -116,7 +116,22 @@ class HudCanvas(QWidget):
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
-        self._tmr.start(16)
+        if self.isVisible():
+            self._tmr.start(16)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._step_t = time.time()
+        self._visemes = None
+        self._vis_i = None
+        if not self._tmr.isActive():
+            self._tmr.start(16)
+        self.update()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        if self._tmr.isActive():
+            self._tmr.stop()
 
     def glance(self, dx: float, dy: float, hold: float = 1.1) -> None:
         """Ask the avatar to look somewhere for a moment (see HoloAvatar.glance)."""
@@ -283,6 +298,10 @@ class HudCanvas(QWidget):
         return pm
 
     def _step(self):
+        if not self.isVisible():
+            if self._tmr.isActive():
+                self._tmr.stop()
+            return
         self._tick += 1
         now = time.time()
 
@@ -376,14 +395,16 @@ class HudCanvas(QWidget):
         # Repaint throttling — advancing the animation state above is cheap at
         # 60 Hz, but the paint is heavy. Active (speaking, audio, thinking) runs
         # at ~30 Hz, which is the frame rate animation has used for talking
-        # characters forever and is indistinguishable here; idle drops to ~20 Hz
-        # so a sleeping HUD stops pinning a CPU core. The visuals stay smooth
-        # either way because the animation state keeps stepping at 60 Hz.
+        # characters forever and is indistinguishable here; idle drops to ~10 Hz
+        # and adapts the timer to 50ms so an idle HUD stops pinning a CPU core.
         self._paint_tick = (self._paint_tick + 1) % 6
         active = (self.speaking or amp > 0.02
                   or self.state in ("THINKING", "PROCESSING"))
-        if _blinked or (self._paint_tick % 2 == 0 if active
-                        else self._paint_tick % 3 == 0):
+        desired_interval = 16 if active else 50
+        if self._tmr.interval() != desired_interval:
+            self._tmr.setInterval(desired_interval)
+
+        if _blinked or (self._paint_tick % 2 == 0):
             # Nothing is on screen when the window is hidden or minimised, so
             # rendering the avatar into it is pure waste — and this app is meant
             # to sit running all day. The animation state above keeps stepping,

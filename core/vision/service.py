@@ -47,6 +47,8 @@ class UnifiedVisionService:
         self.observer = ScreenObserver(privacy_config=self.privacy_config)
         self.browser_intel = BrowserIntelligence()
         self.supervisor = AutonomousTaskSupervisor()
+        self._cached_tabs: list[BrowserTabInfo] = []
+        self._cached_tabs_t: float = 0.0
 
     @classmethod
     def instance(cls) -> UnifiedVisionService:
@@ -112,8 +114,16 @@ class UnifiedVisionService:
 
     # ── Browser Tab Intelligence ─────────────────────────────────────────────
 
-    def enumerate_browser_tabs(self, browser: str | None = None) -> list[BrowserTabInfo]:
-        return self.browser_intel.enumerate_tabs(browser_name=browser)
+    def enumerate_browser_tabs(self, browser: str | None = None, force: bool = False) -> list[BrowserTabInfo]:
+        import time
+        now = time.time()
+        if not force and browser is None and self._cached_tabs and (now - self._cached_tabs_t < 10.0):
+            return self._cached_tabs
+        tabs = self.browser_intel.enumerate_tabs(browser_name=browser)
+        if browser is None:
+            self._cached_tabs = tabs
+            self._cached_tabs_t = now
+        return tabs
 
     def find_browser_tabs(self, query: str) -> list[BrowserTabInfo]:
         return self.browser_intel.find_tabs(query)

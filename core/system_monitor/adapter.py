@@ -83,6 +83,11 @@ class WindowsSystemMonitorAdapter:
         self._wmi_last_check_time: float = 0.0
         self._wmi_backoff_s: float = 60.0
 
+        # Process sampling cache state (10s TTL to prevent CPU/memory churn)
+        self._last_process_sample_time: float = 0.0
+        self._process_cache_ttl_s: float = 10.0
+        self._cached_processes: tuple[ProcessTelemetry, ...] = ()
+
         # Pre-prime CPU percent sampling so subsequent non-blocking calls return valid data
         if _HAS_PSUTIL:
             try:
@@ -395,24 +400,44 @@ class WindowsSystemMonitorAdapter:
             logger.debug("Failed sampling battery: %s", e)
             return BatteryTelemetry(has_battery=False, is_plugged=True)
 
-    def _sample_processes(self, top_n: int = 10) -> tuple[ProcessTelemetry, ...]:
-        """Collect top processes sorted by resource usage (STRICTLY NO cmdline collection)."""
+    def _sample_processes(self, top_n: int = 10, force: bool = False) -> tuple[ProcessTelemetry, ...]:
+        """Collect top processes sorted by resource usage (STRICTLY NO cmdline collection). Cached with 10s TTL."""
         if not _HAS_PSUTIL:
             return ()
 
+        now = time.monotonic()
+        if not force and self._cached_processes and (now - self._last_process_sample_time) < self._process_cache_ttl_s:
+            return self._cached_processes[:top_n]
+
         collected: list[ProcessTelemetry] = []
         try:
-            # Query only safe, non-sensitive attributes. Do NOT include 'cmdline' or 'environ'.
-            for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "status", "memory_info"]):
+            # Query memory metrics first across all processes without computing full CPU diffs
+            candidate_procs = []
+            for p in psutil.process_iter(["pid", "name", "memory_percent", "status", "memory_info"]):
+                try:
+                    info = p.info
+                    mem_pct = float(info.get("memory_percent") or 0.0)
+                    candidate_procs.append((mem_pct, p))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            # Sort primarily by memory usage descending and take the top candidate pool
+            candidate_procs.sort(key=lambda x: x[0], reverse=True)
+            top_pool = candidate_procs[:max(top_n, 20)]
+
+            for mem_pct, p in top_pool:
                 try:
                     info = p.info
                     pid = int(info.get("pid") or 0)
                     name = str(info.get("name") or "unknown")
-                    cpu_pct = float(info.get("cpu_percent") or 0.0)
-                    mem_pct = float(info.get("memory_percent") or 0.0)
                     status = str(info.get("status") or "running")
                     mem_info = info.get("memory_info")
                     mem_mb = round(mem_info.rss / (1024**2), 1) if mem_info else 0.0
+                    cpu_pct = 0.0
+                    try:
+                        cpu_pct = float(p.cpu_percent())
+                    except Exception:
+                        pass
 
                     collected.append(ProcessTelemetry(
                         pid=pid,
@@ -429,7 +454,9 @@ class WindowsSystemMonitorAdapter:
 
         # Sort primarily by memory %, secondarily by CPU %
         collected.sort(key=lambda x: (x.memory_percent, x.cpu_percent), reverse=True)
-        return tuple(collected[:top_n])
+        self._cached_processes = tuple(collected)
+        self._last_process_sample_time = now
+        return self._cached_processes[:top_n]
 
     def _sample_libre_hardware(self) -> tuple[bool, dict[str, Any]]:
         """Safely probe optional LibreHardwareMonitor WMI namespace without crashing or polling continuously."""

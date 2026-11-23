@@ -2,11 +2,13 @@
 
 Implements the three-part command interface:
 - Left Navigation Sidebar (OptimusNavBar): structured, grouped module access.
-- Central Workspace: header bar + QStackedWidget for the active operational module.
+- Central Workspace: header bar + QStackedWidget with lazy tab instantiation.
 - Right Contextual Panel (OptimusContextPanel): collapsible intelligence deck.
 """
 
 from __future__ import annotations
+
+from typing import Any, Callable
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -47,7 +49,30 @@ from gui.theme import C
 
 
 class OptimusControlCenterWidget(QWidget):
-    """The complete, unified OPTIMUS Control Center application surface."""
+    """The complete, unified OPTIMUS Control Center application surface with lazy tab loading."""
+
+    _SECTION_REGISTRY: list[tuple[Callable[..., QWidget], str]] = [
+        (OptimusDashboardView, "dashboard_view"),       # 0: DASHBOARD
+        (SectionCommandCenter, "command_view"),         # 1: COMMAND
+        (SectionWorkflows, "workflows_view"),           # 2: WORKFLOWS
+        (SectionAgents, "agents_view"),                 # 3: AGENTS
+        (SectionIntelligence, "intelligence_view"),     # 4: INTELLIGENCE
+        (SectionMemory, "memory_view"),                 # 5: MEMORY
+        (SectionVerification, "verification_view"),     # 6: VERIFICATION
+        (SectionApprovals, "approvals_view"),           # 7: APPROVALS
+        (SectionSystem, "system_view"),                 # 8: SYSTEM
+        (SectionSettings, "settings_view"),             # 9: SETTINGS
+        (SectionPlanning, "planning_view"),             # 10: PLANNING
+        (SectionDeveloper, "developer_view"),           # 11: DEVELOPER
+        (SectionSkills, "skills_view"),                 # 12: SKILLS
+        (SectionMissions, "missions_view"),             # 13: MISSIONS
+        (SectionProactive, "proactive_view"),           # 14: PROACTIVE
+        (SectionPersonal, "personal_view"),             # 15: PERSONAL
+        (SectionSelfImprovement, "self_improvement_view"), # 16: IMPROVE
+        (SectionVision, "vision_view"),                 # 17: VISION
+        (SectionApplications, "applications_view"),     # 18: APPLICATIONS
+        (SectionIntegrations, "integrations_view"),     # 19: INTEGRATIONS
+    ]
 
     def __init__(self, bridge: OptimusServiceBridge | None = None, parent=None):
         super().__init__(parent)
@@ -78,49 +103,16 @@ class OptimusControlCenterWidget(QWidget):
         self.stack = QStackedWidget(self.center_container)
         self.stack.setStyleSheet("background: transparent;")
 
-        # Instantiate all sections
-        self.dashboard_view = OptimusDashboardView(self.bridge, parent=self.stack)
-        self.command_view = SectionCommandCenter(self.bridge, parent=self.stack)
-        self.workflows_view = SectionWorkflows(self.bridge, parent=self.stack)
-        self.agents_view = SectionAgents(self.bridge, parent=self.stack)
-        self.intelligence_view = SectionIntelligence(self.bridge, parent=self.stack)
-        self.memory_view = SectionMemory(self.bridge, parent=self.stack)
-        self.verification_view = SectionVerification(self.bridge, parent=self.stack)
-        self.approvals_view = SectionApprovals(self.bridge, parent=self.stack)
-        self.system_view = SectionSystem(self.bridge, parent=self.stack)
-        self.settings_view = SectionSettings(self.bridge, parent=self.stack)
-        self.planning_view = SectionPlanning(self.bridge, parent=self.stack)
-        self.developer_view = SectionDeveloper(self.bridge, parent=self.stack)
-        self.skills_view = SectionSkills(self.bridge, parent=self.stack)
-        self.missions_view = SectionMissions(self.bridge, parent=self.stack)
-        self.proactive_view = SectionProactive(self.bridge, parent=self.stack)
-        self.personal_view = SectionPersonal(self.bridge, parent=self.stack)
-        self.self_improvement_view = SectionSelfImprovement(self.bridge, parent=self.stack)
-        self.vision_view = SectionVision(self.bridge, parent=self.stack)
-        self.applications_view = SectionApplications(self.bridge, parent=self.stack)
-        self.integrations_view = SectionIntegrations(self.bridge, parent=self.stack)
+        # Lazy Instantiation Storage & Placeholder Pre-population
+        self._section_instances: dict[int, QWidget | None] = {i: None for i in range(len(self._SECTION_REGISTRY))}
 
-        # Add to stack in index order matching OptimusNavBar.SECTIONS
-        self.stack.addWidget(self.dashboard_view)        # 0: DASHBOARD
-        self.stack.addWidget(self.command_view)          # 1: COMMAND
-        self.stack.addWidget(self.workflows_view)        # 2: WORKFLOWS
-        self.stack.addWidget(self.agents_view)           # 3: AGENTS
-        self.stack.addWidget(self.intelligence_view)     # 4: INTELLIGENCE
-        self.stack.addWidget(self.memory_view)           # 5: MEMORY
-        self.stack.addWidget(self.verification_view)     # 6: VERIFICATION
-        self.stack.addWidget(self.approvals_view)        # 7: APPROVALS
-        self.stack.addWidget(self.system_view)           # 8: SYSTEM
-        self.stack.addWidget(self.settings_view)         # 9: SETTINGS
-        self.stack.addWidget(self.planning_view)         # 10: PLANNING
-        self.stack.addWidget(self.developer_view)        # 11: DEVELOPER
-        self.stack.addWidget(self.skills_view)           # 12: SKILLS
-        self.stack.addWidget(self.missions_view)         # 13: MISSIONS
-        self.stack.addWidget(self.proactive_view)        # 14: PROACTIVE
-        self.stack.addWidget(self.personal_view)         # 15: PERSONAL
-        self.stack.addWidget(self.self_improvement_view) # 16: IMPROVE
-        self.stack.addWidget(self.vision_view)           # 17: VISION
-        self.stack.addWidget(self.applications_view)     # 18: APPLICATIONS
-        self.stack.addWidget(self.integrations_view)     # 19: INTEGRATIONS
+        for i in range(len(self._SECTION_REGISTRY)):
+            placeholder = QWidget()
+            placeholder.setStyleSheet("background: transparent;")
+            self.stack.addWidget(placeholder)
+
+        # Pre-instantiate only the initial view (Dashboard, index 0)
+        self._get_or_create_section(0)
 
         center_lay.addWidget(self.stack, stretch=1)
         root_lay.addWidget(self.center_container, stretch=1)
@@ -139,8 +131,108 @@ class OptimusControlCenterWidget(QWidget):
         self.bridge.recommendation_created.connect(self._update_proactive_badge)
         self._update_proactive_badge(None)
 
+    # ── Lazy Section Instantiation & Property Proxies ─────────────────────────
+
+    def _get_or_create_section(self, index: int) -> QWidget:
+        """Instantiate section on first access, swapping out the placeholder in-place."""
+        if index < 0 or index >= len(self._SECTION_REGISTRY):
+            index = 0
+
+        if self._section_instances.get(index) is None:
+            factory, _ = self._SECTION_REGISTRY[index]
+            view = factory(self.bridge, parent=self.stack)
+            old_w = self.stack.widget(index)
+            self.stack.removeWidget(old_w)
+            self.stack.insertWidget(index, view)
+            old_w.deleteLater()
+            self._section_instances[index] = view
+
+        return self._section_instances[index]  # type: ignore
+
+    @property
+    def dashboard_view(self) -> OptimusDashboardView:
+        return self._get_or_create_section(0)  # type: ignore
+
+    @property
+    def command_view(self) -> SectionCommandCenter:
+        return self._get_or_create_section(1)  # type: ignore
+
+    @property
+    def workflows_view(self) -> SectionWorkflows:
+        return self._get_or_create_section(2)  # type: ignore
+
+    @property
+    def agents_view(self) -> SectionAgents:
+        return self._get_or_create_section(3)  # type: ignore
+
+    @property
+    def intelligence_view(self) -> SectionIntelligence:
+        return self._get_or_create_section(4)  # type: ignore
+
+    @property
+    def memory_view(self) -> SectionMemory:
+        return self._get_or_create_section(5)  # type: ignore
+
+    @property
+    def verification_view(self) -> SectionVerification:
+        return self._get_or_create_section(6)  # type: ignore
+
+    @property
+    def approvals_view(self) -> SectionApprovals:
+        return self._get_or_create_section(7)  # type: ignore
+
+    @property
+    def system_view(self) -> SectionSystem:
+        return self._get_or_create_section(8)  # type: ignore
+
+    @property
+    def settings_view(self) -> SectionSettings:
+        return self._get_or_create_section(9)  # type: ignore
+
+    @property
+    def planning_view(self) -> SectionPlanning:
+        return self._get_or_create_section(10)  # type: ignore
+
+    @property
+    def developer_view(self) -> SectionDeveloper:
+        return self._get_or_create_section(11)  # type: ignore
+
+    @property
+    def skills_view(self) -> SectionSkills:
+        return self._get_or_create_section(12)  # type: ignore
+
+    @property
+    def missions_view(self) -> SectionMissions:
+        return self._get_or_create_section(13)  # type: ignore
+
+    @property
+    def proactive_view(self) -> SectionProactive:
+        return self._get_or_create_section(14)  # type: ignore
+
+    @property
+    def personal_view(self) -> SectionPersonal:
+        return self._get_or_create_section(15)  # type: ignore
+
+    @property
+    def self_improvement_view(self) -> SectionSelfImprovement:
+        return self._get_or_create_section(16)  # type: ignore
+
+    @property
+    def vision_view(self) -> SectionVision:
+        return self._get_or_create_section(17)  # type: ignore
+
+    @property
+    def applications_view(self) -> SectionApplications:
+        return self._get_or_create_section(18)  # type: ignore
+
+    @property
+    def integrations_view(self) -> SectionIntegrations:
+        return self._get_or_create_section(19)  # type: ignore
+
+    # ── Top Bar & Navigation ──────────────────────────────────────────────────
+
     def _build_top_bar(self) -> QWidget:
-        bar = QWidget()
+        bar = QWidget(self.center_container)
         bar.setFixedHeight(38)
         bar.setStyleSheet(f"""
             QWidget {{
@@ -173,12 +265,24 @@ class OptimusControlCenterWidget(QWidget):
             self.context_panel.toggle_visibility()
 
     def _on_tab_selected(self, index: int, title: str) -> None:
+        old_w = self.stack.currentWidget()
+        if old_w and hasattr(old_w, "pause_polling"):
+            try:
+                old_w.pause_polling()
+            except Exception:
+                pass
+        view = self._get_or_create_section(index)
         self.stack.setCurrentIndex(index)
+        if hasattr(view, "resume_polling"):
+            try:
+                view.resume_polling()
+            except Exception:
+                pass
         if hasattr(self, "lbl_workspace_title"):
             self.lbl_workspace_title.setText(f"{title.upper()} · MISSION CONTROL")
 
         # Trigger refresh on view when navigated to
-        w = self.stack.currentWidget()
+        w = view
         if hasattr(w, "refresh_all"):
             w.refresh_all()
         elif hasattr(w, "refresh_vision"):
@@ -218,17 +322,55 @@ class OptimusControlCenterWidget(QWidget):
 
     def navigate_to(self, target: int | str) -> None:
         """Switch section programmatically by index or uppercase section title."""
+        old_w = self.stack.currentWidget()
+        if old_w and hasattr(old_w, "pause_polling"):
+            try:
+                old_w.pause_polling()
+            except Exception:
+                pass
         if isinstance(target, int):
+            view = self._get_or_create_section(target)
             self.nav_bar.select_tab(target)
             self.stack.setCurrentIndex(target)
+            if hasattr(view, "resume_polling"):
+                try:
+                    view.resume_polling()
+                except Exception:
+                    pass
             if hasattr(self, "lbl_workspace_title") and 0 <= target < len(self.nav_bar.SECTIONS):
                 self.lbl_workspace_title.setText(f"{self.nav_bar.SECTIONS[target][0]} · MISSION CONTROL")
         elif isinstance(target, str):
             target_norm = target.strip().upper()
             for idx, (title, _) in enumerate(self.nav_bar.SECTIONS):
                 if title == target_norm or title.startswith(target_norm):
+                    view = self._get_or_create_section(idx)
                     self.nav_bar.select_tab(idx)
                     self.stack.setCurrentIndex(idx)
+                    if hasattr(view, "resume_polling"):
+                        try:
+                            view.resume_polling()
+                        except Exception:
+                            pass
                     if hasattr(self, "lbl_workspace_title"):
                         self.lbl_workspace_title.setText(f"{title} · MISSION CONTROL")
                     break
+
+    # ── Hierarchical Lifecycle Cascading ─────────────────────────────────────
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        curr = self.stack.currentWidget()
+        if curr and hasattr(curr, "pause_polling"):
+            try:
+                curr.pause_polling()
+            except Exception:
+                pass
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        curr = self.stack.currentWidget()
+        if curr and hasattr(curr, "resume_polling"):
+            try:
+                curr.resume_polling()
+            except Exception:
+                pass

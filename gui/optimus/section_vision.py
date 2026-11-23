@@ -262,13 +262,52 @@ class SectionVision(QWidget):
         panel_supervisor.body.addLayout(sup_lay)
         layout.addWidget(panel_supervisor, stretch=2)
 
-        # Periodic refresh timer (every 1.5s)
+        self._last_windows_sig = None
+        self._last_tabs_sig = None
+
+        # Periodic refresh timer (every 1.5s, active only when visible)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_vision)
-        self.timer.start(1500)
+        if self.isVisible():
+            self.timer.start(1500)
 
         # Initial populate
         self.refresh_vision()
+
+    # ── Lifecycle Control ────────────────────────────────────────────────────
+
+    def pause_polling(self) -> None:
+        """Pause 1.5s refresh timer when tab is hidden or inactive."""
+        if self.timer.isActive():
+            self.timer.stop()
+
+    def resume_polling(self) -> None:
+        """Resume 1.5s refresh timer when tab becomes visible."""
+        if not self.timer.isActive():
+            self.timer.start(1500)
+        self.refresh_vision()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.resume_polling()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.pause_polling()
+
+    def _on_focus_button_clicked(self) -> None:
+        sender = self.sender()
+        if sender:
+            target_hwnd = sender.property("target_hwnd")
+            if target_hwnd:
+                self._on_activate_window(target_hwnd)
+
+    def _on_switch_tab_button_clicked(self) -> None:
+        sender = self.sender()
+        if sender:
+            tab_id = sender.property("tab_id")
+            if tab_id:
+                self._on_switch_tab(tab_id)
 
     # ── Refresh & Populate ───────────────────────────────────────────────────
 
@@ -327,55 +366,104 @@ class SectionVision(QWidget):
         self._update_supervisor_log()
 
     def _populate_windows_table(self, windows: list[WindowInfo]) -> None:
-        self.table_windows.setRowCount(len(windows))
+        """In-place update of windows table with zero widget leaks and diff guard."""
+        sig = (len(windows), tuple((w.hwnd, w.is_active, w.is_minimized, w.title) for w in windows[:15]))
+        if sig == self._last_windows_sig:
+            return
+        self._last_windows_sig = sig
+
+        curr_rows = self.table_windows.rowCount()
+        target_rows = len(windows)
+        if curr_rows > target_rows:
+            for r in range(curr_rows - 1, target_rows - 1, -1):
+                self.table_windows.removeRow(r)
+        elif curr_rows < target_rows:
+            for r in range(curr_rows, target_rows):
+                self.table_windows.insertRow(r)
+                for c in range(4):
+                    self.table_windows.setItem(r, c, QTableWidgetItem())
+                btn_act = QPushButton("Focus")
+                btn_act.setFont(px_font(9, QFont.Weight.Medium))
+                btn_act.setStyleSheet(btn_css("primary"))
+                btn_act.clicked.connect(self._on_focus_button_clicked)
+                self.table_windows.setCellWidget(r, 4, btn_act)
+
         for row, w in enumerate(windows):
-            hwnd_item = QTableWidgetItem(str(w.hwnd))
-            hwnd_item.setFont(mono_font(8))
-            self.table_windows.setItem(row, 0, hwnd_item)
+            it0 = self.table_windows.item(row, 0)
+            if it0 and it0.text() != str(w.hwnd):
+                it0.setText(str(w.hwnd))
+                it0.setFont(mono_font(8))
 
-            app_item = QTableWidgetItem(w.app_name)
-            self.table_windows.setItem(row, 1, app_item)
+            it1 = self.table_windows.item(row, 1)
+            if it1 and it1.text() != w.app_name:
+                it1.setText(w.app_name)
 
-            title_item = QTableWidgetItem(w.title)
-            self.table_windows.setItem(row, 2, title_item)
+            it2 = self.table_windows.item(row, 2)
+            if it2 and it2.text() != w.title:
+                it2.setText(w.title)
 
-            state_str = "[ACTIVE]" if w.is_active else ("[MIN]" if w.is_minimized else "[NORMAL]")
-            state_item = QTableWidgetItem(state_str)
-            state_item.setFont(mono_font(8))
-            state_item.setForeground(QColor(C.GREEN if w.is_active else (C.ACC if w.is_minimized else C.WHITE)))
-            self.table_windows.setItem(row, 3, state_item)
+            it3 = self.table_windows.item(row, 3)
+            if it3:
+                state_str = "[ACTIVE]" if w.is_active else ("[MIN]" if w.is_minimized else "[NORMAL]")
+                if it3.text() != state_str:
+                    it3.setText(state_str)
+                    it3.setFont(mono_font(8))
+                    it3.setForeground(QColor(C.GREEN if w.is_active else (C.ACC if w.is_minimized else C.WHITE)))
 
-            btn_act = QPushButton("Focus")
-            btn_act.setFont(px_font(9, QFont.Weight.Medium))
-            btn_act.setStyleSheet(btn_css("primary"))
-            btn_act.clicked.connect(lambda checked=False, target_hwnd=w.hwnd: self._on_activate_window(target_hwnd))
-            self.table_windows.setCellWidget(row, 4, btn_act)
+            btn = self.table_windows.cellWidget(row, 4)
+            if btn:
+                btn.setProperty("target_hwnd", w.hwnd)
 
     def _populate_tabs_table(self, tabs: list[BrowserTabInfo]) -> None:
-        self.table_tabs.setRowCount(len(tabs))
+        """In-place update of browser tabs table with zero widget leaks and diff guard."""
+        sig = (len(tabs), tuple((t.tab_id, t.is_active, t.title) for t in tabs[:15]))
+        if sig == self._last_tabs_sig:
+            return
+        self._last_tabs_sig = sig
+
+        curr_rows = self.table_tabs.rowCount()
+        target_rows = len(tabs)
+        if curr_rows > target_rows:
+            for r in range(curr_rows - 1, target_rows - 1, -1):
+                self.table_tabs.removeRow(r)
+        elif curr_rows < target_rows:
+            for r in range(curr_rows, target_rows):
+                self.table_tabs.insertRow(r)
+                for c in range(4):
+                    self.table_tabs.setItem(r, c, QTableWidgetItem())
+                btn_sw = QPushButton("Switch")
+                btn_sw.setFont(px_font(9, QFont.Weight.Medium))
+                btn_sw.setStyleSheet(btn_css("primary"))
+                btn_sw.clicked.connect(self._on_switch_tab_button_clicked)
+                self.table_tabs.setCellWidget(r, 4, btn_sw)
+
         for row, t in enumerate(tabs):
-            b_item = QTableWidgetItem(t.browser.upper())
-            b_item.setFont(mono_font(8))
-            self.table_tabs.setItem(row, 0, b_item)
+            it0 = self.table_tabs.item(row, 0)
+            if it0 and it0.text() != t.browser.upper():
+                it0.setText(t.browser.upper())
+                it0.setFont(mono_font(8))
 
-            t_item = QTableWidgetItem(t.title)
-            self.table_tabs.setItem(row, 1, t_item)
+            it1 = self.table_tabs.item(row, 1)
+            if it1 and it1.text() != t.title:
+                it1.setText(t.title)
 
-            d_item = QTableWidgetItem(t.domain_hint or t.domain or "-")
-            d_item.setFont(mono_font(8))
-            self.table_tabs.setItem(row, 2, d_item)
+            it2 = self.table_tabs.item(row, 2)
+            d_hint = t.domain_hint or t.domain or "-"
+            if it2 and it2.text() != d_hint:
+                it2.setText(d_hint)
+                it2.setFont(mono_font(8))
 
-            state_str = "[ACTIVE]" if t.is_active else ("[PINNED]" if t.is_pinned else "[BG]")
-            state_item = QTableWidgetItem(state_str)
-            state_item.setFont(mono_font(8))
-            state_item.setForeground(QColor(C.GREEN if t.is_active else C.TEXT_DIM))
-            self.table_tabs.setItem(row, 3, state_item)
+            it3 = self.table_tabs.item(row, 3)
+            if it3:
+                state_str = "[ACTIVE]" if t.is_active else ("[PINNED]" if t.is_pinned else "[BG]")
+                if it3.text() != state_str:
+                    it3.setText(state_str)
+                    it3.setFont(mono_font(8))
+                    it3.setForeground(QColor(C.GREEN if t.is_active else C.TEXT_DIM))
 
-            btn_sw = QPushButton("Switch")
-            btn_sw.setFont(px_font(9, QFont.Weight.Medium))
-            btn_sw.setStyleSheet(btn_css("primary"))
-            btn_sw.clicked.connect(lambda checked=False, tab_id=t.tab_id: self._on_switch_tab(tab_id))
-            self.table_tabs.setCellWidget(row, 4, btn_sw)
+            btn = self.table_tabs.cellWidget(row, 4)
+            if btn:
+                btn.setProperty("tab_id", t.tab_id)
 
     def _update_supervisor_log(self) -> None:
         history = self.vision.supervisor.get_history()
