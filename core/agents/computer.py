@@ -37,6 +37,7 @@ def create_computer_agent_profile() -> AgentProfile:
                 "computer_switch_window",
                 "computer_verify_state",
                 "open_app",
+                "launch_application",
                 "read_file",
             ],
             allowed_tiers=[

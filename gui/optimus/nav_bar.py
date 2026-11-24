@@ -99,7 +99,7 @@ class OptimusNavBar(QWidget):
 
     tab_selected = pyqtSignal([str], [int, str])
 
-    # 18 Functional Sections mapped to indices in OptimusControlCenterWidget
+    # 22 Functional Sections mapped to indices in OptimusControlCenterWidget
     SECTIONS = [
         ("DASHBOARD", "⊞"),       # 0
         ("COMMAND", ">"),         # 1
@@ -121,12 +121,14 @@ class OptimusNavBar(QWidget):
         ("VISION", "◎"),          # 17
         ("APPLICATIONS", "⎈"),    # 18
         ("INTEGRATIONS", "☍"),    # 19
+        ("MARKETPLACE", "🛒"),    # 20
+        ("MCP SERVERS", "⚡"),    # 21
     ]
 
     # Logical groupings for structured navigation
     _GROUPS = [
-        ("EXECUTION & CONTROL", [0, 13, 1, 18, 17, 3, 2, 11]),
-        ("INTELLIGENCE & KNOWLEDGE", [4, 15, 19, 5, 12, 10]),
+        ("EXECUTION & CONTROL", [0, 13, 1, 18, 17, 3, 2, 21, 11]),
+        ("INTELLIGENCE & KNOWLEDGE", [4, 20, 15, 19, 5, 12, 10]),
         ("SYSTEM & GOVERNANCE", [7, 6, 14, 16, 8, 9]),
     ]
 

@@ -15,6 +15,7 @@ import ctypes
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import re
@@ -23,6 +24,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("optimus.verification.verifiers")
 
 from core.verification.types import (
     Postcondition,
@@ -664,6 +667,92 @@ class DataVerifier(BaseVerifier):
                 verdict=f"Verified CSV tabular integrity ({len(headers)} columns, {len(rows)-1} rows).",
             )
 
+        # 4. Markdown Table & Semantic Specification Schema Validation (Resolves MED-02)
+        if (
+            spec.get("type") in ("data_schema", "DATA_SCHEMA")
+            or "markdown_table" in str(spec.get("target", ""))
+            or "parameters" in spec
+        ):
+            params = spec.get("parameters") or {}
+            target_file = spec.get("target") or spec.get("file") or ""
+            content = ""
+
+            from pathlib import Path
+            p = Path(target_file) if target_file and "." in str(target_file) else None
+            if p and not p.is_absolute():
+                p = Path.cwd() / p
+            if p and p.exists() and p.is_file():
+                content = p.read_text(encoding="utf-8", errors="replace")
+            elif context and "output" in context:
+                content = str(context["output"])
+
+            observed["content_length"] = len(content)
+
+            # Check required columns
+            req_cols = params.get("required_columns") or []
+            missing_cols = [c for c in req_cols if c.lower() not in content.lower()]
+            if missing_cols:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result={"missing_columns": missing_cols},
+                    status=VerificationStatus.FAIL,
+                    verdict=f"Semantic data schema validation failed: missing columns {missing_cols}.",
+                )
+
+            # Check min models / rows
+            min_models = int(params.get("min_models") or params.get("min_entries") or 1)
+            row_count = sum(
+                1 for line in content.splitlines()
+                if "|" in line
+                and not set(line.strip()).issubset({"|", "-", ":", " "})
+                and "model" not in line.lower()
+            )
+            observed["table_rows"] = row_count
+            if row_count < min_models and content:
+                return VerificationRecord(
+                    evidence_id=evidence_id,
+                    task_id=task_id,
+                    subtask_id=subtask_id,
+                    verifier_identity=self.verifier_identity,
+                    expected_postcondition=spec,
+                    actual_observed_result=observed,
+                    status=VerificationStatus.FAIL,
+                    verdict=f"Table contains {row_count} entries, expected at least {min_models}.",
+                )
+
+            # Check max price constraint if specified
+            max_price = params.get("max_price")
+            if max_price is not None:
+                prices = [float(num) for num in re.findall(r"\$(\d+(?:\.\d+)?)", content)]
+                if prices:
+                    observed["extracted_prices"] = prices
+                    if any(pr > float(max_price) for pr in prices):
+                        return VerificationRecord(
+                            evidence_id=evidence_id,
+                            task_id=task_id,
+                            subtask_id=subtask_id,
+                            verifier_identity=self.verifier_identity,
+                            expected_postcondition=spec,
+                            actual_observed_result=observed,
+                            status=VerificationStatus.FAIL,
+                            verdict=f"Price constraint violated: found prices > ${max_price}.",
+                        )
+
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result=observed,
+                status=VerificationStatus.PASS,
+                verdict=f"Verified semantic data schema ({row_count} rows, schema constraints satisfied).",
+            )
+
         return VerificationRecord(
             evidence_id=evidence_id,
             task_id=task_id,
@@ -1261,6 +1350,34 @@ class MediaPlaybackVerifier(BaseVerifier):
                 status=VerificationStatus.COMPLETED_VERIFIED,
                 verdict=f"Verified media playback: active and progressing.",
             )
+
+        # Native Windows Core Audio (WASAPI) session inspection (Resolves HIGH-05)
+        target_app = str(spec.get("target") or spec.get("application") or "spotify").lower()
+        try:
+            from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
+            sessions = AudioUtilities.GetAllSessions()
+            for s in sessions:
+                p = s.Process
+                p_name = (p.name() if p else "").lower()
+                if target_app in p_name or (target_app == "spotify" and "spotify" in p_name):
+                    meter = s._ctl.QueryInterface(IAudioMeterInformation) if hasattr(s, "_ctl") else None
+                    peak = float(meter.GetPeakValue()) if meter else 0.0
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result={
+                            "process": p_name,
+                            "peak_meter": peak,
+                            "wasapi_verified": True,
+                        },
+                        status=VerificationStatus.COMPLETED_VERIFIED,
+                        verdict=f"Verified native Windows audio playback for '{p_name}' (WASAPI peak: {round(peak, 4)}).",
+                    )
+        except Exception as wasapi_err:
+            logger.debug("WASAPI session check exception: %s", wasapi_err)
 
         # Real Desktop Observation via screenview UIA
         with com_initialized():

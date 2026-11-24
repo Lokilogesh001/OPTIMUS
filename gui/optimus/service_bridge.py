@@ -139,6 +139,12 @@ class OptimusServiceBridge(QObject):
     reduced_motion_changed = pyqtSignal(bool)
     processes_snapshot_ready = pyqtSignal(list)
 
+    # Marketplace & MCP Runtime Signals
+    plugin_discovered = pyqtSignal(dict)
+    plugin_state_changed = pyqtSignal(dict)
+    mcp_servers_updated = pyqtSignal(list)
+    token_chunk_received = pyqtSignal(str)
+
     _instance: OptimusServiceBridge | None = None
     _lock = threading.Lock()
 
@@ -162,6 +168,8 @@ class OptimusServiceBridge(QObject):
                 try:
                     if hasattr(cls._instance, "_telemetry_timer"):
                         cls._instance._telemetry_timer.stop()
+                    if hasattr(cls._instance, "_token_flush_timer"):
+                        cls._instance._token_flush_timer.stop()
                 except Exception:
                     pass
                 cls._instance = None
@@ -230,6 +238,32 @@ class OptimusServiceBridge(QObject):
             self.mission_engine.on_state_change = self._on_mission_state_change
         except Exception:
             self.mission_engine = None
+
+        # Time-Coalesced Streaming Ring-Buffer (30Hz/60Hz QTimer flushing, resolves HIGH-02, E13)
+        import collections
+        self._token_ring_buffer = collections.deque(maxlen=4096)
+        self._token_buffer_lock = threading.Lock()
+        self._token_flush_timer = QTimer(self)
+        self._token_flush_timer.setInterval(33)  # ~30Hz batching
+        self._token_flush_timer.timeout.connect(self._flush_token_buffer)
+        self._token_flush_timer.start()
+
+    def push_token(self, token: str) -> None:
+        """Pushes incoming streaming token into the thread-safe ring buffer."""
+        if not token:
+            return
+        with self._token_buffer_lock:
+            self._token_ring_buffer.append(token)
+
+    def _flush_token_buffer(self) -> None:
+        """Flushes buffered tokens at 30Hz to prevent Qt event-loop choking under 50 tps."""
+        tokens_to_emit = []
+        with self._token_buffer_lock:
+            while self._token_ring_buffer:
+                tokens_to_emit.append(self._token_ring_buffer.popleft())
+        if tokens_to_emit:
+            batch_text = "".join(tokens_to_emit)
+            self.token_chunk_received.emit(batch_text)
 
     @property
     def workflow_engine(self):

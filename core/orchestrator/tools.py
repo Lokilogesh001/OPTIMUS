@@ -1053,13 +1053,13 @@ class ToolRegistry:
                 allowed_tools = permission_context["allowed_tools"]
 
         if allowed_tools is None:
-            if caller_agent == "orchestrator":
+            if caller_agent in ("orchestrator", "saga_coordinator"):
                 allowed_tools = list(self._tools.keys())
             else:
                 allowed_tools = [tool_name]
 
         if allowed_tiers is None:
-            if caller_agent == "orchestrator":
+            if caller_agent in ("orchestrator", "saga_coordinator"):
                 allowed_tiers = list(CapabilityTier)
             else:
                 try:

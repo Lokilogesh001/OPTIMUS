@@ -1687,3 +1687,33 @@ class CentralOrchestrator:
 
     run_task = execute_task
     cancel_task = cancel
+
+    # ── Universal Mission Lifecycle Bridge ───────────────────────────────────
+
+    def submit_mission(self, objective: str) -> str:
+        """Submit a multi-step autonomous mission to the Universal Mission Intelligence Engine."""
+        from core.missions.engine import get_mission_engine
+        engine = get_mission_engine()
+        rec = engine.create_mission(objective)
+        engine.start_mission(rec.mission_id)
+        return rec.mission_id
+
+    def get_mission(self, mission_id: str) -> Any:
+        """Retrieve a mission record by ID from the MissionStore."""
+        from core.missions.engine import get_mission_engine
+        return get_mission_engine().store.get(mission_id)
+
+    def pause_mission(self, mission_id: str) -> bool:
+        """Pause a running mission."""
+        from core.missions.engine import get_mission_engine
+        return get_mission_engine().pause_mission(mission_id)
+
+    def resume_mission(self, mission_id: str) -> Any:
+        """Resume a paused or interrupted mission."""
+        from core.missions.engine import get_mission_engine
+        return get_mission_engine().resume_mission(mission_id)
+
+    def cancel_mission(self, mission_id: str) -> bool:
+        """Cancel a mission and trigger Saga rollback."""
+        from core.missions.engine import get_mission_engine
+        return get_mission_engine().cancel_mission(mission_id)

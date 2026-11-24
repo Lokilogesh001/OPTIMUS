@@ -181,28 +181,59 @@ class ActionContract:
         }
 
 
+class ExecutionVerdict(str, Enum):
+    """Rigorous execution verdict for closed-loop application interactions (reconciles MED-03)."""
+    COMPLETED_VERIFIED = "completed_verified"
+    COMPLETED_WITH_LIMITATIONS = "completed_with_limitations"
+    ACTION_EXECUTED_UNVERIFIED = "action_executed_unverified"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+
+    # Backward-compatible convenience aliases
+    DONE = "completed_verified"
+    UNVERIFIED = "action_executed_unverified"
+
+
 @dataclass
 class ExecutionEvidence:
     """Physical postcondition evidence matching core.outcome convention."""
     action_id: str
-    status: str = "done"                       # "done", "unverified", "failed"
+    status: str = "done"                       # Backward compatibility: "done", "unverified", "failed", "blocked"
+    verdict: ExecutionVerdict = ExecutionVerdict.COMPLETED_VERIFIED
     tier_used: AppInteractionTier = AppInteractionTier.TIER_2_ADAPTER
     facts: list[str] = field(default_factory=list)
     evidence_data: dict[str, Any] = field(default_factory=dict)
     error_message: str | None = None
+    uipi_blocked: bool = False
+
+    def __post_init__(self) -> None:
+        # Synchronize status and verdict
+        if self.verdict == ExecutionVerdict.COMPLETED_VERIFIED:
+            self.status = "done"
+        elif self.verdict == ExecutionVerdict.ACTION_EXECUTED_UNVERIFIED:
+            self.status = "unverified"
+        elif self.verdict == ExecutionVerdict.BLOCKED:
+            self.status = "blocked"
+        elif self.verdict == ExecutionVerdict.FAILED:
+            self.status = "failed"
+        elif self.verdict == ExecutionVerdict.CANCELLED:
+            self.status = "cancelled"
 
     @property
     def is_success(self) -> bool:
-        return self.status == "done"
+        return self.verdict in (ExecutionVerdict.COMPLETED_VERIFIED, ExecutionVerdict.COMPLETED_WITH_LIMITATIONS)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "action_id": self.action_id,
             "status": self.status,
+            "verdict": self.verdict.value,
             "tier_used": self.tier_used.value,
             "facts": self.facts,
             "evidence_data": self.evidence_data,
             "error_message": self.error_message,
+            "uipi_blocked": self.uipi_blocked,
         }
 
 

@@ -1,5 +1,5 @@
 {
-  "saved_at": 1795377999.6034977,
+  "saved_at": 1795494487.2871602,
   "applications": [
     {
       "app_id": "protocol.whatsapp",
@@ -26,7 +26,7 @@
       "metadata": {
         "protocol": "whatsapp://"
       },
-      "last_discovered_at": 1795377998.054371
+      "last_discovered_at": 1795494485.284128
     },
     {
       "app_id": "protocol.mailto",
@@ -53,7 +53,7 @@
       "metadata": {
         "protocol": "mailto://"
       },
-      "last_discovered_at": 1795377998.0544746
+      "last_discovered_at": 1795494485.2842188
     },
     {
       "app_id": "protocol.ms-settings",
@@ -80,7 +80,7 @@
       "metadata": {
         "protocol": "ms-settings://"
       },
-      "last_discovered_at": 1795377998.054511
+      "last_discovered_at": 1795494485.2842476
     },
     {
       "app_id": "protocol.calculator",
@@ -107,7 +107,7 @@
       "metadata": {
         "protocol": "calculator://"
       },
-      "last_discovered_at": 1795377998.054531
+      "last_discovered_at": 1795494485.2842662
     },
     {
       "app_id": "uwp.windowscalculator",
@@ -133,7 +133,7 @@
         "is_uwp": true,
         "package_family": "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
       },
-      "last_discovered_at": 1795377999.4393926
+      "last_discovered_at": 1795494487.125859
     },
     {
       "app_id": "uwp.photos",
@@ -159,7 +159,7 @@
         "is_uwp": true,
         "package_family": "Microsoft.OneDrive.Photos_8wekyb3d8bbwe"
       },
-      "last_discovered_at": 1795377999.439457
+      "last_discovered_at": 1795494487.1259174
     },
     {
       "app_id": "uwp.windowsterminal",
@@ -187,7 +187,7 @@
         "is_uwp": true,
         "package_family": "Microsoft.WindowsTerminal_8wekyb3d8bbwe"
       },
-      "last_discovered_at": 1795377999.4394474
+      "last_discovered_at": 1795494487.1259084
     },
     {
       "app_id": "uwp.whatsappdesktop",
@@ -213,7 +213,7 @@
         "is_uwp": true,
         "package_family": "5319275A.WhatsAppDesktop_cv1g1gvanyjgm"
       },
-      "last_discovered_at": 1795377999.4394677
+      "last_discovered_at": 1795494487.1259277
     },
     {
       "app_id": "uwp.paint",
@@ -239,7 +239,7 @@
         "is_uwp": true,
         "package_family": "Microsoft.Paint_8wekyb3d8bbwe"
       },
-      "last_discovered_at": 1795377999.4394722
+      "last_discovered_at": 1795494487.1259327
     },
     {
       "app_id": "app.calc",
@@ -262,7 +262,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4394944
+      "last_discovered_at": 1795494487.1259522
     },
     {
       "app_id": "app.notepad",
@@ -285,7 +285,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4704776
+      "last_discovered_at": 1795494487.1542473
     },
     {
       "app_id": "app.explorer",
@@ -308,7 +308,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4395
+      "last_discovered_at": 1795494487.125958
     },
     {
       "app_id": "app.cmd",
@@ -331,7 +331,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4395022
+      "last_discovered_at": 1795494487.1259599
     },
     {
       "app_id": "app.powershell",
@@ -354,7 +354,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4395044
+      "last_discovered_at": 1795494487.1259618
     },
     {
       "app_id": "app.brave",
@@ -376,7 +376,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4407446
+      "last_discovered_at": 1795494487.1269202
     },
     {
       "app_id": "app.chrome",
@@ -400,7 +400,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.441717
+      "last_discovered_at": 1795494487.127894
     },
     {
       "app_id": "app.excel",
@@ -424,7 +424,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.443709
+      "last_discovered_at": 1795494487.1297226
     },
     {
       "app_id": "app.iediagcmd",
@@ -446,7 +446,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.444927
+      "last_discovered_at": 1795494487.13104
     },
     {
       "app_id": "app.iexplore",
@@ -468,7 +468,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.445554
+      "last_discovered_at": 1795494487.1314902
     },
     {
       "app_id": "app.msaccess",
@@ -490,7 +490,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4475155
+      "last_discovered_at": 1795494487.1335413
     },
     {
       "app_id": "app.msedge",
@@ -514,7 +514,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.448086
+      "last_discovered_at": 1795494487.13405
     },
     {
       "app_id": "app.msoadfsb",
@@ -536,7 +536,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4489255
+      "last_discovered_at": 1795494487.1346812
     },
     {
       "app_id": "app.msoasb",
@@ -558,7 +558,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4500093
+      "last_discovered_at": 1795494487.135193
     },
     {
       "app_id": "app.msoxmled",
@@ -580,7 +580,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4510694
+      "last_discovered_at": 1795494487.1358788
     },
     {
       "app_id": "app.onenote",
@@ -602,7 +602,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4517858
+      "last_discovered_at": 1795494487.1363845
     },
     {
       "app_id": "app.outlook",
@@ -624,7 +624,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.452552
+      "last_discovered_at": 1795494487.1368723
     },
     {
       "app_id": "app.pdfcraft",
@@ -646,7 +646,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.453112
+      "last_discovered_at": 1795494487.137323
     },
     {
       "app_id": "app.powerpnt",
@@ -670,7 +670,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4536572
+      "last_discovered_at": 1795494487.1377926
     },
     {
       "app_id": "app.sdxhelper",
@@ -692,7 +692,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4557316
+      "last_discovered_at": 1795494487.138977
     },
     {
       "app_id": "app.skypeserver",
@@ -714,7 +714,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4570172
+      "last_discovered_at": 1795494487.1400077
     },
     {
       "app_id": "app.visio",
@@ -736,7 +736,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4584365
+      "last_discovered_at": 1795494487.141204
     },
     {
       "app_id": "app.vlc",
@@ -758,7 +758,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4594703
+      "last_discovered_at": 1795494487.1418386
     },
     {
       "app_id": "app.winproj",
@@ -780,7 +780,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4616082
+      "last_discovered_at": 1795494487.1442294
     },
     {
       "app_id": "app.winrar",
@@ -802,7 +802,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.462157
+      "last_discovered_at": 1795494487.1449728
     },
     {
       "app_id": "app.winword",
@@ -826,7 +826,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4627059
+      "last_discovered_at": 1795494487.145463
     },
     {
       "app_id": "app.xmousebuttoncontrol",
@@ -848,7 +848,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4643195
+      "last_discovered_at": 1795494487.146669
     },
     {
       "app_id": "app.idle3.11",
@@ -870,7 +870,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4650373
+      "last_discovered_at": 1795494487.147893
     },
     {
       "app_id": "app.ms-teams",
@@ -892,7 +892,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4656987
+      "last_discovered_at": 1795494487.1488028
     },
     {
       "app_id": "app.ms-teamsupdate",
@@ -914,7 +914,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4662726
+      "last_discovered_at": 1795494487.149604
     },
     {
       "app_id": "app.mspaint",
@@ -936,7 +936,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4669209
+      "last_discovered_at": 1795494487.1510003
     },
     {
       "app_id": "app.msteams",
@@ -958,7 +958,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4681187
+      "last_discovered_at": 1795494487.1521802
     },
     {
       "app_id": "app.msteamsupdate",
@@ -980,7 +980,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4688795
+      "last_discovered_at": 1795494487.152677
     },
     {
       "app_id": "app.msteams_autostarter",
@@ -1002,7 +1002,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4696164
+      "last_discovered_at": 1795494487.1535754
     },
     {
       "app_id": "app.pip3.11",
@@ -1024,7 +1024,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4723482
+      "last_discovered_at": 1795494487.1561494
     },
     {
       "app_id": "app.python3.11",
@@ -1046,7 +1046,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.473146
+      "last_discovered_at": 1795494487.1568434
     },
     {
       "app_id": "app.pythonw3.11",
@@ -1068,7 +1068,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4738352
+      "last_discovered_at": 1795494487.157554
     },
     {
       "app_id": "app.snippingtool",
@@ -1090,7 +1090,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.474455
+      "last_discovered_at": 1795494487.1589518
     },
     {
       "app_id": "app.spotify_cli",
@@ -1112,7 +1112,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.475037
+      "last_discovered_at": 1795494487.1596184
     },
     {
       "app_id": "app.store",
@@ -1134,7 +1134,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4757116
+      "last_discovered_at": 1795494487.1600938
     },
     {
       "app_id": "app.windowspackagemanagerserver",
@@ -1156,7 +1156,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4765124
+      "last_discovered_at": 1795494487.161046
     },
     {
       "app_id": "app.winget",
@@ -1178,7 +1178,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.477398
+      "last_discovered_at": 1795494487.1616476
     },
     {
       "app_id": "app.wt",
@@ -1200,7 +1200,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.478217
+      "last_discovered_at": 1795494487.1630652
     },
     {
       "app_id": "pkg.armoury.crate.service",
@@ -1223,7 +1223,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4798071
+      "last_discovered_at": 1795494487.1638083
     },
     {
       "app_id": "pkg.git",
@@ -1246,7 +1246,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.481831
+      "last_discovered_at": 1795494487.1646433
     },
     {
       "app_id": "pkg.photos",
@@ -1269,7 +1269,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4831636
+      "last_discovered_at": 1795494487.1657774
     },
     {
       "app_id": "pkg.postgresql.18",
@@ -1292,7 +1292,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4844556
+      "last_discovered_at": 1795494487.1666193
     },
     {
       "app_id": "pkg.microsoft.project.professional.2024.en.us",
@@ -1315,7 +1315,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4853976
+      "last_discovered_at": 1795494487.1671133
     },
     {
       "app_id": "pkg.microsoft.office.ltsc.professional.plus.2024.en.us",
@@ -1338,7 +1338,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4863179
+      "last_discovered_at": 1795494487.167632
     },
     {
       "app_id": "pkg.microsoft.visio.ltsc.professional.2024.en.us",
@@ -1361,7 +1361,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.487202
+      "last_discovered_at": 1795494487.168102
     },
     {
       "app_id": "pkg.microsoft.visio.ltsc.standard.2024.en.us",
@@ -1384,7 +1384,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4879498
+      "last_discovered_at": 1795494487.168538
     },
     {
       "app_id": "pkg.vlc.media.player",
@@ -1407,7 +1407,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4887872
+      "last_discovered_at": 1795494487.169069
     },
     {
       "app_id": "pkg.winrar.7.30.beta.1.64.bit",
@@ -1430,7 +1430,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4893785
+      "last_discovered_at": 1795494487.1696434
     },
     {
       "app_id": "pkg.microsoft.net.runtime.8.0.29.x64",
@@ -1453,7 +1453,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4894457
+      "last_discovered_at": 1795494487.1697829
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.x64.additional.runtime.12.0.40664",
@@ -1476,7 +1476,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4894931
+      "last_discovered_at": 1795494487.1698332
     },
     {
       "app_id": "pkg.asus.aac_nbdt.hal",
@@ -1499,7 +1499,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5207143
+      "last_discovered_at": 1795494487.2046285
     },
     {
       "app_id": "pkg.python.3.13.16.tcl.tk.support.64.bit",
@@ -1522,7 +1522,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4895701
+      "last_discovered_at": 1795494487.1699214
     },
     {
       "app_id": "pkg.animevisionfont_strix_scar",
@@ -1544,7 +1544,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4896157
+      "last_discovered_at": 1795494487.169958
     },
     {
       "app_id": "pkg.python.3.14.2.documentation.64.bit",
@@ -1567,7 +1567,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.489668
+      "last_discovered_at": 1795494487.169997
     },
     {
       "app_id": "pkg.python.3.13.16.add.to.path.64.bit",
@@ -1590,7 +1590,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4897082
+      "last_discovered_at": 1795494487.170037
     },
     {
       "app_id": "pkg.python.3.13.16.test.suite.64.bit",
@@ -1613,7 +1613,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.489745
+      "last_discovered_at": 1795494487.1700737
     },
     {
       "app_id": "pkg.python.3.15.2.documentation.64.bit",
@@ -1636,7 +1636,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.489779
+      "last_discovered_at": 1795494487.1701183
     },
     {
       "app_id": "pkg.microsoft.net.host.6.0.16.x64",
@@ -1659,7 +1659,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4898152
+      "last_discovered_at": 1795494487.1701522
     },
     {
       "app_id": "pkg.node.js",
@@ -1681,7 +1681,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4898477
+      "last_discovered_at": 1795494487.1701841
     },
     {
       "app_id": "pkg.microsoft.visual.c.2010.x64.redistributable.10.0.40219",
@@ -1704,7 +1704,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4898827
+      "last_discovered_at": 1795494487.1702168
     },
     {
       "app_id": "pkg.microsoft.windows.application.compatibility.fix.database",
@@ -1727,7 +1727,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4899206
+      "last_discovered_at": 1795494487.1702535
     },
     {
       "app_id": "pkg.python.3.14.2.tcl.tk.support.64.bit",
@@ -1750,7 +1750,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4899573
+      "last_discovered_at": 1795494487.170286
     },
     {
       "app_id": "pkg.application.verifier.x64.external.package.desktopeditions",
@@ -1773,7 +1773,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4899917
+      "last_discovered_at": 1795494487.1703186
     },
     {
       "app_id": "pkg.eclipse.temurin.jdk.with.hotspot.25.0.5.8.x64",
@@ -1796,7 +1796,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4904158
+      "last_discovered_at": 1795494487.1706145
     },
     {
       "app_id": "pkg.rog.live.service",
@@ -1819,7 +1819,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.490522
+      "last_discovered_at": 1795494487.1706657
     },
     {
       "app_id": "pkg.windows.app.certification.kit.native.components",
@@ -1842,7 +1842,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.490599
+      "last_discovered_at": 1795494487.1707032
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.x64.additional.runtime.11.0.61030",
@@ -1865,7 +1865,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4906754
+      "last_discovered_at": 1795494487.1707387
     },
     {
       "app_id": "pkg.python.3.15.2.executables.64.bit",
@@ -1888,7 +1888,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.490747
+      "last_discovered_at": 1795494487.1707723
     },
     {
       "app_id": "pkg.vs_communityx64msi",
@@ -1910,7 +1910,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4908156
+      "last_discovered_at": 1795494487.1708038
     },
     {
       "app_id": "pkg.pdfcraft",
@@ -1932,7 +1932,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.490884
+      "last_discovered_at": 1795494487.1708355
     },
     {
       "app_id": "pkg.python.3.15.2.test.suite.64.bit",
@@ -1955,7 +1955,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4909518
+      "last_discovered_at": 1795494487.1708677
     },
     {
       "app_id": "pkg.microsoft.net.host.fx.resolver.9.0.22.x64",
@@ -1978,7 +1978,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4910295
+      "last_discovered_at": 1795494487.170901
     },
     {
       "app_id": "pkg.xbox.service",
@@ -2001,7 +2001,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4910946
+      "last_discovered_at": 1795494487.1709325
     },
     {
       "app_id": "pkg.python.3.14.2.executables.64.bit",
@@ -2024,7 +2024,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4911625
+      "last_discovered_at": 1795494487.1709666
     },
     {
       "app_id": "pkg.windows.sdk.directx.x64.remote",
@@ -2047,7 +2047,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4912314
+      "last_discovered_at": 1795494487.1710083
     },
     {
       "app_id": "pkg.python.3.13.16.executables.64.bit",
@@ -2070,7 +2070,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4913018
+      "last_discovered_at": 1795494487.1710413
     },
     {
       "app_id": "pkg.python.3.14.2.add.to.path.64.bit",
@@ -2093,7 +2093,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4913657
+      "last_discovered_at": 1795494487.1710732
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.x64.minimum.runtime.12.0.40664",
@@ -2116,7 +2116,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.491421
+      "last_discovered_at": 1795494487.1711063
     },
     {
       "app_id": "pkg.python.3.13.16.standard.library.64.bit",
@@ -2139,7 +2139,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4914794
+      "last_discovered_at": 1795494487.1711378
     },
     {
       "app_id": "pkg.msb",
@@ -2161,7 +2161,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4915302
+      "last_discovered_at": 1795494487.1711686
     },
     {
       "app_id": "pkg.microsoft.visual.c.2008.redistributable.x64.9.0.30729.6161",
@@ -2184,7 +2184,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4915812
+      "last_discovered_at": 1795494487.1712012
     },
     {
       "app_id": "pkg.python.3.15.2.core.interpreter.64.bit",
@@ -2207,7 +2207,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4916365
+      "last_discovered_at": 1795494487.1712358
     },
     {
       "app_id": "pkg.github.cli",
@@ -2230,7 +2230,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4916837
+      "last_discovered_at": 1795494487.1712675
     },
     {
       "app_id": "pkg.microsoft.visual.studio.installer",
@@ -2253,7 +2253,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.492527
+      "last_discovered_at": 1795494487.1718125
     },
     {
       "app_id": "pkg.application.verifier.x64.external.package.onecoreuap",
@@ -2276,7 +2276,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4926066
+      "last_discovered_at": 1795494487.1718662
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x64.additional.runtime.14.51.36247",
@@ -2299,7 +2299,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4926598
+      "last_discovered_at": 1795494487.1719034
     },
     {
       "app_id": "pkg.python.3.14.2.development.libraries.64.bit",
@@ -2322,7 +2322,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.492709
+      "last_discovered_at": 1795494487.171938
     },
     {
       "app_id": "pkg.python.3.13.16.documentation.64.bit",
@@ -2345,7 +2345,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4927564
+      "last_discovered_at": 1795494487.171971
     },
     {
       "app_id": "pkg.office.16.click.to.run.licensing.component",
@@ -2368,7 +2368,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4928026
+      "last_discovered_at": 1795494487.172004
     },
     {
       "app_id": "pkg.office.16.click.to.run.extensibility.component",
@@ -2391,7 +2391,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4928493
+      "last_discovered_at": 1795494487.1720371
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x64.minimum.runtime.14.51.36247",
@@ -2414,7 +2414,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4928994
+      "last_discovered_at": 1795494487.1720698
     },
     {
       "app_id": "pkg.python.3.15.2.development.libraries.64.bit",
@@ -2437,7 +2437,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4929478
+      "last_discovered_at": 1795494487.1721027
     },
     {
       "app_id": "pkg.revo.uninstaller.2.7.2",
@@ -2460,7 +2460,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.493868
+      "last_discovered_at": 1795494487.1726003
     },
     {
       "app_id": "pkg.python.3.15.2.tcl.tk.support.64.bit",
@@ -2483,7 +2483,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.494013
+      "last_discovered_at": 1795494487.1726515
     },
     {
       "app_id": "pkg.microsoft.teams.meeting.add.in.for.microsoft.office",
@@ -2506,7 +2506,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4940882
+      "last_discovered_at": 1795494487.1726873
     },
     {
       "app_id": "pkg.microsoft.net.host.fx.resolver.8.0.29.x64",
@@ -2529,7 +2529,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.494158
+      "last_discovered_at": 1795494487.172722
     },
     {
       "app_id": "pkg.asus.ambient.hal",
@@ -2552,7 +2552,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.517718
+      "last_discovered_at": 1795494487.2012382
     },
     {
       "app_id": "pkg.microsoft.net.host.9.0.22.x64",
@@ -2575,7 +2575,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4942796
+      "last_discovered_at": 1795494487.1729028
     },
     {
       "app_id": "pkg.python.3.13.16.pip.bootstrap.64.bit",
@@ -2598,7 +2598,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4943218
+      "last_discovered_at": 1795494487.1729422
     },
     {
       "app_id": "pkg.nvidia.graphics.driver.610.62",
@@ -2621,7 +2621,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.494529
+      "last_discovered_at": 1795494487.1733418
     },
     {
       "app_id": "pkg.nvidia.app.11.0.9.585",
@@ -2644,7 +2644,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4950356
+      "last_discovered_at": 1795494487.1739373
     },
     {
       "app_id": "pkg.nvidia.messagebus.3.for.nvapp",
@@ -2667,7 +2667,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4954233
+      "last_discovered_at": 1795494487.174212
     },
     {
       "app_id": "pkg.nvidia.backend",
@@ -2690,7 +2690,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4957137
+      "last_discovered_at": 1795494487.1747437
     },
     {
       "app_id": "pkg.nvidia.app.driver.settings",
@@ -2713,7 +2713,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4960043
+      "last_discovered_at": 1795494487.1751359
     },
     {
       "app_id": "pkg.nvidia.physx.system.software.9.23.1019",
@@ -2736,7 +2736,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4962783
+      "last_discovered_at": 1795494487.1753798
     },
     {
       "app_id": "pkg.nvidia.frameview.sdk.1.9.12728.38614306",
@@ -2759,7 +2759,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4971848
+      "last_discovered_at": 1795494487.1761973
     },
     {
       "app_id": "pkg.nvidia.hd.audio.driver.1.4.5.7",
@@ -2782,7 +2782,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4973593
+      "last_discovered_at": 1795494487.1763449
     },
     {
       "app_id": "pkg.nvidia.install.application",
@@ -2805,7 +2805,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4974916
+      "last_discovered_at": 1795494487.1764727
     },
     {
       "app_id": "pkg.nvidia.container",
@@ -2828,7 +2828,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4981778
+      "last_discovered_at": 1795494487.1772268
     },
     {
       "app_id": "pkg.nvidia.aiuser.container",
@@ -2851,7 +2851,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.498493
+      "last_discovered_at": 1795494487.1780074
     },
     {
       "app_id": "pkg.nvidia.localsystem.container",
@@ -2874,7 +2874,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4987702
+      "last_discovered_at": 1795494487.1787443
     },
     {
       "app_id": "pkg.nvidia.session.container",
@@ -2897,7 +2897,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4990063
+      "last_discovered_at": 1795494487.1792243
     },
     {
       "app_id": "pkg.nvidia.user.container",
@@ -2920,7 +2920,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4993234
+      "last_discovered_at": 1795494487.1796398
     },
     {
       "app_id": "pkg.nvidia.nvdlisr",
@@ -2943,7 +2943,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.4999259
+      "last_discovered_at": 1795494487.1800296
     },
     {
       "app_id": "pkg.nvidia.platform.controllers.and.framework",
@@ -2966,7 +2966,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5002549
+      "last_discovered_at": 1795494487.1802843
     },
     {
       "app_id": "pkg.nvidia.watchdog.plugin.for.nvcontainer",
@@ -2989,7 +2989,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5006528
+      "last_discovered_at": 1795494487.180732
     },
     {
       "app_id": "pkg.nvidia.telemetry.client",
@@ -3012,7 +3012,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5009463
+      "last_discovered_at": 1795494487.181067
     },
     {
       "app_id": "pkg.nvidia.shadowplay.11.0.9.0",
@@ -3035,7 +3035,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.501858
+      "last_discovered_at": 1795494487.1819263
     },
     {
       "app_id": "pkg.nvidia.usbc.driver.1.52.831.832",
@@ -3058,7 +3058,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5020158
+      "last_discovered_at": 1795494487.1820781
     },
     {
       "app_id": "pkg.nvidia.virtual.audio.4.92.0.0",
@@ -3081,7 +3081,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.502275
+      "last_discovered_at": 1795494487.1825976
     },
     {
       "app_id": "pkg.microsoft.net.host.fx.resolver.8.0.21.x64",
@@ -3104,7 +3104,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5023274
+      "last_discovered_at": 1795494487.182696
     },
     {
       "app_id": "pkg.python.3.14.2.pip.bootstrap.64.bit",
@@ -3127,7 +3127,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5023766
+      "last_discovered_at": 1795494487.182774
     },
     {
       "app_id": "pkg.microsoft.net.host.fx.resolver.6.0.16.x64",
@@ -3150,7 +3150,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5024211
+      "last_discovered_at": 1795494487.18283
     },
     {
       "app_id": "pkg.python.3.13.16.core.interpreter.64.bit",
@@ -3173,7 +3173,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5024579
+      "last_discovered_at": 1795494487.1828973
     },
     {
       "app_id": "pkg.secureexambrowser",
@@ -3195,7 +3195,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5024936
+      "last_discovered_at": 1795494487.1830287
     },
     {
       "app_id": "pkg.aura.lighting.effect.add.on.x64",
@@ -3218,7 +3218,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5025268
+      "last_discovered_at": 1795494487.1831288
     },
     {
       "app_id": "pkg.microsoft.net.runtime.6.0.16.x64",
@@ -3241,7 +3241,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5140615
+      "last_discovered_at": 1795494487.197903
     },
     {
       "app_id": "pkg.diagnosticshub_collectionservice",
@@ -3263,7 +3263,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.502591
+      "last_discovered_at": 1795494487.1833
     },
     {
       "app_id": "pkg.filee",
@@ -3285,7 +3285,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5030348
+      "last_discovered_at": 1795494487.184105
     },
     {
       "app_id": "pkg.python.3.15.2.standard.library.64.bit",
@@ -3308,7 +3308,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5030859
+      "last_discovered_at": 1795494487.184174
     },
     {
       "app_id": "pkg.python.3.15.2.pip.bootstrap.64.bit",
@@ -3331,7 +3331,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5031228
+      "last_discovered_at": 1795494487.1842144
     },
     {
       "app_id": "pkg.universal.crt.tools.x64",
@@ -3354,7 +3354,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5031567
+      "last_discovered_at": 1795494487.1842597
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.x64.minimum.runtime.11.0.61030",
@@ -3377,7 +3377,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5031912
+      "last_discovered_at": 1795494487.184296
     },
     {
       "app_id": "pkg.asus.aura.sdk",
@@ -3400,7 +3400,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5032244
+      "last_discovered_at": 1795494487.184331
     },
     {
       "app_id": "pkg.microsoft.windows.desktop.runtime.9.0.22.x64",
@@ -3423,7 +3423,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5234425
+      "last_discovered_at": 1795494487.2074373
     },
     {
       "app_id": "pkg.microsoft.net.host.8.0.29.x64",
@@ -3446,7 +3446,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5032895
+      "last_discovered_at": 1795494487.1844
     },
     {
       "app_id": "pkg.microsoft.gameinput",
@@ -3469,7 +3469,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.503319
+      "last_discovered_at": 1795494487.1844323
     },
     {
       "app_id": "pkg.python.3.13.16.development.libraries.64.bit",
@@ -3492,7 +3492,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.503352
+      "last_discovered_at": 1795494487.1844664
     },
     {
       "app_id": "pkg.microsoft.net.runtime.9.0.22.x64",
@@ -3515,7 +3515,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5033834
+      "last_discovered_at": 1795494487.1844993
     },
     {
       "app_id": "pkg.microsoft.net.runtime.8.0.21.x64",
@@ -3538,7 +3538,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5226421
+      "last_discovered_at": 1795494487.2066412
     },
     {
       "app_id": "pkg.python.3.14.2.core.interpreter.64.bit",
@@ -3561,7 +3561,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.503463
+      "last_discovered_at": 1795494487.1845632
     },
     {
       "app_id": "pkg.python.3.14.2.test.suite.64.bit",
@@ -3584,7 +3584,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5034971
+      "last_discovered_at": 1795494487.1845963
     },
     {
       "app_id": "pkg.vs.script.debugging.common",
@@ -3607,7 +3607,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5035312
+      "last_discovered_at": 1795494487.1846294
     },
     {
       "app_id": "pkg.microsoft.windows.desktop.runtime.8.0.29.x64",
@@ -3630,7 +3630,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5193124
+      "last_discovered_at": 1795494487.2026846
     },
     {
       "app_id": "pkg.epic.games.launcher.prerequisites.x64",
@@ -3653,7 +3653,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5035973
+      "last_discovered_at": 1795494487.184695
     },
     {
       "app_id": "pkg.python.3.15.2.add.to.path.64.bit",
@@ -3676,7 +3676,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.503629
+      "last_discovered_at": 1795494487.1847277
     },
     {
       "app_id": "pkg.python.3.14.2.standard.library.64.bit",
@@ -3699,7 +3699,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5036602
+      "last_discovered_at": 1795494487.1847594
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x64.debug.runtime.14.44.35211",
@@ -3722,7 +3722,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.503693
+      "last_discovered_at": 1795494487.184793
     },
     {
       "app_id": "pkg.brave",
@@ -3744,7 +3744,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5041738
+      "last_discovered_at": 1795494487.18533
     },
     {
       "app_id": "pkg.visual.studio.build.tools.2022",
@@ -3767,7 +3767,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5044785
+      "last_discovered_at": 1795494487.1856766
     },
     {
       "app_id": "pkg.google.chrome",
@@ -3791,7 +3791,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.504964
+      "last_discovered_at": 1795494487.1862864
     },
     {
       "app_id": "pkg.microsoft.edge",
@@ -3815,7 +3815,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.505572
+      "last_discovered_at": 1795494487.1872594
     },
     {
       "app_id": "pkg.microsoft.edge.webview2.runtime",
@@ -3838,7 +3838,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5060894
+      "last_discovered_at": 1795494487.1882648
     },
     {
       "app_id": "pkg.openal",
@@ -3861,7 +3861,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5065906
+      "last_discovered_at": 1795494487.1887536
     },
     {
       "app_id": "pkg.rainmeter",
@@ -3883,7 +3883,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5070126
+      "last_discovered_at": 1795494487.1891985
     },
     {
       "app_id": "pkg.red.dead.redemption.2",
@@ -3906,7 +3906,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5078797
+      "last_discovered_at": 1795494487.190113
     },
     {
       "app_id": "pkg.x.mouse.button.control.2.20.5",
@@ -3929,7 +3929,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5083804
+      "last_discovered_at": 1795494487.192084
     },
     {
       "app_id": "pkg.intel.r.wireless.bluetooth.r",
@@ -3952,7 +3952,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5086725
+      "last_discovered_at": 1795494487.1923761
     },
     {
       "app_id": "pkg.gamesdk.service",
@@ -3975,7 +3975,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5169573
+      "last_discovered_at": 1795494487.2005272
     },
     {
       "app_id": "pkg.windows.mobile.extension.sdk",
@@ -3998,7 +3998,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5092633
+      "last_discovered_at": 1795494487.19309
     },
     {
       "app_id": "pkg.winrt.intellisense.iot.other.languages",
@@ -4021,7 +4021,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5093005
+      "last_discovered_at": 1795494487.1931438
     },
     {
       "app_id": "pkg.windows.sdk.desktop.libs.x64",
@@ -4044,7 +4044,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5093324
+      "last_discovered_at": 1795494487.1931942
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.redistributable.x64.12.0.40664",
@@ -4067,7 +4067,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5099852
+      "last_discovered_at": 1795494487.1938753
     },
     {
       "app_id": "pkg.universal.crt.redistributable",
@@ -4090,7 +4090,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5216198
+      "last_discovered_at": 1795494487.2055144
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.redistributable.x64.12.0.30501",
@@ -4113,7 +4113,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5105572
+      "last_discovered_at": 1795494487.194403
     },
     {
       "app_id": "pkg.python.launcher",
@@ -4136,7 +4136,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.510619
+      "last_discovered_at": 1795494487.1944532
     },
     {
       "app_id": "pkg.neat.download.manager.version.1.4",
@@ -4159,7 +4159,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5112543
+      "last_discovered_at": 1795494487.1950526
     },
     {
       "app_id": "pkg.aura.service",
@@ -4182,7 +4182,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5166106
+      "last_discovered_at": 1795494487.2001839
     },
     {
       "app_id": "pkg.microsoft.visual.c.v14.redistributable.x64.14.51.36247",
@@ -4205,7 +4205,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.512247
+      "last_discovered_at": 1795494487.1959553
     },
     {
       "app_id": "pkg.sdk.arm64.additions",
@@ -4228,7 +4228,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.512307
+      "last_discovered_at": 1795494487.1960044
     },
     {
       "app_id": "pkg.windows.sdk.desktop.libs.arm64",
@@ -4251,7 +4251,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.512369
+      "last_discovered_at": 1795494487.196041
     },
     {
       "app_id": "pkg.windows.sdk.desktop.headers.arm64",
@@ -4274,7 +4274,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5124054
+      "last_discovered_at": 1795494487.1960757
     },
     {
       "app_id": "pkg.windows.11.installation.assistant",
@@ -4297,7 +4297,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5129151
+      "last_discovered_at": 1795494487.1965442
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.metadata",
@@ -4320,7 +4320,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5129743
+      "last_discovered_at": 1795494487.1966069
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.contracts",
@@ -4343,7 +4343,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5130157
+      "last_discovered_at": 1795494487.1966474
     },
     {
       "app_id": "pkg.windows.sdk.desktop.tools.x86",
@@ -4366,7 +4366,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5130534
+      "last_discovered_at": 1795494487.1966925
     },
     {
       "app_id": "pkg.windows.sdk.eula",
@@ -4389,7 +4389,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.513089
+      "last_discovered_at": 1795494487.19673
     },
     {
       "app_id": "pkg.vs_coreeditorfonts",
@@ -4411,7 +4411,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5131252
+      "last_discovered_at": 1795494487.1967654
     },
     {
       "app_id": "pkg.windows.desktop.extension.sdk.contracts",
@@ -4434,7 +4434,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5131626
+      "last_discovered_at": 1795494487.1968274
     },
     {
       "app_id": "pkg.aura.lighting.effect.add.on",
@@ -4457,7 +4457,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5133657
+      "last_discovered_at": 1795494487.1970046
     },
     {
       "app_id": "pkg.windows.app.certification.kit.supportedapilist.x86",
@@ -4480,7 +4480,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5134015
+      "last_discovered_at": 1795494487.1970506
     },
     {
       "app_id": "pkg.vs_filehandler_amd64",
@@ -4502,7 +4502,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5134346
+      "last_discovered_at": 1795494487.1970854
     },
     {
       "app_id": "pkg.winrt.intellisense.ppi.en.us",
@@ -4525,7 +4525,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5134678
+      "last_discovered_at": 1795494487.1971235
     },
     {
       "app_id": "pkg.vs_communitymsires",
@@ -4547,7 +4547,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5135021
+      "last_discovered_at": 1795494487.1971598
     },
     {
       "app_id": "pkg.vs_githubprotocolhandlermsi",
@@ -4569,7 +4569,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.513536
+      "last_discovered_at": 1795494487.1971948
     },
     {
       "app_id": "pkg.microsoft.xna.framework.redistributable.4.0",
@@ -4592,7 +4592,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5141413
+      "last_discovered_at": 1795494487.1979747
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.managed.apps.libs",
@@ -4615,7 +4615,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5142114
+      "last_discovered_at": 1795494487.1980147
     },
     {
       "app_id": "pkg.windows.iot.extension.sdk.contracts",
@@ -4638,7 +4638,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5142605
+      "last_discovered_at": 1795494487.19805
     },
     {
       "app_id": "pkg.asus.framework.service",
@@ -4661,7 +4661,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.514809
+      "last_discovered_at": 1795494487.198547
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.redistributable.x86.11.0.61030",
@@ -4684,7 +4684,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5152931
+      "last_discovered_at": 1795494487.1990004
     },
     {
       "app_id": "pkg.windows.mobile.extension.sdk.contracts",
@@ -4707,7 +4707,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5153518
+      "last_discovered_at": 1795494487.1990523
     },
     {
       "app_id": "pkg.launcher.prerequisites.x64",
@@ -4730,7 +4730,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5159082
+      "last_discovered_at": 1795494487.1995099
     },
     {
       "app_id": "pkg.windows.software.development.kit.windows.10.0.26100.9457",
@@ -4753,7 +4753,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5163884
+      "last_discovered_at": 1795494487.1999638
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.libs",
@@ -4776,7 +4776,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5164385
+      "last_discovered_at": 1795494487.2000139
     },
     {
       "app_id": "pkg.microsoft.visual.studio.setup.wmi.provider",
@@ -4799,7 +4799,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5164747
+      "last_discovered_at": 1795494487.2000504
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x86.minimum.runtime.14.51.36247",
@@ -4822,7 +4822,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5165112
+      "last_discovered_at": 1795494487.2000859
     },
     {
       "app_id": "pkg.windows.sdk.desktop.headers.x86",
@@ -4845,7 +4845,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5165455
+      "last_discovered_at": 1795494487.2001193
     },
     {
       "app_id": "pkg.vs_minshellinteropsharedmsi",
@@ -4867,7 +4867,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5165782
+      "last_discovered_at": 1795494487.2001512
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x86.additional.runtime.14.51.36247",
@@ -4890,7 +4890,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5166452
+      "last_discovered_at": 1795494487.2002182
     },
     {
       "app_id": "pkg.universal.crt.extension.sdk",
@@ -4913,7 +4913,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5166774
+      "last_discovered_at": 1795494487.2002501
     },
     {
       "app_id": "pkg.windows.sdk.redistributables",
@@ -4936,7 +4936,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5167093
+      "last_discovered_at": 1795494487.2002816
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps",
@@ -4959,7 +4959,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5167408
+      "last_discovered_at": 1795494487.2003136
     },
     {
       "app_id": "pkg.vs_minshellmsi",
@@ -4981,7 +4981,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5167806
+      "last_discovered_at": 1795494487.2003453
     },
     {
       "app_id": "pkg.kits.configuration.installer",
@@ -5004,7 +5004,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5168126
+      "last_discovered_at": 1795494487.2003763
     },
     {
       "app_id": "pkg.vs_filehandler_x86",
@@ -5026,7 +5026,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.516843
+      "last_discovered_at": 1795494487.2004073
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.directx.x86.remote",
@@ -5049,7 +5049,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.516894
+      "last_discovered_at": 1795494487.2004588
     },
     {
       "app_id": "pkg.vs_communitysharedmsi",
@@ -5071,7 +5071,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5169265
+      "last_discovered_at": 1795494487.2004902
     },
     {
       "app_id": "pkg.winrt.intellisense.desktop.other.languages",
@@ -5094,7 +5094,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5169904
+      "last_discovered_at": 1795494487.2005603
     },
     {
       "app_id": "pkg.windows.sdk.onecoreuap.headers.x86",
@@ -5117,7 +5117,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5170224
+      "last_discovered_at": 1795494487.2005928
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.x86.minimum.runtime.12.0.40664",
@@ -5140,7 +5140,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5170598
+      "last_discovered_at": 1795494487.2006254
     },
     {
       "app_id": "pkg.windows.sdk.onecoreuap.headers.arm64",
@@ -5163,7 +5163,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5170908
+      "last_discovered_at": 1795494487.2006574
     },
     {
       "app_id": "pkg.winrt.intellisense.uap.other.languages",
@@ -5186,7 +5186,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5171218
+      "last_discovered_at": 1795494487.2006886
     },
     {
       "app_id": "pkg.windows.sdk.modern.non.versioned.developer.tools",
@@ -5209,7 +5209,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5171533
+      "last_discovered_at": 1795494487.2007198
     },
     {
       "app_id": "pkg.windows.desktop.extension.sdk",
@@ -5232,7 +5232,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5171847
+      "last_discovered_at": 1795494487.2007506
     },
     {
       "app_id": "pkg.windows.sdk.desktop.tools.arm64",
@@ -5255,7 +5255,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.517219
+      "last_discovered_at": 1795494487.2007818
     },
     {
       "app_id": "pkg.windows.sdk.arm64.desktop.tools",
@@ -5278,7 +5278,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.517773
+      "last_discovered_at": 1795494487.2012892
     },
     {
       "app_id": "pkg.msi.development.tools",
@@ -5301,7 +5301,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5178094
+      "last_discovered_at": 1795494487.2013302
     },
     {
       "app_id": "pkg.winappdeploy",
@@ -5323,7 +5323,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5178428
+      "last_discovered_at": 1795494487.2013648
     },
     {
       "app_id": "pkg.microsoft.visual.c.v14.redistributable.x86.14.51.36247",
@@ -5346,7 +5346,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5183103
+      "last_discovered_at": 1795494487.2018037
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.redistributable.x86.12.0.40664",
@@ -5369,7 +5369,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5188432
+      "last_discovered_at": 1795494487.2022355
     },
     {
       "app_id": "pkg.windows.sdk",
@@ -5392,7 +5392,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5193632
+      "last_discovered_at": 1795494487.2027333
     },
     {
       "app_id": "pkg.windows.sdk.signing.tools",
@@ -5415,7 +5415,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5194042
+      "last_discovered_at": 1795494487.2027695
     },
     {
       "app_id": "pkg.vs_minshellinteropmsi",
@@ -5437,7 +5437,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5194383
+      "last_discovered_at": 1795494487.2028027
     },
     {
       "app_id": "pkg.universal.crt.tools.x86",
@@ -5460,7 +5460,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5194728
+      "last_discovered_at": 1795494487.2028344
     },
     {
       "app_id": "pkg.winrt.intellisense.mobile.en.us",
@@ -5483,7 +5483,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5195062
+      "last_discovered_at": 1795494487.2028673
     },
     {
       "app_id": "pkg.windows.sdk.onecoreuap.headers.x64",
@@ -5506,7 +5506,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5195389
+      "last_discovered_at": 1795494487.2028987
     },
     {
       "app_id": "pkg.asus.update.helper",
@@ -5529,7 +5529,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5195694
+      "last_discovered_at": 1795494487.2029362
     },
     {
       "app_id": "pkg.sdk.arm64.redistributables",
@@ -5552,7 +5552,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5196009
+      "last_discovered_at": 1795494487.20297
     },
     {
       "app_id": "pkg.ai.noise.cancelation.audio.software",
@@ -5575,7 +5575,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5200796
+      "last_discovered_at": 1795494487.203611
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.x86.additional.runtime.11.0.61030",
@@ -5598,7 +5598,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.520132
+      "last_discovered_at": 1795494487.2037168
     },
     {
       "app_id": "pkg.windows.team.extension.sdk.contracts",
@@ -5621,7 +5621,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5201685
+      "last_discovered_at": 1795494487.203782
     },
     {
       "app_id": "pkg.vs_vswebprotocolselectormsi",
@@ -5643,7 +5643,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5202007
+      "last_discovered_at": 1795494487.2038505
     },
     {
       "app_id": "pkg.winrt.intellisense.uap.en.us",
@@ -5666,7 +5666,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5202334
+      "last_discovered_at": 1795494487.2039478
     },
     {
       "app_id": "pkg.windows.team.extension.sdk",
@@ -5689,7 +5689,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5202658
+      "last_discovered_at": 1795494487.2040174
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.headers.onecoreuap",
@@ -5712,7 +5712,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.520772
+      "last_discovered_at": 1795494487.2046933
     },
     {
       "app_id": "pkg.winrt.intellisense.desktop.en.us",
@@ -5735,7 +5735,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5208101
+      "last_discovered_at": 1795494487.2047353
     },
     {
       "app_id": "pkg.microsoft.visual.c.2022.x86.debug.runtime.14.44.35211",
@@ -5758,7 +5758,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5208454
+      "last_discovered_at": 1795494487.2047803
     },
     {
       "app_id": "pkg.windows.sdk.desktop.libs.x86",
@@ -5781,7 +5781,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5208821
+      "last_discovered_at": 1795494487.2048197
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.x86.minimum.runtime.11.0.61030",
@@ -5804,7 +5804,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5209172
+      "last_discovered_at": 1795494487.2048585
     },
     {
       "app_id": "pkg.windows.software.development.kit.windows.10.0.26100.7705",
@@ -5827,7 +5827,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5215282
+      "last_discovered_at": 1795494487.2054176
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.headers",
@@ -5850,7 +5850,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5215816
+      "last_discovered_at": 1795494487.2054768
     },
     {
       "app_id": "pkg.vcpp_crt.redist.clickonce",
@@ -5872,7 +5872,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5216534
+      "last_discovered_at": 1795494487.205586
     },
     {
       "app_id": "pkg.winrt.intellisense.ppi.other.languages",
@@ -5895,7 +5895,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5216913
+      "last_discovered_at": 1795494487.205619
     },
     {
       "app_id": "pkg.microsoft.visual.c.2012.redistributable.x64.11.0.61030",
@@ -5918,7 +5918,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5221393
+      "last_discovered_at": 1795494487.206112
     },
     {
       "app_id": "pkg.windows.sdk.for.windows.store.apps.tools",
@@ -5941,7 +5941,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5221894
+      "last_discovered_at": 1795494487.2061667
     },
     {
       "app_id": "pkg.chrome.remote.desktop.host",
@@ -5964,7 +5964,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5226936
+      "last_discovered_at": 1795494487.2066948
     },
     {
       "app_id": "pkg.microsoft.visual.studio.setup.configuration",
@@ -5987,7 +5987,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5227299
+      "last_discovered_at": 1795494487.2067344
     },
     {
       "app_id": "pkg.windows.app.certification.kit.x64.onecoreuap",
@@ -6010,7 +6010,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5227733
+      "last_discovered_at": 1795494487.206769
     },
     {
       "app_id": "pkg.windows.sdk.addon",
@@ -6033,7 +6033,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5228148
+      "last_discovered_at": 1795494487.2068017
     },
     {
       "app_id": "pkg.vs_filetracker_singleton",
@@ -6055,7 +6055,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5228536
+      "last_discovered_at": 1795494487.2068336
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.x86.additional.runtime.12.0.40664",
@@ -6078,7 +6078,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5228887
+      "last_discovered_at": 1795494487.2068677
     },
     {
       "app_id": "pkg.universal.general.midi.dls.extension.sdk",
@@ -6101,7 +6101,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5229218
+      "last_discovered_at": 1795494487.2069
     },
     {
       "app_id": "pkg.windows.sdk.facade.windows.winmd.versioned",
@@ -6124,7 +6124,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5229542
+      "last_discovered_at": 1795494487.2069325
     },
     {
       "app_id": "pkg.windows.iot.extension.sdk",
@@ -6147,7 +6147,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5229855
+      "last_discovered_at": 1795494487.2069638
     },
     {
       "app_id": "pkg.winrt.intellisense.iot.en.us",
@@ -6170,7 +6170,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.523497
+      "last_discovered_at": 1795494487.2074916
     },
     {
       "app_id": "pkg.windows.sdk.desktop.tools.x64",
@@ -6193,7 +6193,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.52355
+      "last_discovered_at": 1795494487.207527
     },
     {
       "app_id": "pkg.windows.sdk.directx.x86.remote",
@@ -6216,7 +6216,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5236213
+      "last_discovered_at": 1795494487.2075605
     },
     {
       "app_id": "pkg.vs_minshellmsires",
@@ -6238,7 +6238,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5236757
+      "last_discovered_at": 1795494487.207597
     },
     {
       "app_id": "pkg.universal.crt.headers.libraries.and.sources",
@@ -6261,7 +6261,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5237157
+      "last_discovered_at": 1795494487.2076306
     },
     {
       "app_id": "pkg.windows.sdk.desktop.headers.x64",
@@ -6284,7 +6284,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5237522
+      "last_discovered_at": 1795494487.2076628
     },
     {
       "app_id": "pkg.windows.sdk.modern.versioned.developer.tools",
@@ -6307,7 +6307,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5237875
+      "last_discovered_at": 1795494487.2076945
     },
     {
       "app_id": "pkg.microsoft.visual.c.2010.x86.redistributable.10.0.40219",
@@ -6330,7 +6330,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5238326
+      "last_discovered_at": 1795494487.2077277
     },
     {
       "app_id": "pkg.microsoft.visual.c.2013.redistributable.x86.12.0.30501",
@@ -6353,7 +6353,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.524579
+      "last_discovered_at": 1795494487.208406
     },
     {
       "app_id": "pkg.vs_minshellsharedmsi",
@@ -6375,7 +6375,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.524628
+      "last_discovered_at": 1795494487.2084727
     },
     {
       "app_id": "pkg.windows.app.certification.kit.x64",
@@ -6398,7 +6398,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5246642
+      "last_discovered_at": 1795494487.2085097
     },
     {
       "app_id": "pkg.rusherai.free.ai.chat",
@@ -6421,7 +6421,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5247302
+      "last_discovered_at": 1795494487.2085893
     },
     {
       "app_id": "pkg.youtube",
@@ -6443,7 +6443,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.524771
+      "last_discovered_at": 1795494487.2086291
     },
     {
       "app_id": "pkg.gmail",
@@ -6465,7 +6465,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5248785
+      "last_discovered_at": 1795494487.2086644
     },
     {
       "app_id": "pkg.vit.chennai.vtop",
@@ -6488,7 +6488,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5249617
+      "last_discovered_at": 1795494487.2086985
     },
     {
       "app_id": "pkg.instagram",
@@ -6510,7 +6510,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5250266
+      "last_discovered_at": 1795494487.2087355
     },
     {
       "app_id": "pkg.cleanly.0.1.1",
@@ -6533,7 +6533,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5256958
+      "last_discovered_at": 1795494487.209201
     },
     {
       "app_id": "pkg.openjarvis",
@@ -6556,7 +6556,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5261855
+      "last_discovered_at": 1795494487.2096488
     },
     {
       "app_id": "pkg.roblox.player.for.loges",
@@ -6579,7 +6579,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5268946
+      "last_discovered_at": 1795494487.2101476
     },
     {
       "app_id": "pkg.rustup.the.rust.toolchain.installer",
@@ -6602,7 +6602,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5269783
+      "last_discovered_at": 1795494487.2101989
     },
     {
       "app_id": "pkg.v.notch",
@@ -6624,7 +6624,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5275471
+      "last_discovered_at": 1795494487.2107913
     },
     {
       "app_id": "pkg.python.3.14.2.64.bit",
@@ -6647,7 +6647,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5281618
+      "last_discovered_at": 1795494487.2122033
     },
     {
       "app_id": "pkg.ollama.version.0.40.17",
@@ -6670,7 +6670,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.528813
+      "last_discovered_at": 1795494487.2129493
     },
     {
       "app_id": "pkg.python.3.15.2.64.bit",
@@ -6693,7 +6693,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5294333
+      "last_discovered_at": 1795494487.2147992
     },
     {
       "app_id": "pkg.python.3.13.16.64.bit",
@@ -6716,7 +6716,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.5299401
+      "last_discovered_at": 1795494487.2156749
     },
     {
       "app_id": "pkg.antigravity.ide.user",
@@ -6739,7 +6739,7 @@
       "pids": [],
       "integrity_level": "Medium",
       "metadata": {},
-      "last_discovered_at": 1795377999.530473
+      "last_discovered_at": 1795494487.2163277
     },
     {
       "app_id": "lnk.access",
@@ -6763,7 +6763,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Access.lnk"
       },
-      "last_discovered_at": 1795377999.5313563
+      "last_discovered_at": 1795494487.2172925
     },
     {
       "app_id": "lnk.brave",
@@ -6787,7 +6787,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Brave.lnk"
       },
-      "last_discovered_at": 1795377999.5316963
+      "last_discovered_at": 1795494487.2177591
     },
     {
       "app_id": "lnk.excel",
@@ -6813,7 +6813,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Excel.lnk"
       },
-      "last_discovered_at": 1795377999.5320277
+      "last_discovered_at": 1795494487.2182007
     },
     {
       "app_id": "lnk.filee",
@@ -6837,7 +6837,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Filee.lnk"
       },
-      "last_discovered_at": 1795377999.5323555
+      "last_discovered_at": 1795494487.2186434
     },
     {
       "app_id": "lnk.google.chrome",
@@ -6861,7 +6861,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Google Chrome.lnk"
       },
-      "last_discovered_at": 1795377999.5329807
+      "last_discovered_at": 1795494487.2190597
     },
     {
       "app_id": "lnk.msb",
@@ -6885,7 +6885,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\MSB.lnk"
       },
-      "last_discovered_at": 1795377999.533357
+      "last_discovered_at": 1795494487.2194638
     },
     {
       "app_id": "lnk.neat.download.manager",
@@ -6909,7 +6909,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Neat Download Manager.lnk"
       },
-      "last_discovered_at": 1795377999.5336735
+      "last_discovered_at": 1795494487.2198288
     },
     {
       "app_id": "lnk.onenote",
@@ -6933,7 +6933,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\OneNote.lnk"
       },
-      "last_discovered_at": 1795377999.534041
+      "last_discovered_at": 1795494487.2202282
     },
     {
       "app_id": "lnk.outlook.classic",
@@ -6957,7 +6957,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Outlook (classic).lnk"
       },
-      "last_discovered_at": 1795377999.5344405
+      "last_discovered_at": 1795494487.220598
     },
     {
       "app_id": "lnk.pdfcraft",
@@ -6981,7 +6981,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PdfCraft.lnk"
       },
-      "last_discovered_at": 1795377999.5350628
+      "last_discovered_at": 1795494487.2209184
     },
     {
       "app_id": "lnk.powerpoint",
@@ -7005,7 +7005,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PowerPoint.lnk"
       },
-      "last_discovered_at": 1795377999.5357454
+      "last_discovered_at": 1795494487.2212498
     },
     {
       "app_id": "lnk.project",
@@ -7029,7 +7029,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Project.lnk"
       },
-      "last_discovered_at": 1795377999.536181
+      "last_discovered_at": 1795494487.2215936
     },
     {
       "app_id": "lnk.rainmeter",
@@ -7053,7 +7053,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Rainmeter.lnk"
       },
-      "last_discovered_at": 1795377999.536546
+      "last_discovered_at": 1795494487.2219524
     },
     {
       "app_id": "lnk.visio",
@@ -7077,7 +7077,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visio.lnk"
       },
-      "last_discovered_at": 1795377999.5368743
+      "last_discovered_at": 1795494487.2222824
     },
     {
       "app_id": "lnk.visual.studio.installer",
@@ -7101,7 +7101,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio Installer.lnk"
       },
-      "last_discovered_at": 1795377999.5372484
+      "last_discovered_at": 1795494487.2226164
     },
     {
       "app_id": "lnk.word",
@@ -7125,7 +7125,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Word.lnk"
       },
-      "last_discovered_at": 1795377999.5375838
+      "last_discovered_at": 1795494487.222947
     },
     {
       "app_id": "lnk.remote.desktop.connection",
@@ -7149,7 +7149,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Accessories\\Remote Desktop Connection.lnk"
       },
-      "last_discovered_at": 1795377999.538426
+      "last_discovered_at": 1795494487.2236574
     },
     {
       "app_id": "lnk.steps.recorder",
@@ -7173,7 +7173,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Accessories\\Steps Recorder.lnk"
       },
-      "last_discovered_at": 1795377999.5387712
+      "last_discovered_at": 1795494487.2241983
     },
     {
       "app_id": "lnk.windows.media.player.legacy",
@@ -7197,7 +7197,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Accessories\\Windows Media Player Legacy.lnk"
       },
-      "last_discovered_at": 1795377999.5391512
+      "last_discovered_at": 1795494487.2246838
     },
     {
       "app_id": "lnk.component.services",
@@ -7221,7 +7221,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Component Services.lnk"
       },
-      "last_discovered_at": 1795377999.5396178
+      "last_discovered_at": 1795494487.2253227
     },
     {
       "app_id": "lnk.computer.management",
@@ -7245,7 +7245,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Computer Management.lnk"
       },
-      "last_discovered_at": 1795377999.539974
+      "last_discovered_at": 1795494487.2257943
     },
     {
       "app_id": "lnk.dfrgui",
@@ -7269,7 +7269,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\dfrgui.lnk"
       },
-      "last_discovered_at": 1795377999.5405529
+      "last_discovered_at": 1795494487.2261963
     },
     {
       "app_id": "lnk.disk.cleanup",
@@ -7293,7 +7293,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Disk Cleanup.lnk"
       },
-      "last_discovered_at": 1795377999.5410259
+      "last_discovered_at": 1795494487.2265596
     },
     {
       "app_id": "lnk.event.viewer",
@@ -7317,7 +7317,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Event Viewer.lnk"
       },
-      "last_discovered_at": 1795377999.541404
+      "last_discovered_at": 1795494487.226957
     },
     {
       "app_id": "lnk.iscsi.initiator",
@@ -7341,7 +7341,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\iSCSI Initiator.lnk"
       },
-      "last_discovered_at": 1795377999.5417638
+      "last_discovered_at": 1795494487.2273612
     },
     {
       "app_id": "lnk.memory.diagnostics.tool",
@@ -7365,7 +7365,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Memory Diagnostics Tool.lnk"
       },
-      "last_discovered_at": 1795377999.542409
+      "last_discovered_at": 1795494487.2277606
     },
     {
       "app_id": "lnk.odbc.data.sources.32.bit",
@@ -7389,7 +7389,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\ODBC Data Sources (32-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5428207
+      "last_discovered_at": 1795494487.2281294
     },
     {
       "app_id": "lnk.odbc.data.sources.64.bit",
@@ -7413,7 +7413,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\ODBC Data Sources (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5432296
+      "last_discovered_at": 1795494487.2285228
     },
     {
       "app_id": "lnk.performance.monitor",
@@ -7437,7 +7437,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Performance Monitor.lnk"
       },
-      "last_discovered_at": 1795377999.5436137
+      "last_discovered_at": 1795494487.2288818
     },
     {
       "app_id": "lnk.recoverydrive",
@@ -7461,7 +7461,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\RecoveryDrive.lnk"
       },
-      "last_discovered_at": 1795377999.5439997
+      "last_discovered_at": 1795494487.229251
     },
     {
       "app_id": "lnk.registry.editor",
@@ -7485,7 +7485,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Registry Editor.lnk"
       },
-      "last_discovered_at": 1795377999.544412
+      "last_discovered_at": 1795494487.2296379
     },
     {
       "app_id": "lnk.resource.monitor",
@@ -7509,7 +7509,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Resource Monitor.lnk"
       },
-      "last_discovered_at": 1795377999.5447755
+      "last_discovered_at": 1795494487.2300081
     },
     {
       "app_id": "lnk.services",
@@ -7533,7 +7533,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\services.lnk"
       },
-      "last_discovered_at": 1795377999.5451736
+      "last_discovered_at": 1795494487.2303867
     },
     {
       "app_id": "lnk.system.configuration",
@@ -7557,7 +7557,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\System Configuration.lnk"
       },
-      "last_discovered_at": 1795377999.545522
+      "last_discovered_at": 1795494487.2307336
     },
     {
       "app_id": "lnk.system.information",
@@ -7581,7 +7581,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\System Information.lnk"
       },
-      "last_discovered_at": 1795377999.5458636
+      "last_discovered_at": 1795494487.2310808
     },
     {
       "app_id": "lnk.task.scheduler",
@@ -7605,7 +7605,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Task Scheduler.lnk"
       },
-      "last_discovered_at": 1795377999.54629
+      "last_discovered_at": 1795494487.231542
     },
     {
       "app_id": "lnk.windows.defender.firewall.with.advanced.security",
@@ -7629,7 +7629,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools\\Windows Defender Firewall with Advanced Security.lnk"
       },
-      "last_discovered_at": 1795377999.546685
+      "last_discovered_at": 1795494487.232078
     },
     {
       "app_id": "lnk.git.bash",
@@ -7653,7 +7653,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Git\\Git Bash.lnk"
       },
-      "last_discovered_at": 1795377999.5476384
+      "last_discovered_at": 1795494487.2333615
     },
     {
       "app_id": "lnk.git.cmd",
@@ -7677,7 +7677,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Git\\Git CMD.lnk"
       },
-      "last_discovered_at": 1795377999.547982
+      "last_discovered_at": 1795494487.2337584
     },
     {
       "app_id": "lnk.git.gui",
@@ -7701,7 +7701,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Git\\Git GUI.lnk"
       },
-      "last_discovered_at": 1795377999.548331
+      "last_discovered_at": 1795494487.234535
     },
     {
       "app_id": "lnk.git.release.notes",
@@ -7725,7 +7725,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Git\\Git Release Notes.lnk"
       },
-      "last_discovered_at": 1795377999.5487456
+      "last_discovered_at": 1795494487.2349463
     },
     {
       "app_id": "lnk.office.language.preferences",
@@ -7749,7 +7749,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Microsoft Office Tools\\Office Language Preferences.lnk"
       },
-      "last_discovered_at": 1795377999.5498967
+      "last_discovered_at": 1795494487.2356894
     },
     {
       "app_id": "lnk.project.server.accounts",
@@ -7773,7 +7773,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Microsoft Office Tools\\Project Server Accounts.lnk"
       },
-      "last_discovered_at": 1795377999.5504196
+      "last_discovered_at": 1795494487.2363389
     },
     {
       "app_id": "lnk.spreadsheet.compare",
@@ -7797,7 +7797,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Microsoft Office Tools\\Spreadsheet Compare.lnk"
       },
-      "last_discovered_at": 1795377999.550959
+      "last_discovered_at": 1795494487.236887
     },
     {
       "app_id": "lnk.install.additional.tools.for.node.js",
@@ -7821,7 +7821,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Node.js\\Install Additional Tools for Node.js.lnk"
       },
-      "last_discovered_at": 1795377999.5514524
+      "last_discovered_at": 1795494487.237618
     },
     {
       "app_id": "lnk.node.js.command.prompt",
@@ -7845,7 +7845,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Node.js\\Node.js command prompt.lnk"
       },
-      "last_discovered_at": 1795377999.5518734
+      "last_discovered_at": 1795494487.2379637
     },
     {
       "app_id": "lnk.node.js",
@@ -7869,7 +7869,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Node.js\\Node.js.lnk"
       },
-      "last_discovered_at": 1795377999.5523455
+      "last_discovered_at": 1795494487.2384152
     },
     {
       "app_id": "lnk.uninstall.node.js",
@@ -7893,7 +7893,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Node.js\\Uninstall Node.js.lnk"
       },
-      "last_discovered_at": 1795377999.552876
+      "last_discovered_at": 1795494487.238919
     },
     {
       "app_id": "lnk.nvidia.app",
@@ -7917,7 +7917,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\NVIDIA Corporation\\NVIDIA App.lnk"
       },
-      "last_discovered_at": 1795377999.5535772
+      "last_discovered_at": 1795494487.23957
     },
     {
       "app_id": "lnk.application.stack.builder",
@@ -7941,7 +7941,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PostgreSQL 18\\Application Stack Builder.lnk"
       },
-      "last_discovered_at": 1795377999.5540802
+      "last_discovered_at": 1795494487.2401276
     },
     {
       "app_id": "lnk.pgadmin.4",
@@ -7965,7 +7965,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PostgreSQL 18\\pgAdmin 4.lnk"
       },
-      "last_discovered_at": 1795377999.5544314
+      "last_discovered_at": 1795494487.2405462
     },
     {
       "app_id": "lnk.reload.configuration",
@@ -7989,7 +7989,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PostgreSQL 18\\Reload Configuration.lnk"
       },
-      "last_discovered_at": 1795377999.5547707
+      "last_discovered_at": 1795494487.2409298
     },
     {
       "app_id": "lnk.sql.shell.psql",
@@ -8013,7 +8013,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\PostgreSQL 18\\SQL Shell (psql).lnk"
       },
-      "last_discovered_at": 1795377999.555124
+      "last_discovered_at": 1795494487.241329
     },
     {
       "app_id": "lnk.idle.python.3.14.64.bit",
@@ -8037,7 +8037,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.14\\IDLE (Python 3.14 64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.555632
+      "last_discovered_at": 1795494487.241856
     },
     {
       "app_id": "lnk.python.3.14.64.bit",
@@ -8061,7 +8061,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.14\\Python 3.14 (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5564404
+      "last_discovered_at": 1795494487.2422101
     },
     {
       "app_id": "lnk.python.3.14.manuals.64.bit",
@@ -8085,7 +8085,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.14\\Python 3.14 Manuals (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5570629
+      "last_discovered_at": 1795494487.242555
     },
     {
       "app_id": "lnk.python.3.14.module.docs.64.bit",
@@ -8109,7 +8109,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.14\\Python 3.14 Module Docs (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5576372
+      "last_discovered_at": 1795494487.2428951
     },
     {
       "app_id": "lnk.idle.python.3.15.64.bit",
@@ -8133,7 +8133,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.15\\IDLE (Python 3.15 64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5582035
+      "last_discovered_at": 1795494487.2433846
     },
     {
       "app_id": "lnk.python.3.15.64.bit",
@@ -8157,7 +8157,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.15\\Python 3.15 (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5585659
+      "last_discovered_at": 1795494487.2437336
     },
     {
       "app_id": "lnk.python.3.15.manuals.64.bit",
@@ -8181,7 +8181,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.15\\Python 3.15 Manuals (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5589793
+      "last_discovered_at": 1795494487.2441568
     },
     {
       "app_id": "lnk.python.3.15.module.docs.64.bit",
@@ -8205,7 +8205,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.15\\Python 3.15 Module Docs (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5593352
+      "last_discovered_at": 1795494487.2445686
     },
     {
       "app_id": "lnk.revo.uninstaller.help",
@@ -8229,7 +8229,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Revo Uninstaller\\Revo Uninstaller Help.lnk"
       },
-      "last_discovered_at": 1795377999.5598848
+      "last_discovered_at": 1795494487.2451305
     },
     {
       "app_id": "lnk.revo.uninstaller",
@@ -8253,7 +8253,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Revo Uninstaller\\Revo Uninstaller.lnk"
       },
-      "last_discovered_at": 1795377999.5602403
+      "last_discovered_at": 1795494487.2456546
     },
     {
       "app_id": "lnk.uninstall.revo.uninstaller",
@@ -8277,7 +8277,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Revo Uninstaller\\Uninstall Revo Uninstaller.lnk"
       },
-      "last_discovered_at": 1795377999.560595
+      "last_discovered_at": 1795494487.2462952
     },
     {
       "app_id": "lnk.task.manager",
@@ -8301,7 +8301,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Task Manager.lnk"
       },
-      "last_discovered_at": 1795377999.561149
+      "last_discovered_at": 1795494487.247376
     },
     {
       "app_id": "lnk.release.notes",
@@ -8325,7 +8325,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\VideoLAN\\Release Notes.lnk"
       },
-      "last_discovered_at": 1795377999.5616596
+      "last_discovered_at": 1795494487.2481134
     },
     {
       "app_id": "lnk.videolan.website",
@@ -8349,7 +8349,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\VideoLAN\\VideoLAN Website.lnk"
       },
-      "last_discovered_at": 1795377999.5620356
+      "last_discovered_at": 1795494487.2484977
     },
     {
       "app_id": "lnk.vlc.media.player.reset.preferences.and.cache.files",
@@ -8373,7 +8373,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\VideoLAN\\VLC media player - reset preferences and cache files.lnk"
       },
-      "last_discovered_at": 1795377999.5624175
+      "last_discovered_at": 1795494487.2488523
     },
     {
       "app_id": "lnk.vlc.media.player.skinned",
@@ -8397,7 +8397,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\VideoLAN\\VLC media player skinned.lnk"
       },
-      "last_discovered_at": 1795377999.5628965
+      "last_discovered_at": 1795494487.2491853
     },
     {
       "app_id": "lnk.vlc.media.player",
@@ -8421,7 +8421,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\VideoLAN\\VLC media player.lnk"
       },
-      "last_discovered_at": 1795377999.5633671
+      "last_discovered_at": 1795494487.2495353
     },
     {
       "app_id": "lnk.windows.powershell.ise.5.1.x86",
@@ -8445,7 +8445,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows PowerShell\\Windows PowerShell ISE 5.1 (x86).lnk"
       },
-      "last_discovered_at": 1795377999.5643585
+      "last_discovered_at": 1795494487.2504332
     },
     {
       "app_id": "lnk.windows.powershell.ise.5.1",
@@ -8469,7 +8469,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows PowerShell\\Windows PowerShell ISE 5.1.lnk"
       },
-      "last_discovered_at": 1795377999.5648
+      "last_discovered_at": 1795494487.250791
     },
     {
       "app_id": "lnk.console.rar.manual",
@@ -8493,7 +8493,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\WinRAR\\Console RAR manual.lnk"
       },
-      "last_discovered_at": 1795377999.5986216
+      "last_discovered_at": 1795494487.2824228
     },
     {
       "app_id": "lnk.what.is.new.in.the.latest.version",
@@ -8517,7 +8517,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\WinRAR\\What is new in the latest version.lnk"
       },
-      "last_discovered_at": 1795377999.5990555
+      "last_discovered_at": 1795494487.282771
     },
     {
       "app_id": "lnk.winrar.help",
@@ -8541,7 +8541,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\WinRAR\\WinRAR help.lnk"
       },
-      "last_discovered_at": 1795377999.5994272
+      "last_discovered_at": 1795494487.283128
     },
     {
       "app_id": "lnk.winrar",
@@ -8565,7 +8565,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\WinRAR\\WinRAR.lnk"
       },
-      "last_discovered_at": 1795377999.5997987
+      "last_discovered_at": 1795494487.2834637
     },
     {
       "app_id": "lnk.application.verifier.x64",
@@ -8589,7 +8589,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Application Verifier (X64)\\Application Verifier (X64).lnk"
       },
-      "last_discovered_at": 1795377999.567439
+      "last_discovered_at": 1795494487.2531972
     },
     {
       "app_id": "lnk.application.verifier.wow",
@@ -8613,7 +8613,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Application Verifier (X86)\\Application Verifier (WOW).lnk"
       },
-      "last_discovered_at": 1795377999.5679493
+      "last_discovered_at": 1795494487.253906
     },
     {
       "app_id": "lnk.windows.app.cert.kit",
@@ -8637,7 +8637,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows App Certification Kit\\Windows App Cert Kit.lnk"
       },
-      "last_discovered_at": 1795377999.568479
+      "last_discovered_at": 1795494487.254427
     },
     {
       "app_id": "lnk.documentation.for.desktop.apps",
@@ -8661,7 +8661,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Documentation for Desktop Apps.lnk"
       },
-      "last_discovered_at": 1795377999.5689683
+      "last_discovered_at": 1795494487.254924
     },
     {
       "app_id": "lnk.documentation.for.uwp.apps",
@@ -8685,7 +8685,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Documentation for UWP Apps.lnk"
       },
-      "last_discovered_at": 1795377999.569398
+      "last_discovered_at": 1795494487.2552795
     },
     {
       "app_id": "lnk.sample.desktop.apps",
@@ -8709,7 +8709,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Sample Desktop Apps.lnk"
       },
-      "last_discovered_at": 1795377999.5699131
+      "last_discovered_at": 1795494487.2556384
     },
     {
       "app_id": "lnk.sample.uwp.apps",
@@ -8733,7 +8733,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Sample UWP Apps.lnk"
       },
-      "last_discovered_at": 1795377999.5704167
+      "last_discovered_at": 1795494487.2559795
     },
     {
       "app_id": "lnk.tools.for.desktop.apps",
@@ -8757,7 +8757,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Tools for Desktop Apps.lnk"
       },
-      "last_discovered_at": 1795377999.5707824
+      "last_discovered_at": 1795494487.256313
     },
     {
       "app_id": "lnk.tools.for.uwp.apps",
@@ -8781,7 +8781,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Tools for UWP Apps.lnk"
       },
-      "last_discovered_at": 1795377999.571133
+      "last_discovered_at": 1795494487.2566442
     },
     {
       "app_id": "lnk.windows.software.development.kit",
@@ -8805,7 +8805,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Windows Kits\\Windows Software Development Kit\\Windows Software Development Kit.lnk"
       },
-      "last_discovered_at": 1795377999.57151
+      "last_discovered_at": 1795494487.2569914
     },
     {
       "app_id": "lnk.debuggable.package.manager",
@@ -8829,7 +8829,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\Debuggable Package Manager.lnk"
       },
-      "last_discovered_at": 1795377999.573026
+      "last_discovered_at": 1795494487.2581928
     },
     {
       "app_id": "lnk.developer.command.prompt.for.vs.2022",
@@ -8853,7 +8853,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\Developer Command Prompt for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.5734644
+      "last_discovered_at": 1795494487.25855
     },
     {
       "app_id": "lnk.developer.powershell.for.vs.2022",
@@ -8877,7 +8877,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\Developer PowerShell for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.573851
+      "last_discovered_at": 1795494487.2589092
     },
     {
       "app_id": "lnk.x64.native.tools.command.prompt.for.vs.2022",
@@ -8901,7 +8901,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\VC\\x64 Native Tools Command Prompt for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.5745394
+      "last_discovered_at": 1795494487.2596774
     },
     {
       "app_id": "lnk.x64_x86.cross.tools.command.prompt.for.vs.2022",
@@ -8925,7 +8925,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\VC\\x64_x86 Cross Tools Command Prompt for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.5749133
+      "last_discovered_at": 1795494487.260138
     },
     {
       "app_id": "lnk.x86.native.tools.command.prompt.for.vs.2022",
@@ -8949,7 +8949,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\VC\\x86 Native Tools Command Prompt for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.5752997
+      "last_discovered_at": 1795494487.2605774
     },
     {
       "app_id": "lnk.x86_x64.cross.tools.command.prompt.for.vs.2022",
@@ -8973,7 +8973,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Visual Studio 2022\\Visual Studio Tools\\VC\\x86_x64 Cross Tools Command Prompt for VS 2022.lnk"
       },
-      "last_discovered_at": 1795377999.5756655
+      "last_discovered_at": 1795494487.2609558
     },
     {
       "app_id": "lnk.whats.new",
@@ -8997,7 +8997,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Highresolution Enterprises\\X-Mouse Button Control\\Whats New.lnk"
       },
-      "last_discovered_at": 1795377999.577881
+      "last_discovered_at": 1795494487.2628524
     },
     {
       "app_id": "lnk.x.mouse.button.control.user.guide",
@@ -9021,7 +9021,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Highresolution Enterprises\\X-Mouse Button Control\\X-Mouse Button Control User Guide.lnk"
       },
-      "last_discovered_at": 1795377999.5782876
+      "last_discovered_at": 1795494487.2632036
     },
     {
       "app_id": "lnk.x.mouse.button.control",
@@ -9045,7 +9045,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Highresolution Enterprises\\X-Mouse Button Control\\X-Mouse Button Control.lnk"
       },
-      "last_discovered_at": 1795377999.5786514
+      "last_discovered_at": 1795494487.2636778
     },
     {
       "app_id": "lnk.character.map",
@@ -9069,7 +9069,7 @@
       "metadata": {
         "shortcut_path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Accessories\\System Tools\\Character Map.lnk"
       },
-      "last_discovered_at": 1795377999.580038
+      "last_discovered_at": 1795494487.264872
     },
     {
       "app_id": "lnk.administrative.tools",
@@ -9093,7 +9093,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools.lnk"
       },
-      "last_discovered_at": 1795377999.580825
+      "last_discovered_at": 1795494487.2655766
     },
     {
       "app_id": "lnk.cleanly",
@@ -9117,7 +9117,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Cleanly.lnk"
       },
-      "last_discovered_at": 1795377999.581202
+      "last_discovered_at": 1795494487.265991
     },
     {
       "app_id": "lnk.file.explorer",
@@ -9141,7 +9141,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\File Explorer.lnk"
       },
-      "last_discovered_at": 1795377999.581564
+      "last_discovered_at": 1795494487.266432
     },
     {
       "app_id": "lnk.git.for.windows",
@@ -9165,7 +9165,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Git for Windows.lnk"
       },
-      "last_discovered_at": 1795377999.581934
+      "last_discovered_at": 1795494487.2668533
     },
     {
       "app_id": "lnk.j.a.r.v.i.s",
@@ -9189,7 +9189,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\J.A.R.V.I.S.lnk"
       },
-      "last_discovered_at": 1795377999.5822692
+      "last_discovered_at": 1795494487.2672777
     },
     {
       "app_id": "lnk.microsoft.edge",
@@ -9213,7 +9213,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Microsoft Edge.lnk"
       },
-      "last_discovered_at": 1795377999.5826292
+      "last_discovered_at": 1795494487.2677128
     },
     {
       "app_id": "lnk.ollama",
@@ -9237,7 +9237,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Ollama.lnk"
       },
-      "last_discovered_at": 1795377999.5951674
+      "last_discovered_at": 1795494487.2790794
     },
     {
       "app_id": "lnk.openjarvis",
@@ -9261,7 +9261,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\OpenJarvis.lnk"
       },
-      "last_discovered_at": 1795377999.583391
+      "last_discovered_at": 1795494487.268462
     },
     {
       "app_id": "lnk.red.dead.redemption.2",
@@ -9285,7 +9285,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Red Dead Redemption 2.lnk"
       },
-      "last_discovered_at": 1795377999.5839918
+      "last_discovered_at": 1795494487.2687948
     },
     {
       "app_id": "lnk.roblox",
@@ -9309,7 +9309,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Roblox.lnk"
       },
-      "last_discovered_at": 1795377999.584415
+      "last_discovered_at": 1795494487.26912
     },
     {
       "app_id": "lnk.this.pc",
@@ -9333,7 +9333,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\This PC.lnk"
       },
-      "last_discovered_at": 1795377999.5848565
+      "last_discovered_at": 1795494487.2694907
     },
     {
       "app_id": "lnk.livecaptions",
@@ -9357,7 +9357,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\LiveCaptions.lnk"
       },
-      "last_discovered_at": 1795377999.585519
+      "last_discovered_at": 1795494487.2700906
     },
     {
       "app_id": "lnk.magnify",
@@ -9381,7 +9381,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\Magnify.lnk"
       },
-      "last_discovered_at": 1795377999.5858812
+      "last_discovered_at": 1795494487.2704191
     },
     {
       "app_id": "lnk.narrator",
@@ -9405,7 +9405,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\Narrator.lnk"
       },
-      "last_discovered_at": 1795377999.5862496
+      "last_discovered_at": 1795494487.2707524
     },
     {
       "app_id": "lnk.on.screen.keyboard",
@@ -9429,7 +9429,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\On-Screen Keyboard.lnk"
       },
-      "last_discovered_at": 1795377999.5867045
+      "last_discovered_at": 1795494487.2711306
     },
     {
       "app_id": "lnk.voiceaccess",
@@ -9453,7 +9453,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\VoiceAccess.lnk"
       },
-      "last_discovered_at": 1795377999.5870697
+      "last_discovered_at": 1795494487.2714581
     },
     {
       "app_id": "lnk.antigravity.ide",
@@ -9477,7 +9477,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Antigravity IDE\\Antigravity IDE.lnk"
       },
-      "last_discovered_at": 1795377999.587825
+      "last_discovered_at": 1795494487.2720883
     },
     {
       "app_id": "lnk.gmail",
@@ -9501,7 +9501,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Brave Apps\\Gmail.lnk"
       },
-      "last_discovered_at": 1795377999.5884662
+      "last_discovered_at": 1795494487.2725148
     },
     {
       "app_id": "lnk.rusherai.free.ai.chat",
@@ -9525,7 +9525,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Brave Apps\\RusherAI \u2014 Free AI Chat.lnk"
       },
-      "last_discovered_at": 1795377999.5890744
+      "last_discovered_at": 1795494487.2729077
     },
     {
       "app_id": "lnk.youtube.1",
@@ -9549,7 +9549,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Brave Apps\\YouTube (1).lnk"
       },
-      "last_discovered_at": 1795377999.5894809
+      "last_discovered_at": 1795494487.2733233
     },
     {
       "app_id": "lnk.youtube",
@@ -9573,7 +9573,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Brave Apps\\YouTube.lnk"
       },
-      "last_discovered_at": 1795377999.5898447
+      "last_discovered_at": 1795494487.2740967
     },
     {
       "app_id": "lnk.chrome.remote.desktop",
@@ -9597,7 +9597,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Chrome Apps\\Chrome Remote Desktop.lnk"
       },
-      "last_discovered_at": 1795377999.5903773
+      "last_discovered_at": 1795494487.2748067
     },
     {
       "app_id": "lnk.vit.chennai.vtop.1",
@@ -9621,7 +9621,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Chrome Apps\\VIT Chennai - VTOP (1).lnk"
       },
-      "last_discovered_at": 1795377999.5909572
+      "last_discovered_at": 1795494487.275179
     },
     {
       "app_id": "lnk.vit.chennai.vtop",
@@ -9645,7 +9645,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Chrome Apps\\VIT Chennai - VTOP.lnk"
       },
-      "last_discovered_at": 1795377999.5913537
+      "last_discovered_at": 1795494487.275525
     },
     {
       "app_id": "lnk.idle.python.3.13.64.bit",
@@ -9669,7 +9669,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.13\\IDLE (Python 3.13 64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5926912
+      "last_discovered_at": 1795494487.2766867
     },
     {
       "app_id": "lnk.python.3.13.64.bit",
@@ -9693,7 +9693,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.13\\Python 3.13 (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5930836
+      "last_discovered_at": 1795494487.2770877
     },
     {
       "app_id": "lnk.python.3.13.manuals.64.bit",
@@ -9717,7 +9717,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.13\\Python 3.13 Manuals (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5934968
+      "last_discovered_at": 1795494487.2774687
     },
     {
       "app_id": "lnk.python.3.13.module.docs.64.bit",
@@ -9741,7 +9741,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Python 3.13\\Python 3.13 Module Docs (64-bit).lnk"
       },
-      "last_discovered_at": 1795377999.5938575
+      "last_discovered_at": 1795494487.2778044
     },
     {
       "app_id": "lnk.roblox.player",
@@ -9765,7 +9765,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Roblox\\Roblox Player.lnk"
       },
-      "last_discovered_at": 1795377999.5943632
+      "last_discovered_at": 1795494487.2782683
     },
     {
       "app_id": "lnk.roblox.studio",
@@ -9789,7 +9789,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Roblox\\Roblox Studio.lnk"
       },
-      "last_discovered_at": 1795377999.59473
+      "last_discovered_at": 1795494487.2786386
     },
     {
       "app_id": "lnk.command.prompt",
@@ -9813,7 +9813,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Command Prompt.lnk"
       },
-      "last_discovered_at": 1795377999.595655
+      "last_discovered_at": 1795494487.279528
     },
     {
       "app_id": "lnk.control.panel",
@@ -9837,7 +9837,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Control Panel.lnk"
       },
-      "last_discovered_at": 1795377999.5960126
+      "last_discovered_at": 1795494487.2799158
     },
     {
       "app_id": "lnk.run",
@@ -9861,7 +9861,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Run.lnk"
       },
-      "last_discovered_at": 1795377999.5963938
+      "last_discovered_at": 1795494487.2803643
     },
     {
       "app_id": "lnk.v.notch",
@@ -9885,7 +9885,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\V-Notch\\V-Notch.lnk"
       },
-      "last_discovered_at": 1795377999.5969925
+      "last_discovered_at": 1795494487.2810407
     },
     {
       "app_id": "lnk.windows.powershell.x86",
@@ -9909,7 +9909,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Windows PowerShell\\Windows PowerShell (x86).lnk"
       },
-      "last_discovered_at": 1795377999.5975409
+      "last_discovered_at": 1795494487.2815762
     },
     {
       "app_id": "lnk.windows.powershell",
@@ -9933,7 +9933,7 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Windows PowerShell\\Windows PowerShell.lnk"
       },
-      "last_discovered_at": 1795377999.5980918
+      "last_discovered_at": 1795494487.2819312
     },
     {
       "app_id": "lnk.ubisoft.connect",
@@ -9957,7 +9957,76 @@
       "metadata": {
         "shortcut_path": "C:\\Users\\loges\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Ubisoft\\UbisoftConnect\\Ubisoft Connect.lnk"
       },
-      "last_discovered_at": 1795377999.600759
+      "last_discovered_at": 1795494487.2843077
+    },
+    {
+      "app_id": "pkg.god.of.war.iii.remastered",
+      "name": "God of War III Remastered",
+      "aliases": [
+        "god of war iii remastered",
+        "god.of.war.iii.remastered"
+      ],
+      "executable_path": null,
+      "package_id": null,
+      "category": "other",
+      "supported_tiers": [
+        "tier_2_adapter",
+        "tier_3_ui_automation",
+        "tier_7_visual_act"
+      ],
+      "associated_extensions": [],
+      "is_running": false,
+      "main_hwnd": null,
+      "pids": [],
+      "integrity_level": "Medium",
+      "metadata": {},
+      "last_discovered_at": 1795494487.1858494
+    },
+    {
+      "app_id": "pkg.sexnatural.milfs.must",
+      "name": "SEXNATURAL: MILFs Must...",
+      "aliases": [
+        "sexnatural: milfs must...",
+        "sexnatural milfs must be filled"
+      ],
+      "executable_path": "D:\\GAMES\\SEXNATURAL - MILFs Must Be Filled\\SEXNATURAL MILFs Must Be Filled.exe",
+      "package_id": null,
+      "category": "other",
+      "supported_tiers": [
+        "tier_2_adapter",
+        "tier_3_ui_automation",
+        "tier_7_visual_act"
+      ],
+      "associated_extensions": [],
+      "is_running": false,
+      "main_hwnd": null,
+      "pids": [],
+      "integrity_level": "Medium",
+      "metadata": {},
+      "last_discovered_at": 1795494487.1915379
+    },
+    {
+      "app_id": "pkg.winfsp.2025",
+      "name": "WinFsp 2025",
+      "aliases": [
+        "winfsp 2025",
+        "winfsp.2025"
+      ],
+      "executable_path": null,
+      "package_id": null,
+      "category": "other",
+      "supported_tiers": [
+        "tier_2_adapter",
+        "tier_3_ui_automation",
+        "tier_7_visual_act"
+      ],
+      "associated_extensions": [],
+      "is_running": false,
+      "main_hwnd": null,
+      "pids": [],
+      "integrity_level": "Medium",
+      "metadata": {},
+      "last_discovered_at": 1795494487.205552
     }
   ]
 }

@@ -9,6 +9,7 @@ Defines:
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ class MissionState(str, Enum):
     PAUSED = "PAUSED"
     WAITING_FOR_AGENT = "WAITING_FOR_AGENT"
     WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL"
+    WAITING_FOR_CLARIFICATION = "WAITING_FOR_CLARIFICATION"
     RETRYING = "RETRYING"
     PARTIALLY_COMPLETED = "PARTIALLY_COMPLETED"
     FAILED = "FAILED"
@@ -56,6 +58,10 @@ class MissionSubtask:
     description: str = ""
     assigned_agent: str = "general"
     required_tools: list[str] = field(default_factory=list)
+    arguments: dict[str, Any] = field(default_factory=dict)
+    condition: str = ""
+    join_policy: str = "ALL_COMPLETED"  # "ALL_COMPLETED", "ONE_COMPLETED", "ALL_RESOLVED"
+    is_untrusted: bool = False
     depends_on: list[str] = field(default_factory=list)
     parallelizable: bool = False
     requires_approval: bool = False
@@ -78,6 +84,10 @@ class MissionSubtask:
             "description": self.description,
             "assigned_agent": self.assigned_agent,
             "required_tools": list(self.required_tools),
+            "arguments": dict(self.arguments),
+            "condition": self.condition,
+            "join_policy": self.join_policy,
+            "is_untrusted": self.is_untrusted,
             "depends_on": list(self.depends_on),
             "parallelizable": self.parallelizable,
             "requires_approval": self.requires_approval,
@@ -108,6 +118,10 @@ class MissionSubtask:
             description=data.get("description", ""),
             assigned_agent=data.get("assigned_agent", "general"),
             required_tools=list(data.get("required_tools", [])),
+            arguments=dict(data.get("arguments", {})),
+            condition=str(data.get("condition", "")),
+            join_policy=str(data.get("join_policy", "ALL_COMPLETED")),
+            is_untrusted=bool(data.get("is_untrusted", False)),
             depends_on=list(data.get("depends_on", [])),
             parallelizable=bool(data.get("parallelizable", False)),
             requires_approval=bool(data.get("requires_approval", False)),
@@ -187,36 +201,47 @@ class MissionRecord:
     failure_reason: str | None = None
     recovery_attempts: int = 0
     version: int = 1
+    consumed_tokens: int = 0
     context: dict[str, Any] = field(default_factory=dict)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def add_timeline_event(self, event_type: str, details: str, data: dict[str, Any] | None = None) -> None:
-        """Append an entry to the mission execution timeline."""
-        entry = {
-            "timestamp": time.time(),
-            "event_type": event_type,
-            "details": details,
-            "data": data or {},
-        }
-        self.timeline.append(entry)
-        self.updated_at = time.time()
+        """Append an entry to the mission execution timeline with thread-safety."""
+        with self._lock:
+            entry = {
+                "timestamp": time.time(),
+                "event_type": event_type,
+                "details": details,
+                "data": data or {},
+            }
+            self.timeline.append(entry)
+            self.updated_at = time.time()
+
+    def append_evidence(self, item: dict[str, Any]) -> None:
+        """Append an evidence record with thread-safety."""
+        with self._lock:
+            self.evidence_ledger.append(item)
+            self.updated_at = time.time()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "mission_id": self.mission_id,
-            "objective": self.objective,
-            "state": self.state.value if isinstance(self.state, MissionState) else str(self.state),
-            "plan": self.plan.to_dict(),
-            "deliverables": list(self.deliverables),
-            "evidence_ledger": list(self.evidence_ledger),
-            "timeline": list(self.timeline),
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "completed_at": self.completed_at,
-            "failure_reason": self.failure_reason,
-            "recovery_attempts": self.recovery_attempts,
-            "version": self.version,
-            "context": dict(self.context),
-        }
+        with self._lock:
+            return {
+                "mission_id": self.mission_id,
+                "objective": self.objective,
+                "state": self.state.value if isinstance(self.state, MissionState) else str(self.state),
+                "plan": self.plan.to_dict(),
+                "deliverables": list(self.deliverables),
+                "evidence_ledger": list(self.evidence_ledger),
+                "timeline": list(self.timeline),
+                "created_at": self.created_at,
+                "updated_at": self.updated_at,
+                "completed_at": self.completed_at,
+                "failure_reason": self.failure_reason,
+                "recovery_attempts": self.recovery_attempts,
+                "version": self.version,
+                "consumed_tokens": self.consumed_tokens,
+                "context": dict(self.context),
+            }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MissionRecord:
@@ -243,5 +268,6 @@ class MissionRecord:
             failure_reason=data.get("failure_reason"),
             recovery_attempts=int(data.get("recovery_attempts", 0)),
             version=int(data.get("version", 1)),
+            consumed_tokens=int(data.get("consumed_tokens", 0)),
             context=dict(data.get("context", {})),
         )

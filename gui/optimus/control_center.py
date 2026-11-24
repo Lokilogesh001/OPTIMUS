@@ -31,6 +31,8 @@ from gui.optimus.section_command import SectionCommandCenter
 from gui.optimus.section_developer import SectionDeveloper
 from gui.optimus.section_integrations import SectionIntegrations
 from gui.optimus.section_intelligence import SectionIntelligence
+from gui.optimus.section_marketplace import SectionMarketplace
+from gui.optimus.section_mcp_manager import SectionMCPManager
 from gui.optimus.section_memory import SectionMemory
 from gui.optimus.section_missions import SectionMissions
 from gui.optimus.section_personal import SectionPersonal
@@ -72,6 +74,8 @@ class OptimusControlCenterWidget(QWidget):
         (SectionVision, "vision_view"),                 # 17: VISION
         (SectionApplications, "applications_view"),     # 18: APPLICATIONS
         (SectionIntegrations, "integrations_view"),     # 19: INTEGRATIONS
+        (SectionMarketplace, "marketplace_view"),       # 20: MARKETPLACE
+        (SectionMCPManager, "mcp_manager_view"),         # 21: MCP SERVERS
     ]
 
     def __init__(self, bridge: OptimusServiceBridge | None = None, parent=None):
@@ -263,6 +267,15 @@ class OptimusControlCenterWidget(QWidget):
     def _toggle_context_panel(self) -> None:
         if hasattr(self, "context_panel"):
             self.context_panel.toggle_visibility()
+
+    @property
+    def current_section_index(self) -> int:
+        """Returns the currently active section index."""
+        return self.stack.currentIndex()
+
+    def switch_section(self, index: int, title: str = "") -> None:
+        """Switch active section by index."""
+        self._on_tab_selected(index, title)
 
     def _on_tab_selected(self, index: int, title: str) -> None:
         old_w = self.stack.currentWidget()

@@ -27,16 +27,30 @@ from core.application_intelligence.discovery import (
 from core.application_intelligence.interaction_router import InteractionRouter
 from core.application_intelligence.learning_engine import ApplicationLearningEngine
 from core.application_intelligence.registry import ApplicationRegistry
+from core.application_intelligence.dpi import (
+    get_system_dpi,
+    get_window_dpi,
+    logical_to_physical,
+    physical_to_logical,
+    scale_rect,
+)
+from core.application_intelligence.lifecycle import (
+    ApplicationInteractionLifecycle,
+    DesktopExecutionMutex,
+    InteractionStage,
+)
 from core.application_intelligence.types import (
     ActionContract,
     AppCategory,
     AppDefinition,
     AppInteractionTier,
     ExecutionEvidence,
+    ExecutionVerdict,
     LearnedWorkflow,
     ResolutionResult,
     ResolutionStatus,
 )
+from core.application_intelligence.ufo_integrator import UFOQuarantineIntegrator
 from core.application_intelligence.workflow_store import WorkflowStore
 
 __all__ = [
@@ -47,9 +61,19 @@ __all__ = [
     "ResolutionResult",
     "ActionContract",
     "ExecutionEvidence",
+    "ExecutionVerdict",
     "LearnedWorkflow",
     "DesktopInteractionLock",
     "DesktopInteractionLockTimeout",
+    "DesktopExecutionMutex",
+    "ApplicationInteractionLifecycle",
+    "InteractionStage",
+    "UFOQuarantineIntegrator",
+    "get_window_dpi",
+    "get_system_dpi",
+    "logical_to_physical",
+    "physical_to_logical",
+    "scale_rect",
     "discover_all_installed_applications",
     "discover_running_processes_and_windows",
     "resolve_file_association",

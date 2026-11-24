@@ -149,6 +149,72 @@ def register_windows_runtime_tools(registry: ToolRegistry) -> None:
         is_mutating=True,
     ))
 
+    # 5b. Batch Move Files
+    def _batch_move_files_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        raw_sources = params.get("source_files") or params.get("sources") or []
+        if isinstance(raw_sources, str):
+            import json
+            try:
+                raw_sources = json.loads(raw_sources)
+            except Exception:
+                raw_sources = [s.strip() for s in raw_sources.split(",") if s.strip()]
+
+        dst_dir = str(params.get("destination_dir") or params.get("dst") or "")
+        if not dst_dir:
+            return ToolResult(status="failed", error="Missing destination_dir")
+
+        import shutil
+        from pathlib import Path
+        dest_p = Path(dst_dir)
+        dest_p.mkdir(parents=True, exist_ok=True)
+
+        moved: list[dict[str, str]] = []
+        errors: list[str] = []
+        for src in raw_sources:
+            src_str = str(src).strip()
+            if not src_str:
+                continue
+            src_p = Path(src_str)
+            if not src_p.is_absolute():
+                src_p = Path.cwd() / src_p
+            if not src_p.exists():
+                errors.append(f"Source file not found: {src_str}")
+                continue
+            target_p = dest_p / src_p.name
+            try:
+                shutil.move(str(src_p), str(target_p))
+                moved.append({"src": str(src_p), "dst": str(target_p)})
+            except Exception as e:
+                errors.append(f"Failed to move {src_p.name}: {e}")
+
+        output_msg = f"Successfully moved {len(moved)} files to '{dst_dir}'."
+        if errors:
+            output_msg += f" Errors ({len(errors)}): {'; '.join(errors)}"
+
+        status = "done" if (moved or not raw_sources) else "failed"
+        return ToolResult(
+            status=status,
+            output=output_msg,
+            evidence={"moved_files": moved, "count": len(moved), "errors": errors},
+            error="; ".join(errors) if (errors and not moved) else None,
+        )
+
+    registry.register(ToolDefinition(
+        name="batch_move_files",
+        description="Move multiple files into a destination directory with automatic directory creation and rollback support.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "source_files": {"type": "ARRAY", "description": "List of source file paths"},
+                "destination_dir": {"type": "STRING", "description": "Destination directory path"},
+            },
+            "required": ["source_files", "destination_dir"],
+        },
+        capability_tier=CapabilityTier.WORKSPACE_WRITE,
+        handler=_batch_move_files_handler,
+        is_mutating=True,
+    ))
+
     # 6. Delete File (Gated by Approval)
     def _delete_file_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         path = params.get("path", "")
@@ -182,8 +248,10 @@ def register_windows_runtime_tools(registry: ToolRegistry) -> None:
 
     # 7. Launch Application
     def _launch_app_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
-        app_name = params.get("app_name", "")
+        app_name = params.get("app_name") or params.get("application_name", "")
         args = params.get("args", [])
+        if not app_name:
+            return ToolResult(status="failed", error="Parameter 'app_name' or 'application_name' is required.")
         try:
             res = client.launch_application(app_name, args=args)
             if res.get("status") == "failed":
@@ -203,9 +271,10 @@ def register_windows_runtime_tools(registry: ToolRegistry) -> None:
             "type": "OBJECT",
             "properties": {
                 "app_name": {"type": "STRING", "description": "Application executable or name"},
+                "application_name": {"type": "STRING", "description": "Alias for app_name"},
                 "args": {"type": "ARRAY", "description": "Optional command line arguments"},
             },
-            "required": ["app_name"],
+            "required": [],
         },
         capability_tier=CapabilityTier.EXECUTION,
         handler=_launch_app_handler,

@@ -7,6 +7,16 @@ human-in-the-loop authorization gates, atomic disk persistence, and crash recove
 from __future__ import annotations
 
 from core.workflows.approval import ApprovalManager
+from core.workflows.checkpointing import (
+    CheckpointError,
+    CheckpointStore,
+    CorruptCheckpointError,
+    PreResumptionDeliverableReVerifier,
+    RepetitiveFailureLoopError,
+    ReverificationReport,
+    SemanticLoopDetector,
+    WorkflowCheckpoint,
+)
 from core.workflows.conditions import SafeConditionEvaluator
 from core.workflows.engine import WorkflowEngine
 from core.workflows.events import (
@@ -56,16 +66,24 @@ __all__ = [
     "ApprovalRequiredError",
     "ApprovalResolvedEvent",
     "ApprovalStatus",
+    "CheckpointError",
+    "CheckpointStore",
     "CircularDependencyError",
     "ConditionType",
+    "CorruptCheckpointError",
     "DependencyResolver",
     "MissingDependencyError",
+    "PreResumptionDeliverableReVerifier",
+    "RepetitiveFailureLoopError",
     "RetryPolicy",
+    "ReverificationReport",
     "SafeConditionEvaluator",
+    "SemanticLoopDetector",
     "StepCondition",
     "StepExecutionRecord",
     "StepStatus",
     "WorkflowCancelledEvent",
+    "WorkflowCheckpoint",
     "WorkflowCompletedEvent",
     "WorkflowCreatedEvent",
     "WorkflowDefinition",
