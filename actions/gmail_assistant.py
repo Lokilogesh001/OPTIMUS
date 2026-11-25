@@ -142,11 +142,14 @@ def gmail_assistant(
         to = str(params.get("to") or "").strip()
         subject = str(params.get("subject") or "").strip()
         body = str(params.get("body") or "")
+        attachments = list(params.get("attachments") or []) if isinstance(params.get("attachments"), (list, tuple)) else []
         if not to or not subject or not body:
             return outcome.failed("gmail_assistant", "Sending an email requires to, subject, and body.")
         def _do_send() -> str:
             from core.security.policy_engine import PolicyEngine
-            send_args = {"to": to, "subject": subject, "body": body}
+            send_args: dict[str, Any] = {"to": to, "subject": subject, "body": body}
+            if attachments:
+                send_args["attachments"] = attachments
             tok = PolicyEngine.instance().create_approval_token(
                 mission_id="voice_gmail_send",
                 subtask_id="send_email",
@@ -168,10 +171,54 @@ def gmail_assistant(
         gate_msg = confirm_gate.request(
             key="send_email",
             title=f"Send email to {to}",
-            detail=f"Subject: {subject}",
+            detail=f"Subject: {subject}" + (f" ({len(attachments)} attachment(s))" if attachments else ""),
             run=_do_send,
         )
         return outcome.ask("gmail_assistant", gate_msg, action="send", to=to, subject=subject)
+
+    if action == "reply":
+        msg_id = str(params.get("message_id") or "").strip()
+        body = str(params.get("body") or "")
+        to = str(params.get("to") or "").strip() or None
+        subject = str(params.get("subject") or "").strip() or None
+        attachments = list(params.get("attachments") or []) if isinstance(params.get("attachments"), (list, tuple)) else []
+        if not msg_id or not body:
+            return outcome.failed("gmail_assistant", "Replying to an email requires message_id and body.")
+
+        def _do_reply() -> str:
+            from core.security.policy_engine import PolicyEngine
+            reply_args: dict[str, Any] = {"message_id": msg_id, "body": body}
+            if to:
+                reply_args["to"] = to
+            if subject:
+                reply_args["subject"] = subject
+            if attachments:
+                reply_args["attachments"] = attachments
+            tok = PolicyEngine.instance().create_approval_token(
+                mission_id="voice_gmail_reply",
+                subtask_id="reply_email",
+                operator_id="human_hud_operator",
+                tool_name="reply_email",
+                arguments=reply_args,
+            )
+            res = reg.execute(
+                "reply_email",
+                reply_args,
+                caller_agent="orchestrator",
+                allowed_tiers=tiers,
+                context={"approval_token": tok},
+            )
+            if not res.is_success:
+                return outcome.failed("gmail_assistant", res.error or "Email reply failed", action="reply")
+            return outcome.done("gmail_assistant", action="reply", details=res.output)
+
+        gate_msg = confirm_gate.request(
+            key="reply_email",
+            title=f"Reply to email {msg_id}",
+            detail=f"Thread reply" + (f" ({len(attachments)} attachment(s))" if attachments else ""),
+            run=_do_reply,
+        )
+        return outcome.ask("gmail_assistant", gate_msg, action="reply", message_id=msg_id)
 
     return outcome.failed("gmail_assistant", f"Unknown action '{action}'")
 
@@ -181,7 +228,7 @@ TOOL = {
     "description": (
         "Direct live Gmail integration. ALWAYS use this for ANY question about Gmail connection, "
         "important morning emails, searching/reading/summarizing emails, listing or downloading "
-        "attachments, preparing drafts, or sending emails (confirmation-gated). "
+        "attachments, preparing drafts, sending emails, or replying to emails (confirmation-gated). "
         "NEVER answer Gmail questions from memory notes or open a browser search instead."
     ),
     "parameters": {
@@ -189,7 +236,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "status | morning_important | search | list | read | summarize | attachments | get_attachment | draft | send",
+                "description": "status | morning_important | search | list | read | summarize | attachments | get_attachment | draft | send | reply",
             },
             "query": {"type": "STRING", "description": "Gmail search query"},
             "sender": {"type": "STRING", "description": "Sender filter"},
@@ -201,9 +248,10 @@ TOOL = {
             "attachment_id": {"type": "STRING", "description": "Attachment ID"},
             "save_path": {"type": "STRING", "description": "Optional authorized save path for attachment"},
             "timezone": {"type": "STRING", "description": "Optional IANA timezone name (e.g. 'Asia/Kolkata')"},
-            "to": {"type": "STRING", "description": "Recipient email for draft/send"},
-            "subject": {"type": "STRING", "description": "Subject for draft/send"},
-            "body": {"type": "STRING", "description": "Body for draft/send"},
+            "to": {"type": "STRING", "description": "Recipient email for draft/send/reply"},
+            "subject": {"type": "STRING", "description": "Subject for draft/send/reply"},
+            "body": {"type": "STRING", "description": "Body for draft/send/reply"},
+            "attachments": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Optional authorized file paths to attach"},
         },
         "required": ["action"],
     },

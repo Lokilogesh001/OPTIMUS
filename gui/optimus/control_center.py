@@ -24,58 +24,47 @@ from PyQt6.QtWidgets import (
 from gui.optimus.context_panel import OptimusContextPanel
 from gui.optimus.dashboard import OptimusDashboardView
 from gui.optimus.nav_bar import OptimusNavBar
-from gui.optimus.section_agents import SectionAgents
-from gui.optimus.section_applications import SectionApplications
-from gui.optimus.section_approvals import SectionApprovals
-from gui.optimus.section_command import SectionCommandCenter
-from gui.optimus.section_developer import SectionDeveloper
-from gui.optimus.section_integrations import SectionIntegrations
-from gui.optimus.section_intelligence import SectionIntelligence
-from gui.optimus.section_marketplace import SectionMarketplace
-from gui.optimus.section_mcp_manager import SectionMCPManager
-from gui.optimus.section_memory import SectionMemory
-from gui.optimus.section_missions import SectionMissions
-from gui.optimus.section_personal import SectionPersonal
-from gui.optimus.section_planning import SectionPlanning
-from gui.optimus.section_proactive import SectionProactive
-from gui.optimus.section_self_improvement import SectionSelfImprovement
-from gui.optimus.section_settings import SectionSettings
-from gui.optimus.section_skills import SectionSkills
-from gui.optimus.section_system import SectionSystem
-from gui.optimus.section_verification import SectionVerification
-from gui.optimus.section_vision import SectionVision
-from gui.optimus.section_workflows import SectionWorkflows
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import btn_css, px_font
 from gui.theme import C
+
+
+def _lazy_section(module_path: str, class_name: str) -> Callable[..., QWidget]:
+    """Return a lazy factory that imports a Control Center section only on first access."""
+    def _factory(bridge: OptimusServiceBridge, parent: QWidget | None = None) -> QWidget:
+        import importlib
+        mod = importlib.import_module(module_path)
+        cls = getattr(mod, class_name)
+        return cls(bridge, parent=parent)
+    return _factory
 
 
 class OptimusControlCenterWidget(QWidget):
     """The complete, unified OPTIMUS Control Center application surface with lazy tab loading."""
 
     _SECTION_REGISTRY: list[tuple[Callable[..., QWidget], str]] = [
-        (OptimusDashboardView, "dashboard_view"),       # 0: DASHBOARD
-        (SectionCommandCenter, "command_view"),         # 1: COMMAND
-        (SectionWorkflows, "workflows_view"),           # 2: WORKFLOWS
-        (SectionAgents, "agents_view"),                 # 3: AGENTS
-        (SectionIntelligence, "intelligence_view"),     # 4: INTELLIGENCE
-        (SectionMemory, "memory_view"),                 # 5: MEMORY
-        (SectionVerification, "verification_view"),     # 6: VERIFICATION
-        (SectionApprovals, "approvals_view"),           # 7: APPROVALS
-        (SectionSystem, "system_view"),                 # 8: SYSTEM
-        (SectionSettings, "settings_view"),             # 9: SETTINGS
-        (SectionPlanning, "planning_view"),             # 10: PLANNING
-        (SectionDeveloper, "developer_view"),           # 11: DEVELOPER
-        (SectionSkills, "skills_view"),                 # 12: SKILLS
-        (SectionMissions, "missions_view"),             # 13: MISSIONS
-        (SectionProactive, "proactive_view"),           # 14: PROACTIVE
-        (SectionPersonal, "personal_view"),             # 15: PERSONAL
-        (SectionSelfImprovement, "self_improvement_view"), # 16: IMPROVE
-        (SectionVision, "vision_view"),                 # 17: VISION
-        (SectionApplications, "applications_view"),     # 18: APPLICATIONS
-        (SectionIntegrations, "integrations_view"),     # 19: INTEGRATIONS
-        (SectionMarketplace, "marketplace_view"),       # 20: MARKETPLACE
-        (SectionMCPManager, "mcp_manager_view"),         # 21: MCP SERVERS
+        (OptimusDashboardView, "dashboard_view"),                                                         # 0: DASHBOARD
+        (_lazy_section("gui.optimus.section_command", "SectionCommandCenter"), "command_view"),            # 1: COMMAND
+        (_lazy_section("gui.optimus.section_workflows", "SectionWorkflows"), "workflows_view"),            # 2: WORKFLOWS
+        (_lazy_section("gui.optimus.section_agents", "SectionAgents"), "agents_view"),                     # 3: AGENTS
+        (_lazy_section("gui.optimus.section_intelligence", "SectionIntelligence"), "intelligence_view"),   # 4: INTELLIGENCE
+        (_lazy_section("gui.optimus.section_memory", "SectionMemory"), "memory_view"),                     # 5: MEMORY
+        (_lazy_section("gui.optimus.section_verification", "SectionVerification"), "verification_view"),   # 6: VERIFICATION
+        (_lazy_section("gui.optimus.section_approvals", "SectionApprovals"), "approvals_view"),            # 7: APPROVALS
+        (_lazy_section("gui.optimus.section_system", "SectionSystem"), "system_view"),                     # 8: SYSTEM
+        (_lazy_section("gui.optimus.section_settings", "SectionSettings"), "settings_view"),               # 9: SETTINGS
+        (_lazy_section("gui.optimus.section_planning", "SectionPlanning"), "planning_view"),               # 10: PLANNING
+        (_lazy_section("gui.optimus.section_developer", "SectionDeveloper"), "developer_view"),            # 11: DEVELOPER
+        (_lazy_section("gui.optimus.section_skills", "SectionSkills"), "skills_view"),                     # 12: SKILLS
+        (_lazy_section("gui.optimus.section_missions", "SectionMissions"), "missions_view"),               # 13: MISSIONS
+        (_lazy_section("gui.optimus.section_proactive", "SectionProactive"), "proactive_view"),            # 14: PROACTIVE
+        (_lazy_section("gui.optimus.section_personal", "SectionPersonal"), "personal_view"),               # 15: PERSONAL
+        (_lazy_section("gui.optimus.section_self_improvement", "SectionSelfImprovement"), "self_improvement_view"), # 16: IMPROVE
+        (_lazy_section("gui.optimus.section_vision", "SectionVision"), "vision_view"),                     # 17: VISION
+        (_lazy_section("gui.optimus.section_applications", "SectionApplications"), "applications_view"),   # 18: APPLICATIONS
+        (_lazy_section("gui.optimus.section_integrations", "SectionIntegrations"), "integrations_view"),   # 19: INTEGRATIONS
+        (_lazy_section("gui.optimus.section_marketplace", "SectionMarketplace"), "marketplace_view"),      # 20: MARKETPLACE
+        (_lazy_section("gui.optimus.section_mcp_manager", "SectionMCPManager"), "mcp_manager_view"),       # 21: MCP SERVERS
     ]
 
     def __init__(self, bridge: OptimusServiceBridge | None = None, parent=None):
@@ -150,8 +139,16 @@ class OptimusControlCenterWidget(QWidget):
             self.stack.insertWidget(index, view)
             old_w.deleteLater()
             self._section_instances[index] = view
+            if index == 0 and hasattr(view, "open_execution_graph_requested"):
+                view.open_execution_graph_requested.connect(self._open_execution_graph)
 
         return self._section_instances[index]  # type: ignore
+
+    def _open_execution_graph(self) -> None:
+        """Navigate from Home active-mission preview to the full Missions Execution Graph."""
+        self.show_section("missions")
+        if hasattr(self.missions_view, "show_execution_graph"):
+            self.missions_view.show_execution_graph()
 
     @property
     def dashboard_view(self) -> OptimusDashboardView:
@@ -387,3 +384,25 @@ class OptimusControlCenterWidget(QWidget):
                 curr.resume_polling()
             except Exception:
                 pass
+
+    def closeEvent(self, event) -> None:
+        for view in list(self._section_instances.values()):
+            if view and hasattr(view, "closeEvent"):
+                try:
+                    view.closeEvent(event)
+                except Exception:
+                    pass
+        self._section_instances.clear()
+
+        # Cascade clean shutdown to background audio and bridge services
+        try:
+            from gui.optimus.service_bridge import OptimusServiceBridge
+            OptimusServiceBridge.reset()
+        except Exception:
+            pass
+        try:
+            from core.audio_stream import ContinuousAudioStreamPlayer
+            ContinuousAudioStreamPlayer.reset_instance()
+        except Exception:
+            pass
+        super().closeEvent(event)

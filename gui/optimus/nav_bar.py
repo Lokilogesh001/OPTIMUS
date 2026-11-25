@@ -217,6 +217,11 @@ class OptimusNavBar(QWidget):
         self._health_badge = self._online_lbl
         layout.addWidget(self._online_lbl)
 
+        self._brand_footer = QLabel("OPTIMUS — Autonomous AI System\nBY LOKI")
+        self._brand_footer.setFont(mono_font(7))
+        self._brand_footer.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; padding: 2px 4px;")
+        layout.addWidget(self._brand_footer)
+
         # Select Dashboard by default
         self._current_index = 0
         if self._buttons and self._buttons[0]:

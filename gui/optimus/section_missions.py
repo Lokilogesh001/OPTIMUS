@@ -115,7 +115,17 @@ class SectionMissions(QWidget):
 
         layout.addLayout(launch_box)
 
-        # ── Main Content Splitter ────────────────────────────────────────────
+        # ── Main Content Tabs: Missions Overview | Execution Graph ──────────
+        from PyQt6.QtWidgets import QComboBox, QTabWidget
+        from gui.optimus.graph_widget import InteractiveGraphView
+
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet(
+            f"QTabWidget::pane {{ border: 1px solid {C.BORDER}; background: {C.BG}; }}"
+            f"QTabBar::tab {{ background: {C.PANEL}; color: {C.TEXT_DIM}; padding: 6px 14px; border: 1px solid {C.BORDER}; }}"
+            f"QTabBar::tab:selected {{ background: {C.PANEL2}; color: {C.PRI}; border-bottom: 2px solid {C.PRI}; }}"
+        )
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet("QSplitter::handle { background: rgba(0, 160, 255, 0.2); }")
 
@@ -285,7 +295,37 @@ class SectionMissions(QWidget):
 
         splitter.addWidget(right_panel)
         splitter.setSizes([380, 620])
-        layout.addWidget(splitter, stretch=1)
+
+        self.tabs.addTab(splitter, "Missions Overview")
+
+        exec_tab = QWidget()
+        exec_lay = QVBoxLayout(exec_tab)
+        exec_lay.setContentsMargins(4, 4, 4, 4)
+        exec_lay.setSpacing(6)
+
+        task_bar = QHBoxLayout()
+        lbl_sel = QLabel("TASK RECORD:")
+        lbl_sel.setFont(px_font(9, QFont.Weight.Bold))
+        lbl_sel.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        task_bar.addWidget(lbl_sel)
+
+        self.task_selector = QComboBox()
+        self.task_selector.setFont(mono_font(8))
+        self.task_selector.setStyleSheet(
+            f"QComboBox {{ background: {C.PANEL2}; color: {C.WHITE}; border: 1px solid {C.BORDER}; padding: 4px 8px; }}"
+        )
+        self.task_selector.currentIndexChanged.connect(self._on_task_selector_changed)
+        task_bar.addWidget(self.task_selector, stretch=1)
+        exec_lay.addLayout(task_bar)
+
+        self.execution_graph = InteractiveGraphView(
+            "TASK EXECUTION GRAPH (READ-ONLY)",
+            "No tasks recorded in authoritative TaskStore yet.",
+        )
+        exec_lay.addWidget(self.execution_graph, stretch=1)
+
+        self.tabs.addTab(exec_tab, "Execution Graph")
+        layout.addWidget(self.tabs, stretch=1)
 
         # Wire live signals
         self.bridge.mission_created.connect(self._on_mission_event)
@@ -341,8 +381,43 @@ class SectionMissions(QWidget):
 
     # ── Data Refresh & Filtering ─────────────────────────────────────────────
 
+    def show_execution_graph(self, task_id: str | None = None) -> None:
+        """Switch to the read-only Execution Graph tab and refresh from authoritative TaskStore."""
+        self.refresh_execution_graph(task_id=task_id)
+        if hasattr(self, "tabs"):
+            self.tabs.setCurrentIndex(1)
+
+    def _on_task_selector_changed(self, _idx: int) -> None:
+        tid = self.task_selector.currentData()
+        if tid:
+            from gui.optimus.graph_builders import build_task_execution_graph
+            nodes, edges = build_task_execution_graph(self.bridge, task_id=str(tid))
+            self.execution_graph.set_graph(nodes, edges)
+
+    def refresh_execution_graph(self, task_id: str | None = None) -> None:
+        """Populate Task Execution Graph from authoritative TaskStore (never executes tasks)."""
+        from gui.optimus.graph_builders import build_task_execution_graph
+        if hasattr(self, "task_selector") and hasattr(self.bridge, "list_recent_tasks"):
+            recent = self.bridge.list_recent_tasks(limit=15)
+            self.task_selector.blockSignals(True)
+            self.task_selector.clear()
+            for t in recent:
+                tid = t.get("task_id", "")
+                st = t.get("status", "")
+                goal = str(t.get("goal", ""))[:45]
+                self.task_selector.addItem(f"[{st}] {tid} — {goal}", tid)
+            if task_id:
+                idx = self.task_selector.findData(task_id)
+                if idx >= 0:
+                    self.task_selector.setCurrentIndex(idx)
+            self.task_selector.blockSignals(False)
+        selected_tid = task_id or (self.task_selector.currentData() if hasattr(self, "task_selector") else None)
+        nodes, edges = build_task_execution_graph(self.bridge, task_id=selected_tid)
+        self.execution_graph.set_graph(nodes, edges)
+
     def refresh_missions(self) -> None:
         """Reload missions from MissionStore into the table."""
+        self.refresh_execution_graph()
         all_missions = self.bridge.list_missions()
         
         filtered = []

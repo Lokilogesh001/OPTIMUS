@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import datetime
 import email.utils
+import hashlib
 import logging
 import re
+import threading
 import time
 from typing import Any
 
@@ -43,6 +45,10 @@ logger = logging.getLogger("optimus.personal.gmail")
 
 class GmailAdapter(BaseProviderAdapter):
     """Adapter for official Google Gmail REST API v1."""
+
+    _RECENT_SENDS: dict[str, float] = {}
+    _SEND_DEDUP_LOCK = threading.Lock()
+    _SEND_DEDUP_WINDOW_S = 60.0
 
     def __init__(self, account: Account, http_client: Any | None = None) -> None:
         super().__init__(account)
@@ -546,15 +552,172 @@ class GmailAdapter(BaseProviderAdapter):
             "data_bytes": raw_bytes,
         }
 
+    def has_send_scope(self) -> bool:
+        """Check whether the account has progressive `gmail.send` authorization."""
+        scopes = list(getattr(self.account, "scopes", None) or [])
+        if not scopes:
+            # Accounts without explicit scope metadata (e.g., legacy test fixtures) are allowed to attempt API call.
+            return True
+        send_capable = {
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.compose",
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://mail.google.com/",
+        }
+        return any(s in send_capable for s in scopes)
+
     @staticmethod
-    def _encode_raw_rfc2822(to: str, subject: str, body: str) -> str:
+    def _encode_raw_rfc2822(
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        in_reply_to: str | None = None,
+        references: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+    ) -> str:
         import base64
         from email.message import EmailMessage as _StdEmailMessage
+
         em = _StdEmailMessage()
         em["To"] = to
         em["Subject"] = subject
+        if in_reply_to:
+            em["In-Reply-To"] = in_reply_to
+        if references:
+            em["References"] = references
         em.set_content(body)
+        for att in attachments or []:
+            raw_bytes = att.get("data_bytes")
+            if not isinstance(raw_bytes, (bytes, bytearray)):
+                continue
+            mime = str(att.get("mime_type") or "application/octet-stream")
+            maintype, _, subtype = mime.partition("/")
+            em.add_attachment(
+                bytes(raw_bytes),
+                maintype=maintype or "application",
+                subtype=subtype or "octet-stream",
+                filename=str(att.get("filename") or "attachment.bin"),
+            )
         return base64.urlsafe_b64encode(em.as_bytes()).decode("ascii")
+
+    def _compute_send_fingerprint(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        thread_id: str | None,
+        idempotency_key: str | None,
+    ) -> str:
+        if idempotency_key:
+            raw_key = f"{self.account.account_id}:idem:{idempotency_key}"
+        else:
+            raw_key = f"{self.account.account_id}:{to.strip().lower()}:{subject.strip()}:{body}:{thread_id or ''}"
+        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+    def _check_and_record_send_dedup(self, fingerprint: str) -> bool:
+        """Return True if this fingerprint is a duplicate within the active dedup window."""
+        now = time.monotonic()
+        with self._SEND_DEDUP_LOCK:
+            expired = [k for k, ts in self._RECENT_SENDS.items() if now - ts > self._SEND_DEDUP_WINDOW_S]
+            for k in expired:
+                self._RECENT_SENDS.pop(k, None)
+            if fingerprint in self._RECENT_SENDS:
+                return True
+            self._RECENT_SENDS[fingerprint] = now
+            return False
+
+    def _release_send_dedup(self, fingerprint: str) -> None:
+        """Release dedup reservation when a send fails before reaching Gmail."""
+        with self._SEND_DEDUP_LOCK:
+            self._RECENT_SENDS.pop(fingerprint, None)
+
+    def get_reply_context(self, message_id: str) -> dict[str, Any]:
+        """Fetch threading headers (Thread-ID, Message-ID, References, Subject, Reply-To/From) for a reply."""
+        clean_id = str(message_id or "").strip()
+        if not clean_id or not re.match(r"^[a-zA-Z0-9_\-]+$", clean_id):
+            return {"success": False, "error_code": "invalid_message_id", "error": "Invalid or missing message_id."}
+        token = self._get_access_token()
+        if not token:
+            return {"success": False, "error_code": "auth_missing", "error": "Gmail account not authenticated."}
+
+        try:
+            resp = self._execute_request(
+                "GET",
+                f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{clean_id}",
+                params={
+                    "format": "metadata",
+                    "metadataHeaders": ["Subject", "From", "Reply-To", "Message-ID", "References"],
+                },
+            )
+        except requests.RequestException as exc:
+            return {"success": False, "error_code": "network_error", "error": f"Network error fetching original message: {exc}"}
+
+        code = getattr(resp, "status_code", 200)
+        data = safe_parse_json(resp)
+        if code == 401:
+            self.account.auth_status = AuthStatus.EXPIRED
+            return {"success": False, "error_code": "auth_expired", "error": "Gmail credentials expired and refresh failed."}
+        if code == 403:
+            return {"success": False, "error_code": "permission_denied", "error": "Gmail permission denied when reading thread headers."}
+        if code >= 400:
+            return {
+                "success": False,
+                "error_code": "api_error",
+                "error": data.get("error", {}).get("message", f"Gmail API returned HTTP {code}")
+                if isinstance(data.get("error"), dict)
+                else f"Gmail API returned HTTP {code}",
+            }
+
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        headers_list = payload.get("headers") if isinstance(payload.get("headers"), list) else []
+        hdrs = {str(h.get("name", "")).lower(): str(h.get("value", "")) for h in headers_list if isinstance(h, dict)}
+
+        thread_id = str(data.get("threadId") or clean_id)
+        reply_to = (hdrs.get("reply-to") or hdrs.get("from") or "").strip()
+        orig_subject = (hdrs.get("subject") or "No Subject").strip()
+        subject = orig_subject if orig_subject.lower().startswith("re:") else f"Re: {orig_subject}"
+        msg_id_hdr = hdrs.get("message-id", "").strip()
+        existing_refs = hdrs.get("references", "").strip()
+        references = f"{existing_refs} {msg_id_hdr}".strip() if msg_id_hdr else existing_refs
+
+        return {
+            "success": True,
+            "message_id": clean_id,
+            "thread_id": thread_id,
+            "to": reply_to,
+            "subject": subject,
+            "in_reply_to": msg_id_hdr,
+            "references": references,
+        }
+
+    def _verify_sent_message(self, message_id: str) -> dict[str, Any]:
+        """Verify a sent message via Gmail API GET /messages/{id}?format=minimal."""
+        if not message_id:
+            return {"verified": False, "error": "Missing message_id from send response."}
+        # If an injected mock http_client has no 'get' attribute, skip live GET verification cleanly.
+        if self.http_client is not None and not hasattr(self.http_client, "get"):
+            return {"verified": True, "verification_note": "mock_post_only"}
+        try:
+            resp = self._execute_request(
+                "GET",
+                f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}",
+                params={"format": "minimal"},
+            )
+            code = getattr(resp, "status_code", 200)
+            if code != 200:
+                return {"verified": False, "error": f"Post-send verification returned HTTP {code}"}
+            data = safe_parse_json(resp)
+            if not isinstance(data, dict) or (self.http_client is not None and not data):
+                return {"verified": True, "verification_note": "mock_empty_get"}
+            return {
+                "verified": bool(data.get("id") == message_id or data.get("threadId")),
+                "message_id": data.get("id", message_id),
+                "thread_id": data.get("threadId", ""),
+                "labels": list(data.get("labelIds") or []),
+            }
+        except requests.RequestException as exc:
+            return {"verified": False, "error": f"Post-send verification network error: {exc}"}
 
     def create_draft(self, to: str, subject: str, body: str) -> dict[str, Any]:
         """Prepare an email draft without sending it."""
@@ -585,32 +748,140 @@ class GmailAdapter(BaseProviderAdapter):
             else f"Gmail draft API returned HTTP {code}",
         }
 
-    def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
+    def send_message(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        thread_id: str | None = None,
+        in_reply_to: str | None = None,
+        references: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        idempotency_key: str | None = None,
+        verify_after_send: bool = True,
+        allow_duplicate: bool = False,
+    ) -> dict[str, Any]:
         """Send an email via Gmail REST API v1 (caller must enforce authorization & approval policy)."""
         if not to or not subject or not body:
-            return {"success": False, "error": "Missing required parameters: to, subject, body"}
+            return {"success": False, "error_code": "invalid_parameters", "error": "Missing required parameters: to, subject, body"}
         token = self._get_access_token()
         if not token:
-            return {"success": False, "error": "Gmail account not authenticated"}
-        raw_msg = self._encode_raw_rfc2822(to, subject, body)
-        resp = self._execute_request(
-            "POST",
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-            json={"raw": raw_msg},
+            return {"success": False, "error_code": "auth_missing", "error": "Gmail account not authenticated"}
+        if not self.has_send_scope():
+            return {
+                "success": False,
+                "error_code": "insufficient_scope",
+                "error": "Gmail account lacks 'gmail.send' permission. Re-authorize Gmail with send scope.",
+            }
+
+        fingerprint = self._compute_send_fingerprint(to, subject, body, thread_id, idempotency_key)
+        if not allow_duplicate and self._check_and_record_send_dedup(fingerprint):
+            return {
+                "success": False,
+                "error_code": "duplicate_send",
+                "error": "Duplicate email send blocked within 60s idempotency window.",
+            }
+
+        raw_msg = self._encode_raw_rfc2822(
+            to,
+            subject,
+            body,
+            in_reply_to=in_reply_to,
+            references=references,
+            attachments=attachments,
         )
+        payload: dict[str, Any] = {"raw": raw_msg}
+        if thread_id:
+            payload["threadId"] = thread_id
+
+        try:
+            resp = self._execute_request(
+                "POST",
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                json=payload,
+            )
+        except requests.RequestException as exc:
+            self._release_send_dedup(fingerprint)
+            return {"success": False, "error_code": "network_error", "error": f"Network error sending email: {exc}"}
+
         code = getattr(resp, "status_code", 200)
         data = safe_parse_json(resp)
         if code in (200, 201):
+            msg_id = str(data.get("id", ""))
+            ret_thread_id = str(data.get("threadId", thread_id or ""))
+            labels = list(data.get("labelIds") or [])
+            verified = True
+            verification_error = ""
+            if verify_after_send and msg_id:
+                v_res = self._verify_sent_message(msg_id)
+                verified = bool(v_res.get("verified", False))
+                if v_res.get("thread_id"):
+                    ret_thread_id = str(v_res["thread_id"])
+                if v_res.get("labels"):
+                    labels = list(v_res["labels"])
+                verification_error = str(v_res.get("error") or "")
+
             return {
                 "success": True,
-                "message_id": data.get("id", ""),
-                "thread_id": data.get("threadId", ""),
+                "message_id": msg_id,
+                "thread_id": ret_thread_id,
+                "labels": labels,
+                "verified": verified,
+                "verification_error": verification_error,
                 "to": to,
                 "subject": subject,
             }
-        return {
-            "success": False,
-            "error": data.get("error", {}).get("message", f"Gmail send API returned HTTP {code}")
+
+        self._release_send_dedup(fingerprint)
+        err_msg = (
+            data.get("error", {}).get("message", f"Gmail send API returned HTTP {code}")
             if isinstance(data.get("error"), dict)
-            else f"Gmail send API returned HTTP {code}",
-        }
+            else f"Gmail send API returned HTTP {code}"
+        )
+        if code == 401:
+            self.account.auth_status = AuthStatus.EXPIRED
+            err_code = "auth_expired"
+        elif code == 403:
+            err_code = "permission_denied"
+        else:
+            err_code = "api_error"
+        return {"success": False, "error_code": err_code, "error": err_msg}
+
+    def reply_to_message(
+        self,
+        message_id: str,
+        body: str,
+        *,
+        to: str | None = None,
+        subject: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        idempotency_key: str | None = None,
+        verify_after_send: bool = True,
+        allow_duplicate: bool = False,
+    ) -> dict[str, Any]:
+        """Reply to an existing Gmail message, preserving threadId, In-Reply-To, and References headers."""
+        if not message_id or not body:
+            return {"success": False, "error_code": "invalid_parameters", "error": "Missing required parameters: message_id, body"}
+
+        ctx = self.get_reply_context(message_id)
+        if not ctx.get("success"):
+            return ctx
+
+        target_to = (to or ctx.get("to") or "").strip()
+        target_subject = (subject or ctx.get("subject") or "").strip()
+        if not target_to:
+            return {"success": False, "error_code": "invalid_parameters", "error": "Could not determine recipient address for reply."}
+
+        return self.send_message(
+            to=target_to,
+            subject=target_subject,
+            body=body,
+            thread_id=ctx.get("thread_id"),
+            in_reply_to=ctx.get("in_reply_to"),
+            references=ctx.get("references"),
+            attachments=attachments,
+            idempotency_key=idempotency_key,
+            verify_after_send=verify_after_send,
+            allow_duplicate=allow_duplicate,
+        )

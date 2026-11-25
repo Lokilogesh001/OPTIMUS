@@ -1630,7 +1630,18 @@ class CentralOrchestrator:
 
                 if not (success and is_verified):
                     now_finish = time.time()
+                    if any(tok in (summary or "").upper() for tok in ("CONFIRMATION_PENDING", "APPROVAL_REQUIRED", "STATUS=ASK")):
+                        fast_subtask.status = SubtaskStatus.PENDING
+                        task.status = TaskStatus.WAITING_FOR_APPROVAL
+                        task.current_stage = "WAITING_FOR_APPROVAL"
+                        task.final_outcome = "WAITING_FOR_APPROVAL"
+                        task.result = summary
+                        task.error = None
+                        self.task_store.save_task(task)
+                        return task
                     task.status = TaskStatus.FAILED
+                    task.current_stage = "FAILED"
+                    task.final_outcome = "FAILED"
                     task.error = f"Deterministic verification failed: {verdict}"
                     task.finished_at = now_finish
                     task.duration_seconds = round(now_finish - task.started_at, 4)
@@ -1652,6 +1663,8 @@ class CentralOrchestrator:
 
                 now_finish = time.time()
                 task.status = TaskStatus.COMPLETED
+                task.current_stage = "COMPLETED"
+                task.final_outcome = "COMPLETED"
                 task.finished_at = now_finish
                 task.duration_seconds = round(now_finish - task.started_at, 4)
                 task.result = summary
@@ -1723,12 +1736,31 @@ class CentralOrchestrator:
                 subtask.status = SubtaskStatus.RUNNING
                 self.task_store.update_subtask(subtask)
 
-                # Controlled Agent Execution
+                # Controlled Agent Execution with bounded transient retries
                 success, summary, side_effects = self._execute_subtask(
                     subtask=subtask,
                     workflow_context=workflow_context,
                     task_id=t_id,
                 )
+                while (
+                    not success
+                    and t_id not in self._cancelled_tasks
+                    and task.retry_count < task.max_retries
+                    and not self._is_non_retryable_failure(summary)
+                ):
+                    task.retry_count += 1
+                    task.status = TaskStatus.RECOVERING
+                    task.current_stage = "RECOVERING"
+                    self.task_store.save_task(task)
+                    success, summary, side_effects = self._execute_subtask(
+                        subtask=subtask,
+                        workflow_context=workflow_context,
+                        task_id=t_id,
+                    )
+                if success and task.status == TaskStatus.RECOVERING:
+                    task.status = TaskStatus.RUNNING
+                    task.current_stage = "EXECUTING"
+                    self.task_store.save_task(task)
 
                 # Check if cancellation occurred mid-execution (Fixes EGM-02)
                 if t_id in self._cancelled_tasks:
@@ -1737,6 +1769,17 @@ class CentralOrchestrator:
                     return self.task_store.get_task(t_id)
 
                 if not success:
+                    if self._is_approval_pending_text(summary):
+                        subtask.status = SubtaskStatus.PENDING
+                        subtask.output_summary = summary
+                        self.task_store.update_subtask(subtask)
+                        task.status = TaskStatus.WAITING_FOR_APPROVAL
+                        task.current_stage = "WAITING_FOR_APPROVAL"
+                        task.final_outcome = "WAITING_FOR_APPROVAL"
+                        task.result = summary
+                        task.error = None
+                        self.task_store.save_task(task)
+                        return task
                     subtask.status = SubtaskStatus.FAILED
                     subtask.error = summary
                     self.task_store.update_subtask(subtask)
@@ -1910,6 +1953,8 @@ class CentralOrchestrator:
             # Catch-all failsafe
             now_err = time.time()
             task.status = TaskStatus.FAILED
+            task.current_stage = "FAILED"
+            task.final_outcome = "FAILED"
             task.error = f"Internal orchestrator error: {type(exc).__name__}: {exc}"
             task.finished_at = now_err
             task.duration_seconds = round(now_err - task.started_at, 2)
@@ -1922,6 +1967,27 @@ class CentralOrchestrator:
                 duration_seconds=task.duration_seconds,
             ))
             return task
+
+    @staticmethod
+    def _is_approval_pending_text(text: str) -> bool:
+        upper = str(text or "").upper()
+        return any(tok in upper for tok in ("CONFIRMATION_PENDING", "APPROVAL_REQUIRED", "STATUS=ASK"))
+
+    @staticmethod
+    def _is_non_retryable_failure(text: str) -> bool:
+        upper = str(text or "").upper()
+        return any(
+            tok in upper
+            for tok in (
+                "CONFIRMATION_PENDING",
+                "APPROVAL_REQUIRED",
+                "STATUS=ASK",
+                "PERMISSION_DENIED",
+                "CANCELLED",
+                "INVALID",
+                "NOT AUTHORIZED",
+            )
+        )
 
     # ── Non-Blocking Background Worker Dispatch ──────────────────────────────
 
@@ -1954,7 +2020,15 @@ class CentralOrchestrator:
             SharedActionScheduler.instance().cancel_task(task_id)
         except Exception:
             pass
-        return bool(self.task_store.cancel_task(task_id))
+        cancelled_rec = self.task_store.cancel_task(task_id)
+        if cancelled_rec is not None:
+            self.event_bus.publish(TaskCancelledEvent(
+                task_id=task_id,
+                goal=cancelled_rec.goal,
+                reason=cancelled_rec.error or "Cancelled by user",
+            ))
+            return True
+        return False
 
     run_task = execute_task
     cancel_task = cancel

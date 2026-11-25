@@ -61,7 +61,7 @@ def test_default_system_prompt_branding():
 def test_subtitle_generation_for_both_brands():
     from gui.window import MainWindow
     sub_optimus = MainWindow._subtitle("OPTIMUS")
-    assert sub_optimus == "Autonomous Intelligence & Verification System"
+    assert sub_optimus == "Autonomous AI System"
 
     sub_jarvis = MainWindow._subtitle("JARVIS")
     assert sub_jarvis == "Just A Rather Very Intelligent System"

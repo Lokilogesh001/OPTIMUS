@@ -59,6 +59,16 @@ class SectionMemory(QWidget):
         hdr.addWidget(btn_refresh)
         layout.addLayout(hdr)
 
+        from PyQt6.QtWidgets import QTabWidget
+        from gui.optimus.graph_widget import InteractiveGraphView
+
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet(
+            f"QTabWidget::pane {{ border: 1px solid {C.BORDER}; background: {C.BG}; }}"
+            f"QTabBar::tab {{ background: {C.PANEL}; color: {C.TEXT_DIM}; padding: 6px 14px; border: 1px solid {C.BORDER}; }}"
+            f"QTabBar::tab:selected {{ background: {C.PANEL2}; color: {C.PRI}; border-bottom: 2px solid {C.PRI}; }}"
+        )
+
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setStyleSheet(f"""
             QSplitter::handle {{ background: {C.BORDER}; }}
@@ -168,7 +178,14 @@ class SectionMemory(QWidget):
         split.addWidget(right_w)
         split.setStretchFactor(0, 5)
         split.setStretchFactor(1, 5)
-        layout.addWidget(split)
+
+        self.tabs.addTab(split, "Memory Store")
+        self.memory_graph = InteractiveGraphView(
+            "MEMORY & CONTEXT GRAPH",
+            "No memory entries or context partitions recorded yet.",
+        )
+        self.tabs.addTab(self.memory_graph, "Memory Graph")
+        layout.addWidget(self.tabs, stretch=1)
 
         # Property aliases for testing & external APIs
         self.table_memories = self.table_mem
@@ -203,6 +220,13 @@ class SectionMemory(QWidget):
                     ver = getattr(entry, "is_verified", False)
                 bus_info += f"    - Subtask {st_id}: key={k} agent={src} verified={ver}\n"
         self.bus_edit.setPlainText(bus_info)
+        self.refresh_memory_graph()
+
+    def refresh_memory_graph(self) -> None:
+        """Populate Memory Graph from MemoryManager without mutating stored data."""
+        from gui.optimus.graph_builders import build_memory_graph
+        nodes, edges = build_memory_graph(self.bridge)
+        self.memory_graph.set_graph(nodes, edges)
 
     def _populate_table(self, entries: list[Any]) -> None:
         self.table_mem.setRowCount(len(entries))

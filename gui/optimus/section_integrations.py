@@ -93,7 +93,21 @@ class SectionIntegrations(QWidget):
         hdr.addWidget(btn_refresh)
         layout.addLayout(hdr)
 
-        # ── 2. Main Splitter View ────────────────────────────────────────────
+        # ── 2. Tabs: Overview | Integration Graph ────────────────────────────
+        from PyQt6.QtWidgets import QTabWidget
+        from gui.optimus.graph_widget import InteractiveGraphView
+
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet(
+            f"QTabWidget::pane {{ border: 1px solid {C.BORDER}; background: {C.BG}; }}"
+            f"QTabBar::tab {{ background: {C.PANEL}; color: {C.TEXT_DIM}; padding: 6px 14px; border: 1px solid {C.BORDER}; }}"
+            f"QTabBar::tab:selected {{ background: {C.PANEL2}; color: {C.PRI}; border-bottom: 2px solid {C.PRI}; }}"
+        )
+        overview_tab = QWidget()
+        overview_lay = QVBoxLayout(overview_tab)
+        overview_lay.setContentsMargins(4, 4, 4, 4)
+        overview_lay.setSpacing(8)
+
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setStyleSheet(f"""
             QSplitter::handle {{ background: {C.BORDER}; }}
@@ -211,7 +225,7 @@ class SectionIntegrations(QWidget):
         right_lay.addStretch()
         split.addWidget(right_w)
 
-        layout.addWidget(split, stretch=1)
+        overview_lay.addWidget(split, stretch=1)
 
         # ── 3. Bottom Integration Operations Ledger ──────────────────────────
         p_ledger = HoloPanel("OPERATIONS LEDGER", "AUDIT & DIAGNOSTICS")
@@ -237,7 +251,15 @@ class SectionIntegrations(QWidget):
             }}
         """ + scroll_css())
         p_ledger.body.addWidget(self.tbl_ledger)
-        layout.addWidget(p_ledger)
+        overview_lay.addWidget(p_ledger)
+
+        self.tabs.addTab(overview_tab, "Overview")
+        self.integration_graph = InteractiveGraphView(
+            "INTEGRATION TOPOLOGY",
+            "No integrations, agents, or providers discovered.",
+        )
+        self.tabs.addTab(self.integration_graph, "Integration Graph")
+        layout.addWidget(self.tabs, stretch=1)
 
         # ── 4. Periodic UI Update Timer ──────────────────────────────────────
         self.ui_timer = QTimer(self)
@@ -273,10 +295,17 @@ class SectionIntegrations(QWidget):
 
     # ── UI Refresh Logic ─────────────────────────────────────────────────────
 
+    def refresh_integration_graph(self) -> None:
+        """Populate Integration Graph from real backend services, agents, tools, apps, and providers."""
+        from gui.optimus.graph_builders import build_integration_graph
+        nodes, edges = build_integration_graph(self.bridge, self.workspace_adapter)
+        self.integration_graph.set_graph(nodes, edges)
+
     def refresh_all(self) -> None:
         """Full manual refresh."""
         self.update_telemetry_ui()
         self.refresh_workspace_ui()
+        self.refresh_integration_graph()
         self._record_ledger("SYSTEM", "Manual UI Refresh", "SUCCESS", "All integration widgets updated")
 
     def update_telemetry_ui(self) -> None:
@@ -327,29 +356,37 @@ class SectionIntegrations(QWidget):
             self.lbl_gpu_extra.setText("Hardware acceleration: Standard CPU / DirectML")
 
     def refresh_workspace_ui(self) -> None:
-        """Update Workspace MCP status card."""
+        """Update Workspace MCP status card with caching to avoid main thread transport blocking."""
         has_creds = has_valid_google_credentials()
         client_id = get_google_client_id()
 
-        try:
-            status = self.workspace_adapter.get_gmail_status()
-            healthy = status.get("healthy", False)
-            account = status.get("account", "user@optimus.local")
-            scopes = status.get("scopes", [])
+        now = time.time()
+        if hasattr(self, "_cached_ws_status") and (now - getattr(self, "_last_ws_status_t", 0.0) < 30.0):
+            status = self._cached_ws_status
+        else:
+            try:
+                status = self.workspace_adapter.get_gmail_status()
+                self._cached_ws_status = status
+                self._last_ws_status_t = now
+            except Exception as e:
+                self.lbl_ws_status.setText(f"Status: MCP Bridge Error ({e})")
+                return
 
-            if healthy:
-                self.lbl_workspace_badge.setText("[WORKSPACE: CONNECTED]")
-                self.lbl_workspace_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(0, 255, 128, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
-                self.lbl_ws_status.setText(f"Status: ACTIVE & AUTHENTICATED\nAccount: {account}\nLast Synchronized: {status.get('last_synced_at', 'Just now')}")
-            else:
-                self.lbl_workspace_badge.setText("[WORKSPACE: NOT CONNECTED]")
-                self.lbl_workspace_badge.setStyleSheet(f"color: {C.ACC}; background: rgba(245, 158, 11, 0.1); border: 1px solid {C.ACC}; border-radius: 3px; padding: 2px 8px;")
-                self.lbl_ws_status.setText(f"Status: CONFIGURED (Authentication Pending)\nClient ID: {client_id[:20]}..." if client_id else "Status: NO OAUTH CREDENTIALS CONFIGURED")
+        healthy = status.get("healthy", False)
+        account = status.get("account", "user@optimus.local")
+        scopes = status.get("scopes", [])
 
-            scope_text = ", ".join([s.split("/")[-1] for s in scopes]) if scopes else "gmail.readonly, calendar.readonly"
-            self.lbl_ws_scopes.setText(f"Active Least-Privilege Scopes: {scope_text}")
-        except Exception as e:
-            self.lbl_ws_status.setText(f"Status: MCP Bridge Error ({e})")
+        if healthy:
+            self.lbl_workspace_badge.setText("[WORKSPACE: CONNECTED]")
+            self.lbl_workspace_badge.setStyleSheet(f"color: {C.GREEN}; background: rgba(0, 255, 128, 0.1); border: 1px solid {C.GREEN}; border-radius: 3px; padding: 2px 8px;")
+            self.lbl_ws_status.setText(f"Status: ACTIVE & AUTHENTICATED\nAccount: {account}\nLast Synchronized: {status.get('last_synced_at', 'Just now')}")
+        else:
+            self.lbl_workspace_badge.setText("[WORKSPACE: NOT CONNECTED]")
+            self.lbl_workspace_badge.setStyleSheet(f"color: {C.ACC}; background: rgba(245, 158, 11, 0.1); border: 1px solid {C.ACC}; border-radius: 3px; padding: 2px 8px;")
+            self.lbl_ws_status.setText(f"Status: CONFIGURED (Authentication Pending)\nClient ID: {client_id[:20]}..." if client_id else "Status: NO OAUTH CREDENTIALS CONFIGURED")
+
+        scope_text = ", ".join([s.split("/")[-1] for s in scopes]) if scopes else "gmail.readonly, calendar.readonly"
+        self.lbl_ws_scopes.setText(f"Active Least-Privilege Scopes: {scope_text}")
 
     def _open_oauth_dialog(self) -> None:
         """Open the secure Google Credentials setup dialog."""

@@ -259,6 +259,14 @@ class SectionSettings(QWidget):
         p_keys.body.addLayout(k_lay)
         layout.addWidget(p_keys)
 
+        # 6. About & System Identity
+        p_about = HoloPanel("SYSTEM IDENTITY & ABOUT", "OPTIMUS")
+        ab_lbl = QLabel("OPTIMUS — Autonomous AI System\nCreator Credit: BY LOKI")
+        ab_lbl.setFont(mono_font(9))
+        ab_lbl.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
+        p_about.body.addWidget(ab_lbl)
+        layout.addWidget(p_about)
+
         layout.addStretch()
 
     def _update_perm_ui(self) -> None:

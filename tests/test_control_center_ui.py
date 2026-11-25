@@ -449,38 +449,47 @@ def test_settings_section_privacy_and_theme_accent(bridge, qapp):
     # Test accent selection
     set_sec._on_accent_selected("#ff6b00")
     qapp.processEvents()
+    # Restore default palette for test isolation
+    from gui.theme import restore_default_palette
+    restore_default_palette()
+    qapp.processEvents()
 
 
 def test_control_center_navigation_and_stack_switching(bridge, qapp):
     """Test 15: Verify OptimusControlCenterWidget manages all 10 views synchronously."""
     cc = OptimusControlCenterWidget()
-    qapp.processEvents()
-
-    assert cc.stack.count() >= 11
-
-    # Test section navigation
-    section_map = {
-        "dashboard": 0,
-        "command": 1,
-        "workflows": 2,
-        "agents": 3,
-        "intelligence": 4,
-        "memory": 5,
-        "verification": 6,
-        "approvals": 7,
-        "system": 8,
-        "settings": 9,
-        "planning": 10,
-    }
-    if cc.stack.count() >= 13:
-        section_map["developer"] = 11
-        section_map["skills"] = 12
-
-    for name, expected_idx in section_map.items():
-        cc.show_section(name)
+    try:
         qapp.processEvents()
-        assert cc.stack.currentIndex() == expected_idx
-        assert cc.nav_bar.active_tab == name
+
+        assert cc.stack.count() >= 11
+
+        # Test section navigation
+        section_map = {
+            "dashboard": 0,
+            "command": 1,
+            "workflows": 2,
+            "agents": 3,
+            "intelligence": 4,
+            "memory": 5,
+            "verification": 6,
+            "approvals": 7,
+            "system": 8,
+            "settings": 9,
+            "planning": 10,
+        }
+        if cc.stack.count() >= 13:
+            section_map["developer"] = 11
+            section_map["skills"] = 12
+
+        for name, expected_idx in section_map.items():
+            cc.show_section(name)
+            qapp.processEvents()
+            assert cc.stack.currentIndex() == expected_idx
+            assert cc.nav_bar.active_tab == name
+    finally:
+        cc.close()
+        cc.deleteLater()
+        qapp.processEvents()
 
 
 def test_main_window_integration_and_f2_mode_toggle(qapp):
@@ -489,35 +498,40 @@ def test_main_window_integration_and_f2_mode_toggle(qapp):
     from ui import JarvisUI
 
     win = MainWindow(face_path="")
-    qapp.processEvents()
+    try:
+        qapp.processEvents()
 
-    assert hasattr(win, "_body_stack")
-    assert win._body_stack.count() == 2
-    assert win._body_stack.currentIndex() == 0  # Initial: Classic HUD
+        assert hasattr(win, "_body_stack")
+        assert win._body_stack.count() == 2
+        assert win._body_stack.currentIndex() == 0  # Initial: Classic HUD
 
-    # Switch to OPTIMUS
-    win.show_optimus("workflows")
-    qapp.processEvents()
-    assert win._body_stack.currentIndex() == 1
-    assert win._optimus_btn.isChecked() is True
-    assert win._optimus_control_center.nav_bar.active_tab == "workflows"
+        # Switch to OPTIMUS
+        win.show_optimus("workflows")
+        qapp.processEvents()
+        assert win._body_stack.currentIndex() == 1
+        assert win._optimus_btn.isChecked() is True
+        assert win._optimus_control_center.nav_bar.active_tab == "workflows"
 
-    # Switch back to Classic HUD
-    win.show_classic_hud()
-    qapp.processEvents()
-    assert win._body_stack.currentIndex() == 0
-    assert win._optimus_btn.isChecked() is False
+        # Switch back to Classic HUD
+        win.show_classic_hud()
+        qapp.processEvents()
+        assert win._body_stack.currentIndex() == 0
+        assert win._optimus_btn.isChecked() is False
 
-    # Test F2 toggle
-    win._toggle_optimus_shortcut()
-    qapp.processEvents()
-    assert win._body_stack.currentIndex() == 1
+        # Test F2 toggle
+        win._toggle_optimus_shortcut()
+        qapp.processEvents()
+        assert win._body_stack.currentIndex() == 1
 
-    win._toggle_optimus_shortcut()
-    qapp.processEvents()
-    assert win._body_stack.currentIndex() == 0
+        win._toggle_optimus_shortcut()
+        qapp.processEvents()
+        assert win._body_stack.currentIndex() == 0
 
-    # Test JarvisUI shim access
-    mock_ui = MagicMock(spec=JarvisUI)
-    mock_ui._win = win
-    assert JarvisUI.control_center.fget(mock_ui) is win._optimus_control_center
+        # Test JarvisUI shim access
+        mock_ui = MagicMock(spec=JarvisUI)
+        mock_ui._win = win
+        assert JarvisUI.control_center.fget(mock_ui) is win._optimus_control_center
+    finally:
+        win.close()
+        win.deleteLater()
+        qapp.processEvents()

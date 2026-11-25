@@ -132,7 +132,7 @@ IMMUTABLE_DENY_PATTERNS: list[tuple[str, re.Pattern]] = [
 PRIVILEGED_APPROVAL_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Privilege escalation", re.compile(r"(sudo\s+|su\s+-|runas\s+/user:)", re.IGNORECASE)),
     ("Credential dump", re.compile(r"(dump_credentials|mimikatz|sekurlsa|samdump)", re.IGNORECASE)),
-    ("Personal communication mutation", re.compile(r"^(send_email|delete_email|delete_message|gmail_send_message|gmail_delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|calendar_create_event|calendar_delete_event|mcp_send_email|mcp_create_calendar_event|send_whatsapp_message|purge_personal_store|wipe_personal_data|wipe_all_data|disconnect_account|revoke_account|delete_account)$", re.IGNORECASE)),
+    ("Personal communication mutation", re.compile(r"^(send_email|reply_email|delete_email|delete_message|gmail_send_message|gmail_delete_message|create_calendar_event|update_calendar_event|delete_calendar_event|calendar_create_event|calendar_delete_event|mcp_send_email|mcp_create_calendar_event|send_whatsapp_message|purge_personal_store|wipe_personal_data|wipe_all_data|disconnect_account|revoke_account|delete_account)$", re.IGNORECASE)),
     ("Self-improvement promotion", re.compile(r"^(promote_skill|install_skill|self_improvement_.*)$", re.IGNORECASE)),
 ]
 

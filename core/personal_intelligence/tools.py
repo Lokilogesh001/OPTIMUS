@@ -602,19 +602,80 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
     ))
 
     # 9. send_email (Approval Gated via PolicyEngine)
+    def _load_safe_email_attachments(attachment_paths: list[str] | None) -> tuple[list[dict[str, Any]], str | None]:
+        """Validate and read email attachments through UnifiedFilesystemService (fail-closed)."""
+        if not attachment_paths:
+            return [], None
+        import mimetypes
+        from pathlib import Path
+        from core.filesystem.service import UnifiedFilesystemService
+
+        fs_service = UnifiedFilesystemService.instance()
+        loaded: list[dict[str, Any]] = []
+        total_bytes = 0
+        max_total_bytes = 20 * 1024 * 1024  # 20 MB safety cap
+
+        for raw_p in attachment_paths:
+            p_str = str(raw_p or "").strip()
+            if not p_str:
+                continue
+            p = Path(p_str)
+            if p.is_symlink():
+                return [], f"Attachment '{p.name}' rejected: symlinks are not permitted."
+            try:
+                resolved = str(p.resolve(strict=True))
+            except OSError:
+                return [], f"Attachment '{p_str}' does not exist."
+            authorized, _, reason = fs_service.check_access(Path(resolved), "read")
+            if not authorized:
+                return [], f"Attachment '{p.name}' rejected: {reason or 'access denied by filesystem policy'}."
+            rp = Path(resolved)
+            if not rp.is_file():
+                return [], f"Attachment '{rp.name}' rejected: not a regular file."
+            size = rp.stat().st_size
+            total_bytes += size
+            if total_bytes > max_total_bytes:
+                return [], "Total attachment size exceeds 20 MB limit."
+            mime, _ = mimetypes.guess_type(rp.name)
+            loaded.append({
+                "filename": rp.name,
+                "mime_type": mime or "application/octet-stream",
+                "data_bytes": rp.read_bytes(),
+            })
+        return loaded, None
+
     def _send_email_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
         import os
         to = str(params.get("to") or "").strip()
         subject = str(params.get("subject") or "").strip()
         body = str(params.get("body") or "")
+        thread_id = str(params.get("thread_id") or "").strip() or None
+        in_reply_to = str(params.get("in_reply_to") or "").strip() or None
+        references = str(params.get("references") or "").strip() or None
+        idempotency_key = str(params.get("idempotency_key") or "").strip() or None
+        raw_atts = params.get("attachments")
+        att_paths = list(raw_atts) if isinstance(raw_atts, (list, tuple)) else []
+
         if not to or not subject or not body:
             return ToolResult(status="failed", error="Missing required parameters: to, subject, body")
+
+        loaded_atts, att_err = _load_safe_email_attachments(att_paths)
+        if att_err:
+            return ToolResult(status="failed", error=att_err, evidence={"error_code": "attachment_rejected"})
 
         if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
             return ToolResult(
                 status="done",
                 output=f"Email sent successfully to '{to}' with subject '{subject}'.",
-                evidence={"to": to, "subject": subject, "timestamp": time.time(), "mode": "mock"},
+                evidence={
+                    "to": to,
+                    "subject": subject,
+                    "thread_id": thread_id or "mock_thread_1",
+                    "verified": True,
+                    "attachments": [a["filename"] for a in loaded_atts],
+                    "timestamp": time.time(),
+                    "mode": "mock",
+                },
             )
 
         accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
@@ -622,39 +683,158 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
             return ToolResult(status="failed", error="No connected Gmail account available to send email.")
         from core.personal_intelligence.providers.gmail import GmailAdapter
         adapter = GmailAdapter(account=accounts[0])
-        res = adapter.send_message(to=to, subject=subject, body=body)
+        res = adapter.send_message(
+            to=to,
+            subject=subject,
+            body=body,
+            thread_id=thread_id,
+            in_reply_to=in_reply_to,
+            references=references,
+            attachments=loaded_atts or None,
+            idempotency_key=idempotency_key,
+        )
         if not res.get("success"):
             return ToolResult(
                 status="failed",
                 error=str(res.get("error") or "Failed to send email via Gmail API."),
-                evidence={"to": to, "subject": subject, "error": res.get("error")},
+                evidence={
+                    "to": to,
+                    "subject": subject,
+                    "error_code": res.get("error_code", "send_failed"),
+                    "error": res.get("error"),
+                },
             )
         return ToolResult(
             status="done",
-            output=f"Email sent successfully to '{to}' with subject '{subject}' (message_id={res.get('message_id', '')}).",
+            output=(
+                f"Email sent successfully to '{to}' with subject '{subject}' "
+                f"(message_id={res.get('message_id', '')}, thread_id={res.get('thread_id', '')}, verified={res.get('verified', False)})."
+            ),
             evidence={
                 "to": to,
                 "subject": subject,
                 "message_id": res.get("message_id", ""),
                 "thread_id": res.get("thread_id", ""),
+                "labels": res.get("labels", []),
+                "verified": res.get("verified", False),
+                "attachments": [a["filename"] for a in loaded_atts],
                 "timestamp": time.time(),
             },
         )
 
     registry.register(ToolDefinition(
         name="send_email",
-        description="Send an outgoing email message through a connected Gmail or Outlook account (MANDATORY APPROVAL REQUIRED).",
+        description="Send an outgoing email message through a connected Gmail account (MANDATORY APPROVAL REQUIRED).",
         parameters={
             "type": "OBJECT",
             "properties": {
                 "to": {"type": "STRING", "description": "Recipient email address"},
                 "subject": {"type": "STRING", "description": "Email subject line"},
                 "body": {"type": "STRING", "description": "Email body content"},
+                "thread_id": {"type": "STRING", "description": "Optional Gmail thread ID"},
+                "in_reply_to": {"type": "STRING", "description": "Optional RFC 2822 In-Reply-To header"},
+                "references": {"type": "STRING", "description": "Optional RFC 2822 References header"},
+                "attachments": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Optional authorized file paths to attach"},
+                "idempotency_key": {"type": "STRING", "description": "Optional idempotency key to prevent duplicate sends"},
             },
             "required": ["to", "subject", "body"],
         },
         capability_tier=CapabilityTier.NETWORK_EXTERNAL,
         handler=_send_email_handler,
+        is_mutating=True,
+    ))
+
+    # 9b. reply_email (Approval Gated via PolicyEngine)
+    def _reply_email_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        import os
+        msg_id = str(params.get("message_id") or "").strip()
+        body = str(params.get("body") or "")
+        to_override = str(params.get("to") or "").strip() or None
+        subject_override = str(params.get("subject") or "").strip() or None
+        idempotency_key = str(params.get("idempotency_key") or "").strip() or None
+        raw_atts = params.get("attachments")
+        att_paths = list(raw_atts) if isinstance(raw_atts, (list, tuple)) else []
+
+        if not msg_id or not body:
+            return ToolResult(status="failed", error="Missing required parameters: message_id, body")
+
+        loaded_atts, att_err = _load_safe_email_attachments(att_paths)
+        if att_err:
+            return ToolResult(status="failed", error=att_err, evidence={"error_code": "attachment_rejected"})
+
+        if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
+            return ToolResult(
+                status="done",
+                output=f"Reply sent successfully to message '{msg_id}'.",
+                evidence={
+                    "reply_to_message_id": msg_id,
+                    "thread_id": f"thread_{msg_id}",
+                    "verified": True,
+                    "attachments": [a["filename"] for a in loaded_atts],
+                    "timestamp": time.time(),
+                    "mode": "mock",
+                },
+            )
+
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        if not accounts:
+            return ToolResult(status="failed", error="No connected Gmail account available to reply to email.")
+        from core.personal_intelligence.providers.gmail import GmailAdapter
+        adapter = GmailAdapter(account=accounts[0])
+        res = adapter.reply_to_message(
+            message_id=msg_id,
+            body=body,
+            to=to_override,
+            subject=subject_override,
+            attachments=loaded_atts or None,
+            idempotency_key=idempotency_key,
+        )
+        if not res.get("success"):
+            return ToolResult(
+                status="failed",
+                error=str(res.get("error") or "Failed to send reply via Gmail API."),
+                evidence={
+                    "reply_to_message_id": msg_id,
+                    "error_code": res.get("error_code", "reply_failed"),
+                    "error": res.get("error"),
+                },
+            )
+        return ToolResult(
+            status="done",
+            output=(
+                f"Reply sent successfully to '{res.get('to', '')}' in thread '{res.get('thread_id', '')}' "
+                f"(message_id={res.get('message_id', '')}, verified={res.get('verified', False)})."
+            ),
+            evidence={
+                "reply_to_message_id": msg_id,
+                "to": res.get("to", ""),
+                "subject": res.get("subject", ""),
+                "message_id": res.get("message_id", ""),
+                "thread_id": res.get("thread_id", ""),
+                "labels": res.get("labels", []),
+                "verified": res.get("verified", False),
+                "attachments": [a["filename"] for a in loaded_atts],
+                "timestamp": time.time(),
+            },
+        )
+
+    registry.register(ToolDefinition(
+        name="reply_email",
+        description="Reply to an existing Gmail message preserving thread and RFC 2822 reply headers (MANDATORY APPROVAL REQUIRED).",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "message_id": {"type": "STRING", "description": "Original Gmail message ID to reply to"},
+                "body": {"type": "STRING", "description": "Reply body content"},
+                "to": {"type": "STRING", "description": "Optional recipient override"},
+                "subject": {"type": "STRING", "description": "Optional subject override"},
+                "attachments": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Optional authorized file paths to attach"},
+                "idempotency_key": {"type": "STRING", "description": "Optional idempotency key to prevent duplicate sends"},
+            },
+            "required": ["message_id", "body"],
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_reply_email_handler,
         is_mutating=True,
     ))
 

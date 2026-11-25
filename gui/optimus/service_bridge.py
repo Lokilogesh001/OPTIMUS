@@ -1123,6 +1123,75 @@ class OptimusServiceBridge(QObject):
         if self._active_task_id:
             self.orchestrator.cancel_task(self._active_task_id)
 
+    def get_active_task_status(self) -> dict[str, Any]:
+        """Return authoritative task state from TaskStore (shared with backend orchestrator)."""
+        task_store = getattr(self.orchestrator, "task_store", None)
+        rec = None
+        if task_store is not None:
+            if self._active_task_id:
+                rec = task_store.get_task(self._active_task_id)
+            if rec is None:
+                recent = task_store.list_tasks(limit=1)
+                rec = recent[0] if recent else None
+        if rec is None:
+            return {
+                "task_id": self._active_task_id or "",
+                "goal": self._active_task_goal or "",
+                "status": "IDLE",
+                "current_stage": "IDLE",
+                "retry_count": 0,
+                "max_retries": 0,
+                "error": None,
+                "subtasks": [],
+                "waiting_for_approval": False,
+            }
+        subtasks = []
+        if getattr(rec, "plan", None) and getattr(rec.plan, "subtasks", None):
+            subtasks = [
+                {
+                    "subtask_id": st.subtask_id,
+                    "title": st.title,
+                    "agent": st.assigned_agent,
+                    "status": st.status.value if hasattr(st.status, "value") else str(st.status),
+                    "error": st.error,
+                }
+                for st in rec.plan.subtasks
+            ]
+        status_val = rec.status.value if hasattr(rec.status, "value") else str(rec.status)
+        return {
+            "task_id": rec.task_id,
+            "goal": rec.goal,
+            "status": status_val,
+            "current_stage": rec.current_stage,
+            "retry_count": rec.retry_count,
+            "max_retries": rec.max_retries,
+            "error": rec.error,
+            "result": rec.result,
+            "duration_seconds": rec.duration_seconds,
+            "subtasks": subtasks,
+            "waiting_for_approval": status_val == "WAITING_FOR_APPROVAL",
+        }
+
+    def list_recent_tasks(self, limit: int = 15) -> list[dict[str, Any]]:
+        """Return recent authoritative task records from TaskStore."""
+        task_store = getattr(self.orchestrator, "task_store", None)
+        if task_store is None:
+            return []
+        tasks = task_store.list_tasks(limit=limit)
+        return [
+            {
+                "task_id": t.task_id,
+                "goal": t.goal,
+                "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+                "current_stage": t.current_stage,
+                "retry_count": t.retry_count,
+                "max_retries": t.max_retries,
+                "error": t.error,
+                "duration_seconds": t.duration_seconds,
+            }
+            for t in tasks
+        ]
+
     def pause_workflow(self, execution_id: str) -> None:
         wf_engine = getattr(self.orchestrator, "workflow_engine", None)
         if wf_engine:

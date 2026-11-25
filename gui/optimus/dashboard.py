@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QFrame,
@@ -29,6 +29,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.optimus.animation import AnimationManager
+from gui.optimus.animation.animation_config import (
+    DEFAULT_WIDGET_MIN_HEIGHT,
+    DEFAULT_WIDGET_MIN_WIDTH,
+)
 from gui.optimus.service_bridge import OptimusServiceBridge
 from gui.style import btn_css, mono_font, px_font, scroll_css
 from gui.theme import C
@@ -104,10 +109,16 @@ class TelemetryMetricBar(QWidget):
 class OptimusDashboardView(QWidget):
     """The central multi-module OPTIMUS HUD dashboard."""
 
+    open_execution_graph_requested = pyqtSignal()
+
     def __init__(self, bridge: OptimusServiceBridge, parent=None):
         super().__init__(parent)
         self.bridge = bridge
         self.setStyleSheet(f"background: {C.BG};")
+
+        # Initialize Cinematic Animation Subsystem
+        self.animation_manager = AnimationManager(self)
+        self.animation_manager.connect_service_bridge(self.bridge)
 
         # Root Scroll Area to guarantee responsiveness
         scroll = QScrollArea(self)
@@ -127,7 +138,7 @@ class OptimusDashboardView(QWidget):
         scroll.setWidget(container)
 
         # ── 1. Top Horizon: Assistant Conversation & Directive Center ────────
-        self.panel_cmd = HoloPanel("ASSISTANT CONVERSATION & DIRECTIVE STREAM", "JARVIS_CORE")
+        self.panel_cmd = HoloPanel("ASSISTANT CONVERSATION & DIRECTIVE STREAM", "OPTIMUS_CORE")
         self._build_conversation_hub(self.panel_cmd.body)
         main_lay.addWidget(self.panel_cmd)
 
@@ -195,6 +206,13 @@ class OptimusDashboardView(QWidget):
     # ── Module 1: Conversation & Directive Input Hub ─────────────────────────
 
     def _build_conversation_hub(self, lay: QVBoxLayout) -> None:
+        hub_split = QHBoxLayout()
+        hub_split.setSpacing(12)
+
+        # Left Column: Conversation Input & Terminal Stream
+        left_box = QVBoxLayout()
+        left_box.setSpacing(6)
+
         # Status header row
         hdr_row = QHBoxLayout()
         hdr_row.setSpacing(8)
@@ -215,14 +233,14 @@ class OptimusDashboardView(QWidget):
         self.cmd_time_lbl.setFont(mono_font(9))
         self.cmd_time_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
         hdr_row.addWidget(self.cmd_time_lbl)
-        lay.addLayout(hdr_row)
+        left_box.addLayout(hdr_row)
 
         # Active goal label
         self.active_goal_lbl = QLabel("No active task executing. Enter natural language directive below.")
         self.active_goal_lbl.setFont(px_font(10))
         self.active_goal_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: {C.PANEL2}; border: 1px solid {C.BORDER}; padding: 6px 10px; border-radius: 4px;")
         self.active_goal_lbl.setWordWrap(True)
-        lay.addWidget(self.active_goal_lbl)
+        left_box.addWidget(self.active_goal_lbl)
 
         # Transcript stream container (Mandate M-5: StreamConsoleWidget)
         self.chat_transcript = StreamConsoleWidget(self)
@@ -233,7 +251,7 @@ class OptimusDashboardView(QWidget):
             "Autonomous Agentic AI Assistant ready. Directives are validated via policy engine.",
             tag="sys",
         )
-        lay.addWidget(self.chat_transcript)
+        left_box.addWidget(self.chat_transcript)
 
         # Command input row
         in_row = QHBoxLayout()
@@ -276,7 +294,25 @@ class OptimusDashboardView(QWidget):
         self.btn_cancel.setStyleSheet(btn_css("danger"))
         self.btn_cancel.clicked.connect(self._cancel_task)
         in_row.addWidget(self.btn_cancel)
-        lay.addLayout(in_row)
+        left_box.addLayout(in_row)
+
+        hub_split.addLayout(left_box, stretch=1)
+
+        # Right Column: Cinematic Holographic AI Core HUD
+        right_box = QVBoxLayout()
+        right_box.setSpacing(6)
+        self.anim_core_widget = self.animation_manager.create_core_widget(self)
+        self.anim_core_widget.setMinimumSize(DEFAULT_WIDGET_MIN_WIDTH, DEFAULT_WIDGET_MIN_HEIGHT)
+        right_box.addWidget(self.anim_core_widget)
+
+        # Live Real-Time Voice Waveform beneath Core
+        self.anim_voice_widget = self.animation_manager.create_voice_widget(self)
+        self.anim_voice_widget.setMinimumHeight(48)
+        self.anim_voice_widget.setMaximumHeight(72)
+        right_box.addWidget(self.anim_voice_widget)
+
+        hub_split.addLayout(right_box)
+        lay.addLayout(hub_split)
 
     def _submit_task(self) -> None:
         text = self.cmd_input.text().strip()
@@ -313,6 +349,12 @@ class OptimusDashboardView(QWidget):
         self.btn_appr_gate.setFont(px_font(9, QFont.Weight.Medium))
         self.btn_appr_gate.setStyleSheet(btn_css("dim"))
         ctrl_row.addWidget(self.btn_appr_gate)
+
+        self.btn_open_exec_graph = QPushButton("Execution Graph")
+        self.btn_open_exec_graph.setFont(px_font(9, QFont.Weight.Medium))
+        self.btn_open_exec_graph.setStyleSheet(btn_css("dim"))
+        self.btn_open_exec_graph.clicked.connect(self.open_execution_graph_requested.emit)
+        ctrl_row.addWidget(self.btn_open_exec_graph)
         lay.addLayout(ctrl_row)
 
         self.wf_dag_scroll = QScrollArea()
@@ -591,31 +633,42 @@ class OptimusDashboardView(QWidget):
         self.bridge.task_completed.connect(self._on_bridge_task_completed)
         self.bridge.task_failed.connect(self._on_bridge_task_failed)
         self.bridge.task_cancelled.connect(self._on_bridge_task_cancelled)
+        self.bridge.subtask_delegated.connect(lambda _d: self.sync_authoritative_task_state())
+        self.bridge.subtask_completed.connect(lambda _d: self.sync_authoritative_task_state())
+        self.bridge.subtask_failed.connect(lambda _d: self.sync_authoritative_task_state())
 
         self.bridge.approval_requested.connect(self._on_approval_change)
         self.bridge.approval_resolved.connect(self._on_approval_change)
 
     def _on_bridge_task_created(self, d: dict) -> None:
         self._on_task_state("RUNNING", d.get("goal", ""))
+        self.sync_authoritative_task_state()
 
     def _on_bridge_task_completed(self, d: dict) -> None:
         self._on_task_state("COMPLETED", d.get("result", ""))
+        self.sync_authoritative_task_state()
 
     def _on_bridge_task_failed(self, d: dict) -> None:
         self._on_task_state("FAILED", d.get("error", ""))
+        self.sync_authoritative_task_state()
 
     def _on_bridge_task_cancelled(self, d: dict) -> None:
         self._on_task_state("CANCELLED", d.get("reason", ""))
+        self.sync_authoritative_task_state()
 
     def _on_task_state(self, status: str, text: str) -> None:
-        self.cmd_status_lbl.setText(status)
-        if status == "COMPLETED":
+        st_upper = str(status or "IDLE").upper()
+        self.cmd_status_lbl.setText(st_upper)
+        if st_upper == "COMPLETED":
             st_color = C.GREEN
             bg_color = "rgba(16, 185, 129, 0.12)"
-        elif status == "FAILED":
+        elif st_upper in ("FAILED", "PARTIAL"):
             st_color = C.RED
             bg_color = "rgba(239, 68, 68, 0.12)"
-        elif status == "RUNNING":
+        elif st_upper in ("WAITING_FOR_APPROVAL", "RECOVERING", "CANCELLED"):
+            st_color = C.ACC
+            bg_color = "rgba(245, 158, 11, 0.12)"
+        elif st_upper in ("RUNNING", "EXECUTING", "PLANNING", "VERIFYING"):
             st_color = C.PRI
             bg_color = "rgba(0, 132, 255, 0.12)"
         else:
@@ -626,8 +679,60 @@ class OptimusDashboardView(QWidget):
         if text:
             self.active_goal_lbl.setText(text)
             self.chat_transcript.append(
-                f"<font color='{st_color}'><b>[{status}]</b></font> <font color='{C.WHITE}'>{text[:180]}</font>"
+                f"<font color='{st_color}'><b>[{st_upper}]</b></font> <font color='{C.WHITE}'>{text[:180]}</font>"
             )
+
+    def sync_authoritative_task_state(self) -> None:
+        """Sync UI task status, recovery retries, approval state, and subtasks from authoritative backend TaskStore."""
+        if not hasattr(self.bridge, "get_active_task_status"):
+            return
+        state = self.bridge.get_active_task_status()
+        status = str(state.get("status") or "IDLE").upper()
+        retry_count = int(state.get("retry_count") or 0)
+        max_retries = int(state.get("max_retries") or 0)
+        badge_text = status
+        if status == "RECOVERING" and max_retries > 0:
+            badge_text = f"RECOVERING ({retry_count}/{max_retries})"
+        elif status == "WAITING_FOR_APPROVAL":
+            badge_text = "WAITING FOR APPROVAL"
+
+        self.cmd_status_lbl.setText(badge_text)
+        if status == "COMPLETED":
+            st_color, bg_color = C.GREEN, "rgba(16, 185, 129, 0.12)"
+        elif status in ("FAILED", "PARTIAL"):
+            st_color, bg_color = C.RED, "rgba(239, 68, 68, 0.12)"
+        elif status in ("WAITING_FOR_APPROVAL", "RECOVERING", "CANCELLED"):
+            st_color, bg_color = C.ACC, "rgba(245, 158, 11, 0.12)"
+        elif status in ("RUNNING", "EXECUTING", "PLANNING", "VERIFYING"):
+            st_color, bg_color = C.PRI, "rgba(0, 132, 255, 0.12)"
+        else:
+            st_color, bg_color = C.TEXT_MED, C.PANEL2
+        self.cmd_status_lbl.setStyleSheet(
+            f"color: {st_color}; background: {bg_color}; border: 1px solid {st_color}; padding: 2px 8px; border-radius: 3px;"
+        )
+
+        goal = str(state.get("goal") or "").strip()
+        err = str(state.get("error") or "").strip()
+        if status == "WAITING_FOR_APPROVAL":
+            self.active_goal_lbl.setText(f"Approval required: {goal}" if goal else "Approval required before execution.")
+        elif err and status in ("FAILED", "PARTIAL", "CANCELLED"):
+            self.active_goal_lbl.setText(f"{status}: {err[:140]}")
+        elif goal:
+            retry_note = f" [retry {retry_count}/{max_retries}]" if retry_count > 0 else ""
+            self.active_goal_lbl.setText(f"{goal}{retry_note}")
+
+        subtasks = state.get("subtasks") or []
+        if subtasks:
+            self.wf_active_title.setText(goal[:60] if goal else "ACTIVE TASK")
+            dag_items = [
+                {
+                    "step_id": st.get("title") or st.get("subtask_id", "step"),
+                    "assigned_agent": st.get("agent", "agent"),
+                    "status": st.get("status", "PENDING"),
+                }
+                for st in subtasks
+            ]
+            self.update_workflow_dag(dag_items)
 
     def _on_approval_change(self, _) -> None:
         pending = self.bridge.get_pending_approvals()
@@ -636,6 +741,7 @@ class OptimusDashboardView(QWidget):
             self.btn_appr_gate.setStyleSheet(btn_css("on"))
         else:
             self.btn_appr_gate.setStyleSheet(btn_css("dim"))
+        self.sync_authoritative_task_state()
 
     def refresh_all(self) -> None:
         """Trigger sync across all bridge telemetry sources."""
@@ -643,3 +749,29 @@ class OptimusDashboardView(QWidget):
         self.update_agents_list(self.bridge.get_agents_status())
         self.update_telemetry(self.bridge.get_system_telemetry() if hasattr(self.bridge, "get_system_telemetry") else {})
         self._on_approval_change(None)
+        self.sync_authoritative_task_state()
+
+    # ── Animation Lifecycle & Polling Hooks (M-02) ───────────────────────────
+
+    def pause_polling(self) -> None:
+        """Pause animations and heavy rendering when navigated away from Dashboard."""
+        if hasattr(self, "animation_manager"):
+            self.animation_manager.pause_all()
+
+    def resume_polling(self) -> None:
+        """Resume animations when navigated to Dashboard."""
+        if hasattr(self, "animation_manager"):
+            self.animation_manager.resume_all()
+
+    def hideEvent(self, event) -> None:
+        self.pause_polling()
+        super().hideEvent(event)
+
+    def showEvent(self, event) -> None:
+        self.resume_polling()
+        super().showEvent(event)
+
+    def closeEvent(self, event) -> None:
+        if hasattr(self, "animation_manager"):
+            self.animation_manager.shutdown()
+        super().closeEvent(event)

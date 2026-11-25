@@ -567,6 +567,25 @@ class MainWindow(QMainWindow):
                             except Exception:
                                 pass
 
+    def closeEvent(self, event) -> None:
+        """Cascade graceful teardown to embedded control center, bridge, and audio player."""
+        if hasattr(self, "_optimus_control_center") and self._optimus_control_center:
+            try:
+                self._optimus_control_center.closeEvent(event)
+            except Exception:
+                pass
+        try:
+            from gui.optimus.service_bridge import OptimusServiceBridge
+            OptimusServiceBridge.reset()
+        except Exception:
+            pass
+        try:
+            from core.audio_stream import ContinuousAudioStreamPlayer
+            ContinuousAudioStreamPlayer.reset_instance()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""
         self._cam_preview.show_frame(img_bytes)
@@ -1030,7 +1049,7 @@ class MainWindow(QMainWindow):
             sc.TargetPath       = target
             sc.Arguments        = f'"{args}"'
             sc.WorkingDirectory = work_dir
-            sc.Description      = "J.A.R.V.I.S AI Assistant"
+            sc.Description      = "OPTIMUS — Autonomous AI System"
             sc.IconLocation     = icon_loc
             sc.save()
             return
@@ -1045,7 +1064,7 @@ class MainWindow(QMainWindow):
             f'sc.TargetPath = "{target}"',
             f'sc.Arguments = Chr(34) & "{args}" & Chr(34)',
             f'sc.WorkingDirectory = "{work_dir}"',
-            'sc.Description = "J.A.R.V.I.S AI Assistant"',
+            'sc.Description = "OPTIMUS — Autonomous AI System"',
             f'sc.IconLocation = "{icon_loc}"',
             'sc.Save',
         ])
@@ -1166,16 +1185,20 @@ class MainWindow(QMainWindow):
 
             # ── Windows ───────────────────────────────────────────────────────
             if _os == "Windows":
-                pythonw  = python.parent / "pythonw.exe"
-                target   = str(pythonw if pythonw.exists() else python)
-                lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
-                self._create_lnk_windows(lnk, target, str(script),
-                                         str(script.parent), icon_loc)
+                from core.runtime.startup import DesktopShortcutManager
+                if not ico_path.exists():
+                    self._build_jarvis_icon(ico_path)
+                res = DesktopShortcutManager.create_shortcut(
+                    project_root=Path(__file__).resolve().parent.parent,
+                    desktop_dir=desktop,
+                    python_exe=python,
+                )
+                if not res.get("success"):
+                    raise RuntimeError(res.get("error", "Failed to create OPTIMUS.lnk"))
 
             # ── macOS — proper .app bundle (no Terminal window) ───────────────
             elif _os == "Darwin":
-                app     = desktop / "J.A.R.V.I.S.app"
+                app     = desktop / "OPTIMUS.app"
                 mac_dir = app / "Contents" / "MacOS"
                 res_dir = app / "Contents" / "Resources"
                 mac_dir.mkdir(parents=True, exist_ok=True)
@@ -1183,7 +1206,7 @@ class MainWindow(QMainWindow):
 
                 # Launcher executable (bash — runs as background process,
                 # macOS does NOT open Terminal for executables inside .app bundles)
-                launcher = mac_dir / "JARVIS"
+                launcher = mac_dir / "OPTIMUS"
                 launcher.write_text(
                     "#!/usr/bin/env bash\n"
                     f'cd "{script.parent}"\n'
@@ -1198,10 +1221,10 @@ class MainWindow(QMainWindow):
                     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                     '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                     '<plist version="1.0"><dict>\n'
-                    '  <key>CFBundleExecutable</key><string>JARVIS</string>\n'
+                    '  <key>CFBundleExecutable</key><string>OPTIMUS</string>\n'
                     '  <key>CFBundleIdentifier</key>'
-                    '<string>com.jarvis.assistant</string>\n'
-                    '  <key>CFBundleName</key><string>J.A.R.V.I.S</string>\n'
+                    '<string>com.optimus.assistant</string>\n'
+                    '  <key>CFBundleName</key><string>OPTIMUS</string>\n'
                     '  <key>CFBundlePackageType</key><string>APPL</string>\n'
                     '  <key>CFBundleVersion</key><string>1.0</string>\n'
                     '</dict></plist>\n'
@@ -1239,10 +1262,10 @@ class MainWindow(QMainWindow):
                         png_path = ico_path  # fallback to .ico
 
                 icon_line = f"Icon={png_path}\n" if png_path.exists() else ""
-                desk = desktop / "J.A.R.V.I.S.desktop"
+                desk = desktop / "OPTIMUS.desktop"
                 desk.write_text(
                     "[Desktop Entry]\n"
-                    "Name=J.A.R.V.I.S\n"
+                    "Name=OPTIMUS\n"
                     f"Exec={python} {script}\n"
                     f"Path={script.parent}\n"
                     "Type=Application\n"
@@ -1436,7 +1459,7 @@ class MainWindow(QMainWindow):
     def _subtitle(display: str) -> str:
         d = display.replace(".", "").strip().upper()
         if d == "OPTIMUS":
-            return "Autonomous Intelligence & Verification System"
+            return "Autonomous AI System"
         if d == "JARVIS":
             return "Just A Rather Very Intelligent System"
         return "Personal AI Assistant"
@@ -2419,7 +2442,7 @@ class MainWindow(QMainWindow):
     def _build_footer(self) -> QWidget:
         self._status_strip = StatusStrip()
         self._status_strip.set_right(
-            "F4 MUTE   ·   F11 FULLSCREEN   ·   ESC INTERRUPT   ·   BY FATIHMAKES")
+            "F4 MUTE   ·   F11 FULLSCREEN   ·   ESC INTERRUPT   ·   BY LOKI")
         self._refresh_status_strip()
         return self._status_strip
 
@@ -2498,79 +2521,27 @@ class MainWindow(QMainWindow):
     def _check_autostart(self) -> bool:
         """Returns True if auto-start is currently registered on this OS."""
         try:
-            if _OS == "Windows":
-                import winreg
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                    r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
-                try:
-                    winreg.QueryValueEx(key, "JARVIS_AI")
-                    return True
-                except FileNotFoundError:
-                    return False
-                finally:
-                    winreg.CloseKey(key)
-            elif _OS == "Darwin":
-                return (Path.home() / "Library" / "LaunchAgents"
-                        / "com.jarvis.assistant.plist").exists()
-            else:
-                return (Path.home() / ".config" / "autostart" / "jarvis.desktop").exists()
+            from core.runtime.startup import AutoStartManager
+            return AutoStartManager.is_enabled()
         except Exception:
             return False
 
     def _toggle_autostart(self):
         currently_on = self._check_autostart()
         try:
-            script = str(Path(__file__).resolve().parent.parent / "main.py")
-            if _OS == "Windows":
-                import winreg
-                reg = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                    r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
-                if currently_on:
-                    winreg.DeleteValue(reg, "JARVIS_AI")
-                else:
-                    pythonw = Path(sys.executable).parent / "pythonw.exe"
-                    exe = str(pythonw if pythonw.exists() else sys.executable)
-                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ,
-                                      f'"{exe}" "{script}"')
-                winreg.CloseKey(reg)
-            elif _OS == "Darwin":
-                plist_dir = Path.home() / "Library" / "LaunchAgents"
-                plist_dir.mkdir(parents=True, exist_ok=True)
-                plist = plist_dir / "com.jarvis.assistant.plist"
-                if currently_on:
-                    plist.unlink(missing_ok=True)
-                else:
-                    plist.write_text(
-                        '<?xml version="1.0" encoding="UTF-8"?>\n'
-                        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
-                        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
-                        '<plist version="1.0"><dict>\n'
-                        '  <key>Label</key><string>com.jarvis.assistant</string>\n'
-                        '  <key>ProgramArguments</key><array>\n'
-                        f'    <string>{sys.executable}</string>\n'
-                        f'    <string>{script}</string>\n'
-                        '  </array>\n'
-                        '  <key>RunAtLoad</key><true/>\n'
-                        '</dict></plist>\n'
-                    )
+            from core.runtime.startup import AutoStartManager
+            if currently_on:
+                AutoStartManager.disable()
             else:
-                desk_dir = Path.home() / ".config" / "autostart"
-                desk_dir.mkdir(parents=True, exist_ok=True)
-                desk = desk_dir / "jarvis.desktop"
-                if currently_on:
-                    desk.unlink(missing_ok=True)
-                else:
-                    desk.write_text(
-                        "[Desktop Entry]\n"
-                        f"Name={self._assistant_name}\n"
-                        f"Exec={sys.executable} {script}\n"
-                        "Type=Application\nTerminal=false\n"
-                        "X-GNOME-Autostart-enabled=true\n"
-                    )
-            enabled = not currently_on
-            self._update_autostart_btn(enabled)
+                AutoStartManager.enable(
+                    project_root=Path(__file__).resolve().parent.parent,
+                    python_exe=Path(sys.executable),
+                )
+            now_on = self._check_autostart()
+            self._update_autostart_btn(now_on)
             self._log.append_log(
-                f"SYS: Auto-start {'enabled' if enabled else 'disabled'}.")
+                f"SYS: Auto-start {'enabled (OPTIMUS_AI)' if now_on else 'disabled'}."
+            )
         except Exception as e:
             self._log.append_log(f"ERR: Auto-start failed — {e}")
 
@@ -3066,8 +3037,11 @@ class MainWindow(QMainWindow):
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
 
     def _apply_state(self, state: str):
-        self.hud.state    = state
-        self.hud.speaking = (state == "SPEAKING")
+        if hasattr(self, "web_shell"):
+            self.web_shell.set_state(state)
+        if hasattr(self, "hud") and self.hud:
+            self.hud.state    = state
+            self.hud.speaking = (state == "SPEAKING")
         if hasattr(self, "_state_chip"):
             self._state_chip.set_state(state)
 

@@ -225,8 +225,89 @@ def apply_ui_accent(accent_hex: str) -> bool:
         if grey:
             s *= 0.15
         r, g, b = colorsys.hsv_to_rgb((h + dh) % 1.0, s, v)
-        setattr(C, key, f"#{int(r * 255 + 0.5):02x}{int(g * 255 + 0.5):02x}{int(b * 255 + 0.5):02x}")
+        new_val = f"#{int(r * 255 + 0.5):02x}{int(g * 255 + 0.5):02x}{int(b * 255 + 0.5):02x}"
+        setattr(C, key, new_val)
+        if key == "BG":
+            OptimusTheme.BG_BASE = new_val
+            OptimusTheme.BG = new_val
+            C.BG_BASE = new_val
+        elif key == "PANEL":
+            OptimusTheme.BG_PANEL = new_val
+            OptimusTheme.PANEL = new_val
+            C.BG_PANEL = new_val
+        elif key == "PANEL2":
+            OptimusTheme.BG_ELEVATED = new_val
+            OptimusTheme.PANEL2 = new_val
+            C.BG_ELEVATED = new_val
+        elif key == "PRI":
+            OptimusTheme.ACCENT_PRI = new_val
+            OptimusTheme.PRI = new_val
+            C.ACCENT_PRI = new_val
+        elif key == "BORDER":
+            OptimusTheme.BORDER_HAIRLINE = new_val
+            OptimusTheme.BORDER = new_val
+            C.BORDER_HAIRLINE = new_val
+        elif key == "BORDER_B":
+            OptimusTheme.BORDER_ACTIVE = new_val
+            OptimusTheme.BORDER_B = new_val
+            C.BORDER_ACTIVE = new_val
     return True
+
+
+_ORIGINAL_PALETTE_CONSTANTS: dict[str, str] = {
+    "BG": "#070b14",
+    "PANEL": "#0c1322",
+    "PANEL2": "#111a2e",
+    "PANEL_HEAD": "#0f172a",
+    "BORDER": "#1e293b",
+    "BORDER_B": "#334155",
+    "BORDER_A": "#1e293b",
+    "PRI": "#0084ff",
+    "PRI_DIM": "#005bb5",
+    "PRI_GHO": "#0b1c33",
+    "ACC": "#f59e0b",
+    "ACC2": "#38bdf8",
+    "GREEN": "#10b981",
+    "GREEN_D": "#059669",
+    "RED": "#ef4444",
+    "MUTED_C": "#f43f5e",
+    "TEXT": "#f1f5f9",
+    "TEXT_DIM": "#64748b",
+    "TEXT_MED": "#94a3b8",
+    "WHITE": "#f8fafc",
+    "DARK": "#05080f",
+    "BAR_BG": "#0f1728",
+}
+
+
+def restore_default_palette() -> None:
+    """Restore all palette tokens to their original static constants."""
+    for key, val in _ORIGINAL_PALETTE_CONSTANTS.items():
+        setattr(C, key, val)
+    OptimusTheme.BG_BASE = C.BG
+    OptimusTheme.BG = C.BG
+    OptimusTheme.BG_PANEL = C.PANEL
+    OptimusTheme.PANEL = C.PANEL
+    OptimusTheme.BG_ELEVATED = C.PANEL2
+    OptimusTheme.PANEL2 = C.PANEL2
+    OptimusTheme.BG_HEADER = C.PANEL_HEAD
+    OptimusTheme.PANEL_HEAD = C.PANEL_HEAD
+    OptimusTheme.ACCENT_PRI = C.PRI
+    OptimusTheme.PRI = C.PRI
+    OptimusTheme.ACCENT_CYAN = C.ACC2
+    OptimusTheme.ACC2 = C.ACC2
+    OptimusTheme.BORDER_HAIRLINE = C.BORDER
+    OptimusTheme.BORDER = C.BORDER
+    OptimusTheme.BORDER_ACTIVE = C.BORDER_B
+    OptimusTheme.BORDER_B = C.BORDER_B
+    OptimusTheme.TEXT_PRIMARY = C.TEXT
+    OptimusTheme.TEXT = C.TEXT
+    OptimusTheme.TEXT_SECONDARY = C.TEXT_MED
+    OptimusTheme.TEXT_MED = C.TEXT_MED
+    OptimusTheme.TEXT_MUTED = C.TEXT_DIM
+    OptimusTheme.TEXT_DIM = C.TEXT_DIM
+    OptimusTheme.TRACK_BG = C.BAR_BG
+    OptimusTheme.BAR_BG = C.BAR_BG
 
 
 def current_palette() -> dict[str, str]:
