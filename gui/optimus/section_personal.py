@@ -19,7 +19,7 @@ import threading
 import time
 import webbrowser
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -197,8 +197,13 @@ class GoogleCredentialsDialog(QDialog):
 class SectionPersonal(QWidget):
     """Unified Personal Life Intelligence surface for OPTIMUS."""
 
+    _oauth_succeeded = pyqtSignal(object)
+    _oauth_failed = pyqtSignal(str)
+
     def __init__(self, bridge: OptimusServiceBridge | None = None, parent=None):
         super().__init__(parent)
+        self._oauth_succeeded.connect(self._on_oauth_success)
+        self._oauth_failed.connect(self._on_oauth_failed)
         self.bridge = bridge or OptimusServiceBridge.instance()
         self.store = PersonalStore.instance()
         self.engine = PersonalIntelligenceEngine(store=self.store)
@@ -983,7 +988,7 @@ class SectionPersonal(QWidget):
 
                 if not cb_result.get("success"):
                     err = cb_result.get("error", "OAuth timeout or rejection.")
-                    QTimer.singleShot(0, lambda msg=err: self._on_oauth_failed(msg))
+                    self._oauth_failed.emit(err)
                     return
 
                 token_data = mgr.exchange_code(
@@ -1002,12 +1007,12 @@ class SectionPersonal(QWidget):
                 except Exception as sync_ex:  # noqa: BLE001
                     logger.warning("Initial sync exception: %s", sync_ex)
 
-                QTimer.singleShot(0, lambda acc=account: self._on_oauth_success(acc))
+                self._oauth_succeeded.emit(account)
             except Exception as ex:  # noqa: BLE001
                 err_str = str(ex)
                 logger.error("OAuth loopback / exchange failure: %s", err_str)
                 mgr.stop_loopback_listener()
-                QTimer.singleShot(0, lambda msg=err_str: self._on_oauth_failed(msg))
+                self._oauth_failed.emit(err_str)
 
         threading.Thread(target=_worker, daemon=True).start()
         webbrowser.open(session["auth_url"])

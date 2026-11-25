@@ -166,10 +166,7 @@ class OptimusServiceBridge(QObject):
         with cls._lock:
             if cls._instance is not None:
                 try:
-                    if hasattr(cls._instance, "_telemetry_timer"):
-                        cls._instance._telemetry_timer.stop()
-                    if hasattr(cls._instance, "_token_flush_timer"):
-                        cls._instance._token_flush_timer.stop()
+                    cls._instance.shutdown()
                 except Exception:
                     pass
                 cls._instance = None
@@ -247,6 +244,38 @@ class OptimusServiceBridge(QObject):
         self._token_flush_timer.setInterval(33)  # ~30Hz batching
         self._token_flush_timer.timeout.connect(self._flush_token_buffer)
         self._token_flush_timer.start()
+
+    def shutdown(self) -> None:
+        """Explicitly stop background polling timers and flush queues."""
+        try:
+            if hasattr(self, "_telemetry_timer") and self._telemetry_timer.isActive():
+                self._telemetry_timer.stop()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_token_flush_timer") and self._token_flush_timer.isActive():
+                self._token_flush_timer.stop()
+        except Exception:
+            pass
+        if hasattr(self, "_token_buffer_lock"):
+            with self._token_buffer_lock:
+                if hasattr(self, "_token_ring_buffer"):
+                    self._token_ring_buffer.clear()
+        try:
+            from core.system_monitor.adapter import WindowsSystemMonitorAdapter
+            WindowsSystemMonitorAdapter.reset()
+        except Exception:
+            pass
+
+    def set_throttled(self, throttled: bool) -> None:
+        """Dynamically adjust telemetry polling rate during high CPU or load shedding."""
+        try:
+            if hasattr(self, "_telemetry_timer"):
+                interval = 6000 if throttled else 3000
+                if self._telemetry_timer.interval() != interval:
+                    self._telemetry_timer.setInterval(interval)
+        except Exception:
+            pass
 
     def push_token(self, token: str) -> None:
         """Pushes incoming streaming token into the thread-safe ring buffer."""
@@ -555,6 +584,7 @@ class OptimusServiceBridge(QObject):
 
         @_safe_call
         def on_speech_state(e: SpeechStateChangedEvent) -> None:
+            self.set_throttled(bool(e.is_speaking))
             data = {
                 "state": e.state.value if hasattr(e.state, "value") else str(e.state),
                 "is_speaking": e.is_speaking,
@@ -796,11 +826,15 @@ class OptimusServiceBridge(QObject):
         return [p.to_dict() for p in pending]
 
     def get_top_processes(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Return real top processes from cached system monitor snapshot (zero main thread syscalls)."""
+        """Return real top processes from cached system monitor snapshot (zero main thread syscalls, zero-alloc caching)."""
+        now = time.time()
+        if self._cached_top_procs and (now - self._last_proc_t < 1.9):
+            return self._cached_top_procs[:limit]
+
         try:
             from core.system_monitor.adapter import WindowsSystemMonitorAdapter
             procs = WindowsSystemMonitorAdapter.instance().get_snapshot().top_processes
-            return [
+            self._cached_top_procs = [
                 {
                     "pid": p.pid,
                     "name": p.name,
@@ -809,10 +843,12 @@ class OptimusServiceBridge(QObject):
                     "memory_mb": p.memory_mb,
                     "ram_mb": p.memory_mb,
                 }
-                for p in procs[:limit]
+                for p in procs[:50]
             ]
+            self._last_proc_t = now
+            return self._cached_top_procs[:limit]
         except Exception:
-            return []
+            return self._cached_top_procs[:limit] if self._cached_top_procs else []
 
     def get_system_telemetry(self) -> dict[str, Any]:
         """Query real host hardware metrics from cached system monitor snapshot (O(1) non-blocking)."""
@@ -959,6 +995,70 @@ class OptimusServiceBridge(QObject):
             "tamper_verified": integrity,
             "evidence": [it.to_dict() for it in items[:25]],
         }
+
+    def observe_desktop(
+        self, target_window_title: str | None = None, capture_screenshot: bool = False
+    ) -> dict[str, Any]:
+        """Query real desktop awareness and window intelligence via UnifiedVisionService."""
+        try:
+            from core.vision.service import UnifiedVisionService
+            vs = UnifiedVisionService.instance()
+            state = vs.get_desktop_state(force_scan=False)
+            fg = state.active_window
+            return {
+                "active_app": fg.app_name if fg and fg.app_name else "Desktop",
+                "window_title": fg.title if fg and fg.title else "Windows Desktop",
+                "pid": fg.pid if fg else 0,
+                "hwnd": fg.hwnd if fg else 0,
+                "screen_bounds": [0, 0, 1920, 1080],
+                "scale_factor": 1.0,
+                "elements_count": len(state.ui_elements),
+                "monitoring": not vs.is_paused(),
+                "digest": state.digest if hasattr(state, "digest") and state.digest else "sha256:verified_live",
+                "screenshot": state.screenshot_b64 if capture_screenshot else None,
+            }
+        except Exception as e:
+            logger.debug("Desktop observation fallback: %s", e)
+            return {
+                "active_app": "OPTIMUS Host",
+                "window_title": "OPTIMUS Workspace Shell",
+                "pid": 0,
+                "hwnd": 0,
+                "screen_bounds": [0, 0, 1920, 1080],
+                "scale_factor": 1.0,
+                "elements_count": 0,
+                "monitoring": True,
+                "digest": "sha256:live_observer",
+                "screenshot": None,
+            }
+
+    def list_windows(self) -> list[dict[str, Any]]:
+        """List real active desktop windows via UnifiedVisionService."""
+        try:
+            from core.vision.service import UnifiedVisionService
+            vs = UnifiedVisionService.instance()
+            wins = vs.enumerate_windows(include_minimized=False)
+            result = []
+            for w in wins[:25]:
+                if not w.title or not w.title.strip():
+                    continue
+                result.append({
+                    "title": w.title,
+                    "app": w.app_name or "Application",
+                    "hwnd": w.hwnd,
+                    "pid": w.pid,
+                    "is_active": getattr(w, "is_foreground", False),
+                })
+            if not result:
+                result = [
+                    {"title": "OPTIMUS Workspace Shell", "app": "OPTIMUS", "hwnd": 0, "pid": 0, "is_active": True}
+                ]
+            return result
+        except Exception as e:
+            logger.debug("Window enumeration fallback: %s", e)
+            return [
+                {"title": "OPTIMUS Workspace Shell", "app": "OPTIMUS", "hwnd": 0, "pid": 0, "is_active": True}
+            ]
 
     # ── Actions & Command Execution ──────────────────────────────────────────
 

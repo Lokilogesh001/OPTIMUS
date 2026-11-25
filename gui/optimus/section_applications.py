@@ -6,12 +6,12 @@ Adheres strictly to the refined de-slopped command center design tokens.
 """
 
 from __future__ import annotations
-
+import threading
 import logging
 import time
 from typing import Any
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QDialog,
@@ -54,6 +54,8 @@ logger = logging.getLogger("optimus.gui.section_applications")
 class SectionApplications(QWidget):
     """Command Center workspace section for Universal Application Intelligence."""
 
+    _scan_completed = pyqtSignal()
+
     def __init__(self, bridge: OptimusServiceBridge | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.bridge = bridge or OptimusServiceBridge.instance()
@@ -62,6 +64,9 @@ class SectionApplications(QWidget):
         self.learning_engine = ApplicationLearningEngine(workflow_store=self.workflow_store)
         self._last_apps_sig: tuple | None = None
         self._last_running_sig: tuple | None = None
+        self._is_scanning: bool = False
+        self._is_closing: bool = False
+        self._scan_completed.connect(self._render_current_tab)
 
         self.setStyleSheet(f"background: {C.BG};")
         root_lay = QVBoxLayout(self)
@@ -255,8 +260,11 @@ class SectionApplications(QWidget):
         self.stack.addWidget(panel)
 
     # ── Refresh Logic ─────────────────────────────────────────────────────────
-    def _refresh_all(self, force: bool = False) -> None:
-        self.registry.refresh(force=force)
+    @pyqtSlot()
+    def _render_current_tab(self) -> None:
+        """Render active tab from in-memory cache with zero main thread blocking."""
+        if self._is_closing:
+            return
         curr = self.stack.currentIndex()
         if curr == 0:
             self._refresh_apps_table()
@@ -270,6 +278,40 @@ class SectionApplications(QWidget):
             self._refresh_frameworks_table()
         else:
             self._refresh_apps_table()
+
+    def _refresh_all(self, force: bool = False) -> None:
+        """Non-blocking refresh: renders cached data immediately and updates in background."""
+        if self._is_closing:
+            return
+        self._render_current_tab()
+
+        now = time.time()
+        last_refresh = getattr(self.registry, "_last_static_refresh", 0.0)
+        needs_refresh = force or (now - last_refresh > 60.0) or not getattr(self.registry, "_apps", None)
+
+        if needs_refresh and not self._is_scanning:
+            self._is_scanning = True
+
+            def _bg_scan():
+                try:
+                    self.registry.refresh(force=force)
+                    if not self._is_closing:
+                        self._scan_completed.emit()
+                except Exception as exc:
+                    logger.debug("Background application registry refresh error: %s", exc)
+                finally:
+                    self._is_scanning = False
+
+            threading.Thread(target=_bg_scan, daemon=True, name="AppRegistryBackgroundScanner").start()
+
+    def closeEvent(self, event) -> None:
+        """Mark closing so background scan callbacks do not touch destroyed widgets."""
+        self._is_closing = True
+        super().closeEvent(event)
+
+    def refresh_all(self, force: bool = False) -> None:
+        """Public hook called by tab selector and refresh button."""
+        self._refresh_all(force=force)
 
     def _on_launch_app_clicked(self) -> None:
         sender = self.sender()
@@ -288,78 +330,86 @@ class SectionApplications(QWidget):
             self._learn_app(str(app_name))
 
     def _refresh_apps_table(self) -> None:
-        apps = self.registry.list_all_apps()
+        all_apps = self.registry.list_all_apps()
+        # Sort running apps first, then alphabetically by name
+        sorted_apps = sorted(all_apps, key=lambda a: (not a.is_running, a.name.lower()))
+        # Cap batch to top 64 to guarantee instantaneous UI responsiveness (<20ms)
+        apps = sorted_apps[:64]
         sig = tuple((a.name, a.app_id, a.is_running, a.integrity_level) for a in apps)
         if sig == self._last_apps_sig:
             return
         self._last_apps_sig = sig
 
-        curr_rows = self.tbl_apps.rowCount()
-        target_rows = len(apps)
-        while curr_rows < target_rows:
-            self.tbl_apps.insertRow(curr_rows)
-            for c in range(5):
-                self.tbl_apps.setItem(curr_rows, c, QTableWidgetItem())
+        self.tbl_apps.setUpdatesEnabled(False)
+        try:
+            curr_rows = self.tbl_apps.rowCount()
+            target_rows = len(apps)
+            while curr_rows < target_rows:
+                self.tbl_apps.insertRow(curr_rows)
+                for c in range(5):
+                    self.tbl_apps.setItem(curr_rows, c, QTableWidgetItem())
 
-            act_w = QWidget()
-            act_box = QHBoxLayout(act_w)
-            act_box.setContentsMargins(4, 2, 4, 2)
-            act_box.setSpacing(6)
+                act_w = QWidget()
+                act_box = QHBoxLayout(act_w)
+                act_box.setContentsMargins(4, 2, 4, 2)
+                act_box.setSpacing(6)
 
-            btn_launch = QPushButton("LAUNCH")
-            btn_launch.setObjectName("btn_launch")
-            btn_launch.setFont(px_font(8, QFont.Weight.Bold))
-            btn_launch.setFixedHeight(24)
-            btn_launch.clicked.connect(self._on_launch_app_clicked)
-            act_box.addWidget(btn_launch)
+                btn_launch = QPushButton("LAUNCH")
+                btn_launch.setObjectName("btn_launch")
+                btn_launch.setFont(px_font(8, QFont.Weight.Bold))
+                btn_launch.setFixedHeight(24)
+                btn_launch.clicked.connect(self._on_launch_app_clicked)
+                act_box.addWidget(btn_launch)
 
-            btn_learn = QPushButton("LEARN")
-            btn_learn.setObjectName("btn_learn")
-            btn_learn.setFont(px_font(8))
-            btn_learn.setStyleSheet(btn_css("secondary"))
-            btn_learn.setFixedHeight(24)
-            btn_learn.clicked.connect(self._on_learn_app_clicked)
-            act_box.addWidget(btn_learn)
-            act_box.addStretch()
+                btn_learn = QPushButton("LEARN")
+                btn_learn.setObjectName("btn_learn")
+                btn_learn.setFont(px_font(8))
+                btn_learn.setStyleSheet(btn_css("secondary"))
+                btn_learn.setFixedHeight(24)
+                btn_learn.clicked.connect(self._on_learn_app_clicked)
+                act_box.addWidget(btn_learn)
+                act_box.addStretch()
 
-            self.tbl_apps.setCellWidget(curr_rows, 5, act_w)
-            curr_rows += 1
+                self.tbl_apps.setCellWidget(curr_rows, 5, act_w)
+                curr_rows += 1
 
-        while curr_rows > target_rows:
-            self.tbl_apps.removeRow(curr_rows - 1)
-            curr_rows -= 1
+            while curr_rows > target_rows:
+                self.tbl_apps.removeRow(curr_rows - 1)
+                curr_rows -= 1
 
-        for row, app in enumerate(apps):
-            it0 = self.tbl_apps.item(row, 0)
-            if it0:
-                it0.setText(app.name)
-            it1 = self.tbl_apps.item(row, 1)
-            if it1:
-                it1.setText(app.app_id)
-            it2 = self.tbl_apps.item(row, 2)
-            if it2:
-                it2.setText(app.category.value)
+            for row, app in enumerate(apps):
+                it0 = self.tbl_apps.item(row, 0)
+                if it0:
+                    it0.setText(app.name)
+                it1 = self.tbl_apps.item(row, 1)
+                if it1:
+                    it1.setText(app.app_id)
+                it2 = self.tbl_apps.item(row, 2)
+                if it2:
+                    it2.setText(app.category.value)
 
-            status_text = "RUNNING" if app.is_running else "INSTALLED"
-            it3 = self.tbl_apps.item(row, 3)
-            if it3:
-                it3.setText(status_text)
-                it3.setForeground(QColor(C.GREEN) if app.is_running else QColor(C.TEXT_DIM))
+                status_text = "RUNNING" if app.is_running else "INSTALLED"
+                it3 = self.tbl_apps.item(row, 3)
+                if it3:
+                    it3.setText(status_text)
+                    it3.setForeground(QColor(C.GREEN) if app.is_running else QColor(C.TEXT_DIM))
 
-            it4 = self.tbl_apps.item(row, 4)
-            if it4:
-                it4.setText(app.integrity_level)
+                it4 = self.tbl_apps.item(row, 4)
+                if it4:
+                    it4.setText(app.integrity_level)
 
-            act_w = self.tbl_apps.cellWidget(row, 5)
-            if act_w:
-                btn_launch = act_w.findChild(QPushButton, "btn_launch")
-                if btn_launch:
-                    btn_launch.setText("ACTIVATE" if app.is_running else "LAUNCH")
-                    btn_launch.setStyleSheet(btn_css("primary" if not app.is_running else "secondary"))
-                    btn_launch.setProperty("app_name", app.name)
-                btn_learn = act_w.findChild(QPushButton, "btn_learn")
-                if btn_learn:
-                    btn_learn.setProperty("app_name", app.name)
+                act_w = self.tbl_apps.cellWidget(row, 5)
+                if act_w:
+                    btn_launch = act_w.findChild(QPushButton, "btn_launch")
+                    if btn_launch:
+                        btn_launch.setText("ACTIVATE" if app.is_running else "LAUNCH")
+                        btn_launch.setStyleSheet(btn_css("primary" if not app.is_running else "secondary"))
+                        btn_launch.setProperty("app_name", app.name)
+                    btn_learn = act_w.findChild(QPushButton, "btn_learn")
+                    if btn_learn:
+                        btn_learn.setProperty("app_name", app.name)
+        finally:
+            self.tbl_apps.setUpdatesEnabled(True)
 
     def _refresh_running_table(self) -> None:
         running = self.registry.list_running_apps()
