@@ -223,6 +223,31 @@ class GmailAdapter(BaseProviderAdapter):
                 "auth_status": self.account.auth_status.value,
             }
 
+    @staticmethod
+    def _extract_attachments_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        """Recursively collect attachment metadata descriptors without downloading payloads."""
+        attachments: list[dict[str, Any]] = []
+
+        def _walk(part: dict[str, Any]) -> None:
+            if not isinstance(part, dict):
+                return
+            filename = str(part.get("filename") or "").strip()
+            body = part.get("body") if isinstance(part.get("body"), dict) else {}
+            att_id = str(body.get("attachmentId") or "").strip()
+            if filename or att_id:
+                attachments.append({
+                    "attachment_id": att_id,
+                    "filename": filename or "unnamed_attachment",
+                    "mime_type": str(part.get("mimeType") or "application/octet-stream"),
+                    "size": int(body.get("size") or 0),
+                    "part_id": str(part.get("partId") or ""),
+                })
+            for sub in part.get("parts") or []:
+                _walk(sub)
+
+        _walk(payload)
+        return attachments
+
     def _parse_raw_gmail_message(self, raw_item: dict[str, Any], defang: bool = True) -> Message:
         """Parse raw Gmail message resource into normalized Message dataclass with injection defense."""
         msg_id = raw_item.get("id", "")
@@ -231,7 +256,8 @@ class GmailAdapter(BaseProviderAdapter):
         labels = raw_item.get("labelIds", [])
 
         # Extract headers
-        headers_list = raw_item.get("payload", {}).get("headers", [])
+        payload = raw_item.get("payload", {})
+        headers_list = payload.get("headers", [])
         headers = {h.get("name", "").lower(): h.get("value", "") for h in headers_list if "name" in h}
 
         subject = headers.get("subject", "No Subject")
@@ -252,6 +278,7 @@ class GmailAdapter(BaseProviderAdapter):
 
         is_unread = "UNREAD" in labels
         is_important = "IMPORTANT" in labels or "STARRED" in labels
+        attachments = self._extract_attachments_from_payload(payload)
 
         # Quarantined body snippet using core.outcome.untrusted
         safe_snippet = untrusted("gmail", snippet[:500]) if (defang and snippet) else snippet[:500]
@@ -269,7 +296,7 @@ class GmailAdapter(BaseProviderAdapter):
             labels=labels,
             is_read=not is_unread,
             is_important=is_important,
-            raw_reference={"historyId": raw_item.get("historyId", "")},
+            raw_reference={"historyId": raw_item.get("historyId", ""), "attachments": attachments},
         )
 
     def initial_sync(self, max_items: int = 50) -> tuple[list[Message], list[PersonalEvent], str | None]:
@@ -389,6 +416,15 @@ class GmailAdapter(BaseProviderAdapter):
             "https://gmail.googleapis.com/gmail/v1/users/me/messages",
             params=params,
         )
+        code = getattr(resp, "status_code", 200)
+        if code >= 400:
+            err_data = safe_parse_json(resp)
+            err_msg = (
+                err_data.get("error", {}).get("message")
+                if isinstance(err_data.get("error"), dict)
+                else f"Gmail messages API returned HTTP {code}"
+            )
+            raise RuntimeError(str(err_msg or f"Gmail messages API returned HTTP {code}"))
         data = safe_parse_json(resp)
         messages_raw = data.get("messages", [])
         results: list[Message] = []
@@ -478,3 +514,103 @@ class GmailAdapter(BaseProviderAdapter):
         store_credential(f"gmail_{self.account.account_id}_token", "")
         store_credential(f"gmail_{self.account.account_id}_refresh", "")
         return True
+
+    def get_attachment(self, message_id: str, attachment_id: str) -> dict[str, Any]:
+        """Fetch an authorized attachment payload by ID and decode base64url safely."""
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", str(message_id or "")):
+            return {"success": False, "error": "Invalid message_id format"}
+        if not re.match(r"^[a-zA-Z0-9_\-=]+$", str(attachment_id or "")):
+            return {"success": False, "error": "Invalid attachment_id format"}
+        token = self._get_access_token()
+        if not token:
+            return {"success": False, "error": "Gmail account not authenticated"}
+        resp = self._execute_request(
+            "GET",
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}",
+        )
+        code = getattr(resp, "status_code", 200)
+        if code != 200:
+            return {"success": False, "error": f"Gmail attachment API returned HTTP {code}"}
+        data = safe_parse_json(resp)
+        b64 = str(data.get("data") or "")
+        if not b64:
+            return {"success": False, "error": "Attachment payload was empty"}
+        import base64
+        padded = b64 + "=" * (-len(b64) % 4)
+        raw_bytes = base64.urlsafe_b64decode(padded.encode("ascii"))
+        return {
+            "success": True,
+            "message_id": message_id,
+            "attachment_id": attachment_id,
+            "size": len(raw_bytes),
+            "data_bytes": raw_bytes,
+        }
+
+    @staticmethod
+    def _encode_raw_rfc2822(to: str, subject: str, body: str) -> str:
+        import base64
+        from email.message import EmailMessage as _StdEmailMessage
+        em = _StdEmailMessage()
+        em["To"] = to
+        em["Subject"] = subject
+        em.set_content(body)
+        return base64.urlsafe_b64encode(em.as_bytes()).decode("ascii")
+
+    def create_draft(self, to: str, subject: str, body: str) -> dict[str, Any]:
+        """Prepare an email draft without sending it."""
+        if not to or not subject:
+            return {"success": False, "error": "Recipient 'to' and 'subject' are required"}
+        token = self._get_access_token()
+        if not token:
+            return {"success": False, "error": "Gmail account not authenticated"}
+        raw_msg = self._encode_raw_rfc2822(to, subject, body)
+        resp = self._execute_request(
+            "POST",
+            "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+            json={"message": {"raw": raw_msg}},
+        )
+        code = getattr(resp, "status_code", 200)
+        data = safe_parse_json(resp)
+        if code in (200, 201):
+            return {
+                "success": True,
+                "draft_id": data.get("id", ""),
+                "to": to,
+                "subject": subject,
+            }
+        return {
+            "success": False,
+            "error": data.get("error", {}).get("message", f"Gmail draft API returned HTTP {code}")
+            if isinstance(data.get("error"), dict)
+            else f"Gmail draft API returned HTTP {code}",
+        }
+
+    def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
+        """Send an email via Gmail REST API v1 (caller must enforce authorization & approval policy)."""
+        if not to or not subject or not body:
+            return {"success": False, "error": "Missing required parameters: to, subject, body"}
+        token = self._get_access_token()
+        if not token:
+            return {"success": False, "error": "Gmail account not authenticated"}
+        raw_msg = self._encode_raw_rfc2822(to, subject, body)
+        resp = self._execute_request(
+            "POST",
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            json={"raw": raw_msg},
+        )
+        code = getattr(resp, "status_code", 200)
+        data = safe_parse_json(resp)
+        if code in (200, 201):
+            return {
+                "success": True,
+                "message_id": data.get("id", ""),
+                "thread_id": data.get("threadId", ""),
+                "to": to,
+                "subject": subject,
+            }
+        return {
+            "success": False,
+            "error": data.get("error", {}).get("message", f"Gmail send API returned HTTP {code}")
+            if isinstance(data.get("error"), dict)
+            else f"Gmail send API returned HTTP {code}",
+        }

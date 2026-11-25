@@ -420,15 +420,20 @@ def write_file(path: str, name: str = "", content: str = "",
 
 
 def find_files(name: str = "", extension: str = "",
-               path: str = "home", max_results: int = 20) -> str:
+               path: str = "home", max_results: int = 20,
+               semantic: bool = True) -> str:
     try:
         from core.filesystem.service import UnifiedFilesystemService
-        pattern = f"*{name}*{extension}" if (name or extension) else "*"
+        exts = [extension] if extension else None
         res = UnifiedFilesystemService.instance().search_files(
             root_path=path,
-            pattern=pattern,
+            pattern="*" if (semantic or exts) else (f"*{name}*{extension}" if (name or extension) else "*"),
             recursive=True,
             max_results=max_results,
+            extensions=exts,
+            semantic=semantic and bool(name),
+            semantic_query=name or None,
+            terms=[name] if (name and not semantic) else None,
         )
         if res.is_success:
             return res.output
@@ -462,12 +467,12 @@ def get_largest_files(path: str = "downloads", count: int = 10) -> str:
                 return f"Access denied: {path}"
             return res.output or err or f"Search error: {path}"
 
-        items = res.evidence.get("items", []) if res.evidence else []
+        items = res.evidence.get("matches", res.evidence.get("items", [])) if res.evidence else []
         files = []
         for it in items:
             if not it.get("is_dir"):
                 p_item = Path(it.get("path"))
-                files.append((it.get("size_bytes", 0), p_item))
+                files.append((it.get("size", it.get("size_bytes", 0)), p_item))
 
         files.sort(reverse=True)
         top = files[:count]
@@ -674,8 +679,62 @@ def file_controller(
                 name=name or params.get("name", ""),
                 extension=params.get("extension", ""),
                 path=path,
-                max_results=min(int(params.get("max_results", 20)), 50),
+                max_results=min(int(params.get("max_results", 50)), 100),
+                semantic=bool(params.get("semantic", True)),
             )
+
+        elif action == "open_via_run":
+            from core.filesystem.run_opener import VerifiedRunFileOpener
+            res = VerifiedRunFileOpener.instance().open_path(path)
+            return res.verification_details or (
+                f"Opened '{res.canonical_path}' via Win+R (state={res.launch_state})."
+                if res.success else (res.error or f"Failed to open '{path}'")
+            )
+
+        elif action == "open_multiple_via_run":
+            from core.filesystem.run_opener import VerifiedRunFileOpener
+            raw_paths = params.get("paths") or ([p.strip() for p in str(path).split(",") if p.strip()] if path else [])
+            if not raw_paths:
+                return "No file paths provided to open sequentially via Win+R."
+            batch = VerifiedRunFileOpener.instance().open_sequential(list(raw_paths))
+            lines = [f"Sequential Win+R open complete: {batch['succeeded']}/{batch['total']} opened."]
+            for item in batch.get("results", []):
+                lines.append(
+                    f"- {item.get('canonical_path') or item.get('requested_path')}: "
+                    f"{'OK' if item.get('success') else 'FAILED'} [{item.get('launch_state')}]"
+                    + (f" ({item.get('verification_details')})" if item.get("verification_details") else "")
+                )
+            return "\n".join(lines)
+
+        elif action == "search_and_open_via_run":
+            from core.filesystem.service import UnifiedFilesystemService
+            from core.filesystem.run_opener import VerifiedRunFileOpener
+            query_name = name or str(params.get("name") or "")
+            ext = str(params.get("extension") or "")
+            s_res = UnifiedFilesystemService.instance().search_files(
+                root_path=path or "downloads",
+                pattern="*",
+                recursive=True,
+                max_results=min(int(params.get("max_results", 50)), 100),
+                extensions=[ext] if ext else None,
+                semantic=bool(query_name),
+                semantic_query=query_name or None,
+            )
+            if not s_res.is_success:
+                return f"Search failed: {s_res.error or s_res.output}"
+            matches = [m for m in (s_res.evidence or {}).get("matches", []) if not m.get("is_dir")]
+            if not matches:
+                return s_res.output or f"No matching files found in '{path}'."
+            ordered_paths = [m["path"] for m in sorted(matches, key=lambda x: str(x["path"]).lower())]
+            batch = VerifiedRunFileOpener.instance().open_sequential(ordered_paths)
+            lines = [f"Found {len(ordered_paths)} matching file(s) and ran sequential Win+R open ({batch['succeeded']}/{batch['total']}):"]
+            for item in batch.get("results", []):
+                lines.append(
+                    f"- {item.get('canonical_path') or item.get('requested_path')}: "
+                    f"{'OK' if item.get('success') else 'FAILED'} [{item.get('launch_state')}]"
+                    + (f" — {item.get('verification_details')}" if item.get("verification_details") else "")
+                )
+            return "\n".join(lines)
 
         elif action == "largest":
             return get_largest_files(
@@ -702,17 +761,25 @@ def file_controller(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "file_controller",
-    "description": "Manages files and folders: list, create, delete, move, copy, rename, read, write, find, disk usage.",
+    "description": (
+        "Manages files and folders: recursive semantic find, list, create, delete, move, copy, rename, read, write, "
+        "disk usage, and verified sequential Windows Run (Win+R) file opening (open_via_run, open_multiple_via_run, search_and_open_via_run)."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
+                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info | open_via_run | open_multiple_via_run | search_and_open_via_run"
             },
             "path": {
                 "type": "STRING",
                 "description": "File/folder path or shortcut: desktop, downloads, documents, home"
+            },
+            "paths": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "description": "List of exact file/folder paths for open_multiple_via_run"
             },
             "destination": {
                 "type": "STRING",

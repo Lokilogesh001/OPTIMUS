@@ -117,6 +117,14 @@ from memory.memory_manager import (
     set_trim_notifier,
     update_memory,
 )
+# Ensure QtWebEngine is initialized before QApplication is created
+try:
+    from PyQt6.QtCore import QCoreApplication, Qt
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
+    import PyQt6.QtWebEngineWidgets  # noqa: F401
+except Exception:
+    pass
+
 from ui import JarvisUI, OptimusUI
 
 # How long the assistant stays awake with no user speech before it auto-sleeps
@@ -414,9 +422,22 @@ TOOL_DECLARATIONS = [
     {
         "name": "system_status",
         "description": (
-            "Returns real-time system metrics: CPU usage, RAM, GPU load, CPU temperature, "
-            "uptime, and process count. Use when the user asks about computer performance, "
-            "temperature, memory, or resource usage."
+            "Returns real-time system metrics (CPU, RAM, GPU, temperature, uptime, process count) "
+            "AND active AI model/provider configuration. Use when the user asks about computer "
+            "performance, hardware status, or system/model configuration."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+        }
+    },
+    {
+        "name": "active_model_status",
+        "description": (
+            "Returns authoritative runtime information on which AI provider and model OPTIMUS is "
+            "using (configured model, active model, fallback status, config source, verification status). "
+            "ALWAYS call this instead of web_search or memory when asked 'What model are you using?', "
+            "'Which Gemini model are you running?', 'Check your configuration', or 'Are you using the fallback model?'."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -954,7 +975,6 @@ class OptimusLive:
         # Failures are written in core/outcome's vocabulary, because that is what
         # the caller reads. A plain "Tool 'x' failed" sentence was counted as a
         # tool that RAN by the screen agent, which only recognises status lines.
-        from core import outcome
         parameters = parameters or {}
         try:
             if self._action_registry.has(name):
@@ -1705,6 +1725,16 @@ class OptimusLive:
                 r = await loop.run_in_executor(None, get_system_status)
                 result = str(r)
 
+            elif name == "active_model_status":
+                def _query_model():
+                    from core.intelligence.model_status import (
+                        format_active_model_report,
+                        get_active_model_status,
+                    )
+                    st = get_active_model_status(runtime_live_model=LIVE_MODEL)
+                    return format_active_model_report(st)
+                result = await loop.run_in_executor(None, _query_model)
+
             elif name == "manage_monitor":
                 action = args.get("action", "").lower().strip()
                 topic  = args.get("topic", "").strip()
@@ -1775,8 +1805,7 @@ class OptimusLive:
                 result = r or "Done."
                 # web_search: mirror results to the on-screen content panel
                 if (name == "web_search" and r
-                        and not r.startswith("No results")
-                        and not r.startswith("Search failed")):
+                        and not str(r).startswith(("No results", "Search failed", "status=failed", "status=unverified"))):
                     _mode  = args.get("mode", "search")
                     _query = args.get("query") or ", ".join(args.get("items", []))
                     _label = f"{_mode.upper()} — {_query[:38]}" if _query else _mode.upper()
@@ -1819,7 +1848,6 @@ class OptimusLive:
                   or self._plugin_registry.scheduling(name))
         _extra = {"scheduling": _sched} if _sched else {}
         # Demarcate plugin results for model serialization (reconciles MED-03)
-        from core import outcome
         model_payload = (
             outcome.untrusted(source=f"plugin:{name}", content=str(result))
             if self._plugin_registry.has(name)
@@ -2216,45 +2244,23 @@ class OptimusLive:
                     except asyncio.QueueEmpty:
                         break
 
-                # Drive the HUD waveform and the avatar's mouth from JARVIS's
-                # own voice. The batch is up to 200 ms long, so we hand over a
-                # *schedule* of 20 ms viseme frames instead of a single averaged
-                # level and let the HUD play it out in step with the audio.
+                raw_bytes = bytes(batch)
+                write_fut = asyncio.to_thread(stream.write, raw_bytes)
+
+                # Drive the HUD waveform and avatar visemes concurrently
                 try:
-                    pcm = np.frombuffer(bytes(batch), dtype=np.int16)
+                    pcm = np.frombuffer(raw_bytes, dtype=np.int16)
                     hop = _VIS_HOP / RECEIVE_SAMPLE_RATE
                     frames = _pcm_visemes(pcm, sr=RECEIVE_SAMPLE_RATE)
-                    # When does this batch become audible? The stream was
-                    # started at launch and its callback has been pulling
-                    # silence ever since, so the first bytes of a reply reach
-                    # the speaker about one callback period later — NOT one
-                    # buffer later. `stream.latency` reports the buffer's
-                    # capacity, which is how much can be queued ahead, and on
-                    # Windows that is commonly 300-500 ms. Anchoring on it put
-                    # the entire schedule a buffer late; that is the half second
-                    # of lag, and it grew with whatever the device reported.
-                    #
-                    # After the anchor nothing needs measuring: the device
-                    # consumes at exactly realtime, so each batch sounds one
-                    # batch-duration after the one before it. The cursor is
-                    # re-anchored only when it leaves the range physically
-                    # possible — behind `now` means the device drained and this
-                    # batch starts a fresh stretch of speech, while further
-                    # ahead than the buffer can hold means it has drifted.
                     now = time.time()
                     horizon = self._out_latency + _CURSOR_SLACK
                     if not (now <= self._play_cursor <= now + horizon):
                         self._play_cursor = now + _FIRST_SOUND
                     at = self._play_cursor
-                    # Advance by the batch's own duration whether or not it
-                    # yielded frames, so a block too short to analyse cannot
-                    # shift everything after it out of step with the audio.
                     self._play_cursor += pcm.size / RECEIVE_SAMPLE_RATE
                     if frames:
                         frames = self._visemes.frames(frames, hop)
                         self.ui.push_visemes(frames, hop, at)
-                        # Barge-in needs to know what we are playing, not just
-                        # how loud: the guard subtracts this from the microphone.
                         self._out_level = max(f[0] for f in frames)
                         self._echo.note_output(pcm, RECEIVE_SAMPLE_RATE,
                                                self._out_level)
@@ -2267,7 +2273,7 @@ class OptimusLive:
                     pass
 
                 try:
-                    await asyncio.to_thread(stream.write, bytes(batch))
+                    await write_fut
                 except (RuntimeError, asyncio.CancelledError):
                     break   # executor shutting down — exit cleanly
         except Exception as e:
@@ -3097,6 +3103,16 @@ def _exit_process(code: int = 0) -> None:
     import atexit
     import os as _os
     try:
+        from gui.optimus.service_bridge import OptimusServiceBridge
+        OptimusServiceBridge.reset()
+    except Exception:
+        pass
+    try:
+        from core.audio_stream import ContinuousAudioStreamPlayer
+        ContinuousAudioStreamPlayer.reset_instance()
+    except Exception:
+        pass
+    try:
         atexit._run_exitfuncs()
     except Exception:
         pass
@@ -3109,6 +3125,12 @@ def _exit_process(code: int = 0) -> None:
 
 
 def main():
+    from core.runtime.startup import SingleInstanceGuard
+    instance_guard = SingleInstanceGuard()
+    if not instance_guard.acquire():
+        print("[OPTIMUS] Another OPTIMUS instance is already running. Exiting duplicate launch.")
+        return
+
     ui = OptimusUI("face.png")
     holder: dict = {}
 
@@ -3132,6 +3154,7 @@ def main():
             optimus.finish()
         except Exception as e:
             print(f"[OPTIMUS] finish: {e!r}")
+    instance_guard.release()
     _exit_process(0)
 
 if __name__ == "__main__":

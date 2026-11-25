@@ -471,6 +471,59 @@ class ToolRegistry:
             is_mutating=False,
         ))
 
+        # 5b. Verified Windows Run Dialog File & Folder Opener (Phase 1 Default)
+        def _open_via_run_handler(params: dict, context: dict | None = None) -> ToolResult:
+            raw_path = params.get("path")
+            paths = params.get("paths")
+            ctx = context or {}
+            allowed_roots = ctx.get("allowed_roots")
+            allow_cross_drive = bool(ctx.get("cross_drive") or ctx.get("allow_system_paths") or params.get("cross_drive"))
+            enforce_roots = bool(allowed_roots) and not (
+                allow_cross_drive or any(str(r) in ("*", "ALL_DRIVES") for r in allowed_roots)
+            )
+            if enforce_roots:
+                candidates = paths if isinstance(paths, list) else [str(raw_path or "")]
+                for item in candidates:
+                    try:
+                        _ = _resolve_safe_path(str(item), allowed_roots, allow_cross_drive=False)
+                    except Exception as e:
+                        return ToolResult(status="failed", error=str(e), output=f"Open error: {e}")
+
+            from core.filesystem.run_opener import VerifiedRunFileOpener
+            opener = VerifiedRunFileOpener.instance()
+            if isinstance(paths, list):
+                return opener.as_tool_result(paths, context=context)
+            return opener.as_tool_result(str(raw_path or ""), context=context)
+
+        self.register(ToolDefinition(
+            name="open_file_via_run",
+            description="Verify an exact file or folder path and open it through the Windows Run (Win+R) dialog.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "path": {"type": "STRING", "description": "Exact file or folder path to verify and open via Win+R"}
+                },
+                "required": ["path"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_open_via_run_handler,
+            is_mutating=False,
+        ))
+        self.register(ToolDefinition(
+            name="open_multiple_files_via_run",
+            description="Validate multiple file or folder paths and open them sequentially via Windows Run (Win+R).",
+            parameters={
+                "type": "OBJECT",
+                "properties": {
+                    "paths": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "List of exact paths to open sequentially"}
+                },
+                "required": ["paths"],
+            },
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_open_via_run_handler,
+            is_mutating=False,
+        ))
+
         # ── Milestone 16: Visual Awareness, Window & Browser Tab Intelligence ──
 
         # 1. Enumerate Windows
@@ -989,6 +1042,77 @@ class ToolRegistry:
             parameters={"type": "OBJECT", "properties": {}},
             capability_tier=CapabilityTier.READ_ONLY,
             handler=_ufo_mcp_servers_status_handler,
+            is_mutating=False,
+        ))
+
+        # ── Phase 1 Personal Integration Discovery & Cross-Service Briefing ──────
+        def _discover_integrations_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.personal_intelligence.engine import PersonalIntelligenceEngine
+            items = PersonalIntelligenceEngine().discover_integrations()
+            connected = [i for i in items if i["connected"]]
+            lines = [
+                f"- {i['provider']}: {'CONNECTED' if i['connected'] else 'NOT CONNECTED'}"
+                + (f" ({i['email_or_id']})" if i.get("email_or_id") else "")
+                for i in items
+            ]
+            return ToolResult(
+                status="done",
+                output="Personal Integrations:\n" + "\n".join(lines),
+                evidence={"integrations": items, "connected_count": len(connected)},
+            )
+
+        self.register(ToolDefinition(
+            name="discover_personal_integrations",
+            description="Inspect connected personal services (Gmail, Google Calendar, Outlook, WhatsApp), supported actions, and operational status.",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_discover_integrations_handler,
+            is_mutating=False,
+        ))
+
+        def _prepare_meeting_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.personal_intelligence.engine import PersonalIntelligenceEngine
+            res = PersonalIntelligenceEngine().prepare_for_next_meeting()
+            if not res.get("found"):
+                return ToolResult(
+                    status="failed" if not res.get("calendar_connected") else "done",
+                    output=res.get("message", "No upcoming meeting found."),
+                    error=None if res.get("calendar_connected") else res.get("message"),
+                    evidence=res,
+                )
+            return ToolResult(
+                status="done",
+                output=res["briefing"],
+                evidence=res,
+            )
+
+        self.register(ToolDefinition(
+            name="prepare_for_next_meeting",
+            description="Prepare a concise cross-service briefing from upcoming calendar events and related emails.",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_prepare_meeting_handler,
+            is_mutating=False,
+        ))
+
+        def _active_model_status_handler(params: dict, context: dict | None = None) -> ToolResult:
+            from core.intelligence.model_status import (
+                format_active_model_report,
+                get_active_model_status,
+            )
+            st = get_active_model_status()
+            return ToolResult(
+                status="done",
+                output=format_active_model_report(st),
+                evidence=st,
+            )
+
+        self.register(ToolDefinition(
+            name="get_active_model_status",
+            description="Query authoritative runtime provider, configured model, active model, fallback status, and verification status.",
+            parameters={"type": "OBJECT", "properties": {}},
+            capability_tier=CapabilityTier.READ_ONLY,
+            handler=_active_model_status_handler,
             is_mutating=False,
         ))
 

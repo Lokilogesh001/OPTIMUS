@@ -46,7 +46,10 @@ class ApplicationRegistry:
         if cache_file:
             self.cache_file = Path(cache_file)
         else:
-            self.cache_file = Path.cwd() / "config" / "application_inventory.json"
+            default_path = Path(__file__).resolve().parent.parent.parent / "config" / "application_inventory.json"
+            if not default_path.exists():
+                default_path = Path.cwd() / "config" / "application_inventory.json"
+            self.cache_file = default_path
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._apps: dict[str, AppDefinition] = {}
@@ -78,6 +81,7 @@ class ApplicationRegistry:
                 for item in data.get("applications", []):
                     app = AppDefinition.from_dict(item)
                     self._register_internal(app)
+                self._last_static_refresh = data.get("saved_at", time.time())
                 logger.debug("Loaded %d applications from cache", len(self._apps))
             except Exception as ex:
                 logger.warning("Failed loading application cache: %s", ex)
@@ -110,25 +114,36 @@ class ApplicationRegistry:
             self._alias_index[stem] = app.app_id
 
     def refresh(self, force: bool = False) -> None:
-        """Refresh installed application inventory and running process states."""
+        """Refresh installed application inventory and running process states without holding lock across slow discovery."""
         now = time.time()
         with self._lock:
-            # 1. Static Inventory Refresh (with 60s TTL)
-            if force or (now - self._last_static_refresh > self.STATIC_INVENTORY_TTL) or not self._apps:
-                discovered = discover_all_installed_applications()
+            need_static = force or (now - self._last_static_refresh > self.STATIC_INVENTORY_TTL) or not self._apps
+            need_process = force or (now - self._last_process_refresh > self.RUNNING_PROCESS_TTL)
+
+        # 1. Static Inventory Refresh (discovery runs lock-free)
+        if need_static:
+            discovered = discover_all_installed_applications()
+            with self._lock:
                 for app in discovered.values():
                     self._register_internal(app)
-                self._last_static_refresh = now
+                self._last_static_refresh = time.time()
                 self._save_cache()
 
-            # 2. Dynamic Process Refresh (with 2s TTL)
-            if force or (now - self._last_process_refresh > self.RUNNING_PROCESS_TTL):
-                self._refresh_running_processes()
-                self._last_process_refresh = now
+        # 2. Dynamic Process Refresh (process enumeration runs lock-free)
+        if need_process:
+            running_procs = discover_running_processes_and_windows()
+            with self._lock:
+                self._correlate_running_processes(running_procs)
+                self._last_process_refresh = time.time()
 
     def _refresh_running_processes(self) -> None:
         """Update is_running, main_hwnd, pids, and integrity_level on registered apps."""
         running_procs = discover_running_processes_and_windows()
+        with self._lock:
+            self._correlate_running_processes(running_procs)
+
+    def _correlate_running_processes(self, running_procs: list[dict[str, Any]]) -> None:
+        """Correlate pre-discovered running processes against registered apps (caller holds _lock)."""
 
         # Reset running states
         for app in self._apps.values():
@@ -152,7 +167,6 @@ class ApplicationRegistry:
 
     def find_app(self, query: str) -> AppDefinition | None:
         """Find an application by ID, name, alias, or executable name."""
-        self.refresh()
         clean = query.strip().lower()
 
         with self._lock:
@@ -173,6 +187,18 @@ class ApplicationRegistry:
                     return app
                 if app.executable_path and clean in Path(app.executable_path).name.lower():
                     return app
+
+        # If not found and cache is empty or stale, refresh once and retry
+        if not self._apps or (time.time() - self._last_static_refresh > self.STATIC_INVENTORY_TTL):
+            self.refresh()
+            with self._lock:
+                if clean in self._apps:
+                    return self._apps[clean]
+                if clean in self._alias_index:
+                    return self._apps.get(self._alias_index[clean])
+                for app in self._apps.values():
+                    if clean in app.name.lower() or any(clean in a for a in app.aliases):
+                        return app
 
         return None
 
@@ -200,15 +226,25 @@ class ApplicationRegistry:
 
         return matched_apps
 
-    def list_all_apps(self) -> list[AppDefinition]:
-        """Return all discovered applications."""
-        self.refresh()
+    def list_all_apps(self, auto_refresh: bool = False) -> list[AppDefinition]:
+        """Return all discovered applications.
+        
+        Reads from in-memory cache by default to prevent blocking the Qt GUI thread.
+        Pass auto_refresh=True to force synchronous TTL-based refresh.
+        """
+        if auto_refresh:
+            self.refresh()
         with self._lock:
             return list(self._apps.values())
 
-    def list_running_apps(self) -> list[AppDefinition]:
-        """Return all currently running applications with window handles."""
-        self.refresh()
+    def list_running_apps(self, auto_refresh: bool = False) -> list[AppDefinition]:
+        """Return all currently running applications with window handles.
+        
+        Reads from in-memory cache by default to prevent blocking the Qt GUI thread.
+        Pass auto_refresh=True to force synchronous TTL-based refresh.
+        """
+        if auto_refresh:
+            self.refresh()
         with self._lock:
             return [a for a in self._apps.values() if a.is_running]
 
@@ -258,7 +294,12 @@ class ApplicationRegistry:
             # 2. Launch new instance via WindowsRuntimeClient
             client = get_windows_runtime_client()
             target_exe = app.executable_path or app.name
-            launch_res = client.launch_application(target_exe, args=args or [])
+            launch_args = list(args) if args is not None else []
+            # spotify_cli.exe prints help and exits if invoked with no arguments;
+            # pass "open" to launch/activate the Spotify Desktop UI cleanly.
+            if Path(target_exe).name.lower() == "spotify_cli.exe" and not launch_args:
+                launch_args = ["open"]
+            launch_res = client.launch_application(target_exe, args=launch_args)
 
             if launch_res.get("status") != "failed":
                 # Wait briefly for process/window to appear

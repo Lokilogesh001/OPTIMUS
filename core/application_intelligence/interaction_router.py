@@ -182,8 +182,13 @@ class InteractionRouter:
                     self.provider_registry.record_outcome(provider.name, False, 100.0)
                     provider.rollback(req, ExecutionResponse(action_id=contract.action_id, status="failed", error_message=str(ex)))
 
-        # 4. Standard Tier Ladder Fallback
-        with DesktopInteractionLock(owner=f"router_{contract.action_id}", timeout=20.0):
+        # 4. Standard Tier Ladder Fallback (canonical SharedActionScheduler ordering prevents AB-BA deadlock)
+        from core.orchestrator.scheduler import ResourceType, SharedActionScheduler
+        with SharedActionScheduler.instance().acquire(
+            [ResourceType.ACTIVE_WINDOW, ResourceType.KEYBOARD_MOUSE],
+            task_id=contract.action_id,
+            timeout=20.0,
+        ):
             ladder = [
                 AppInteractionTier.TIER_1_NATIVE_API,
                 AppInteractionTier.TIER_2_ADAPTER,

@@ -269,18 +269,18 @@ class MissionIntentParser:
                 action_verb = "write"
                 is_mutating = True
 
-        elif any(w in lower for w in ("laptop", "compare", "research", "best", "price", "spec")):
-            target_domain = "web"
-            action_verb = "research"
-
-        elif any(w in lower for w in ("test", "bug", "failing", "fix", "code", "pytest", "calculator")):
-            target_domain = "code"
-            action_verb = "fix"
-            is_mutating = True
-
-        elif any(w in lower for w in ("ram", "cpu", "gpu", "hardware", "process", "system", "vitals")):
+        elif any(re.search(r"\b" + re.escape(w) + r"\b", lower) for w in ("ram", "cpu", "gpu", "hardware", "process", "system", "vitals", "ollama")):
             target_domain = "system"
             action_verb = "diagnose"
+
+        elif any(re.search(r"\b" + re.escape(w) + r"\b", lower) for w in ("git", "repository", "developer", "structure", "test", "bug", "failing", "fix", "code", "pytest", "calculator")):
+            target_domain = "code"
+            action_verb = "diagnose" if any(w in lower for w in ("inspect", "check", "status", "audit")) else "fix"
+            is_mutating = action_verb == "fix"
+
+        elif any(re.search(r"\b" + re.escape(w) + r"\b", lower) for w in ("laptop", "compare", "research", "best", "price", "specs", "specification", "specifications")):
+            target_domain = "web"
+            action_verb = "research"
 
         # 2. Extract Entities
         entities: list[IntentEntity] = []

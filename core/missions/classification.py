@@ -119,13 +119,14 @@ class MissionClassifier:
         # Rule: Code modification is HIGH or CRITICAL; file moves with Saga rollback are MEDIUM; read-only is LOW
         has_code_mutation = any(i.target_domain == "code" and i.is_mutating for i in all_intents)
         has_file_deletion = any("delete" in i.action_verb or "drop" in i.action_verb for i in all_intents)
+        has_destructive_action = any(w in intent.raw_query.lower() for w in ("format", "terminate process", "delete", "drop table", "wipe", "destroy", "kill process"))
         has_file_mutation = any(i.target_domain == "filesystem" and i.is_mutating for i in all_intents)
         has_external_comms = any(i.target_domain == "email" and i.is_mutating for i in all_intents)
 
-        if has_code_mutation or has_file_deletion:
+        if has_code_mutation or has_file_deletion or has_destructive_action:
             risk_tier = MissionRiskTier.HIGH
             authorization_level = AuthorizationLevel.PRE_EXECUTION_APPROVAL
-            rationale = "Modifying source code or deleting files carries high operational impact and requires pre-execution authorization."
+            rationale = "Modifying source code, terminating processes, formatting disks, or deleting files carries high operational impact and requires pre-execution authorization."
         elif has_external_comms:
             risk_tier = MissionRiskTier.HIGH
             authorization_level = AuthorizationLevel.PRE_EXECUTION_APPROVAL

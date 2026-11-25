@@ -9,6 +9,7 @@ from core.application_intelligence.adapters.base import BaseApplicationAdapter
 from core.application_intelligence.adapters.browser import BrowserAdapter
 from core.application_intelligence.adapters.devtools import DevToolsAdapter
 from core.application_intelligence.adapters.document import DocumentAdapter
+from core.application_intelligence.adapters.media import MediaAdapter
 from core.application_intelligence.adapters.whatsapp import WhatsAppAdapter
 from core.application_intelligence.registry import ApplicationRegistry
 
@@ -55,6 +56,13 @@ def get_adapter(target: str) -> BaseApplicationAdapter | None:
         _ADAPTERS[clean] = adapter
         return adapter
 
+    # 5. Media / Spotify
+    if clean in ("spotify", "spotify web", "media", "music") or (app and "spotify" in app.name.lower()):
+        adapter = MediaAdapter(app)
+        _ADAPTERS["spotify"] = adapter
+        _ADAPTERS[clean] = adapter
+        return adapter
+
     return None
 
 
@@ -64,5 +72,6 @@ __all__ = [
     "BrowserAdapter",
     "DocumentAdapter",
     "DevToolsAdapter",
+    "MediaAdapter",
     "get_adapter",
 ]

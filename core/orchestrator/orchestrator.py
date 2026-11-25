@@ -137,6 +137,14 @@ class CentralOrchestrator:
         self._lock = threading.RLock()
         self._active_workers: dict[str, threading.Thread] = {}
         self._cancelled_tasks: set[str] = set()
+        self._conv_context: dict[str, Any] = {
+            "last_task_id": None,
+            "last_goal": "",
+            "last_file_path": None,
+            "last_media_query": None,
+            "last_app": None,
+            "last_output": "",
+        }
 
     # ── Fast-Path Deterministic Execution ────────────────────────────────────
 
@@ -158,6 +166,14 @@ class CentralOrchestrator:
         - Direct web search (e.g., 'search the web for official ollama github')
         - Explicit unavailable tool failure handling
         """
+        stripped = goal.strip()
+        lower = stripped.lower()
+
+        # 0. Phase 1 Contextual Voice/Chat Follow-ups (strictly BEFORE stateless MRE)
+        ctx_res = self._try_contextual_followup(lower, task_id)
+        if ctx_res is not None:
+            return ctx_res
+
         # Minimum Reliable Execution (MRE) Unified Fast-Path Pipeline
         try:
             mre_res = self.mre_pipeline.try_execute(goal, task_id, tool_registry=self.tool_registry)
@@ -165,9 +181,6 @@ class CentralOrchestrator:
                 return mre_res
         except Exception:  # noqa: BLE001
             pass
-
-        stripped = goal.strip()
-        lower = stripped.lower()
 
         # 1. Echo / Ping
         if lower == "ping":
@@ -209,10 +222,10 @@ class CentralOrchestrator:
             except Exception:
                 pass
 
-        # 4. Direct File Reads (within allowed roots or workspace)
-        read_match = re.match(r"^(?:read|cat|view|inspect)\s+(?:a\s+)?(?:text\s+)?file\s+([a-zA-Z0-9_\-\.\/\\]+)$", stripped, re.IGNORECASE)
+        # 4. Direct File Reads (supports Windows paths, env vars, ~, spaces, Unicode, quotes)
+        read_match = re.match(r"^(?:read|cat|view|inspect)\s+(?:a\s+)?(?:text\s+)?file\s+[\"']?(.+?)[\"']?$", stripped, re.IGNORECASE)
         if not read_match:
-            read_match = re.match(r"^(?:read|cat)\s+([a-zA-Z0-9_\-\.\/\\]+\.[a-zA-Z0-9]{1,5})$", stripped, re.IGNORECASE)
+            read_match = re.match(r"^(?:read|cat)\s+[\"']?(.+?\.[a-zA-Z0-9]{1,6})[\"']?$", stripped, re.IGNORECASE)
         if read_match:
             file_name = read_match.group(1).strip()
             tool_res = self.tool_registry.execute("read_file", {"path": file_name}, caller_agent="filesystem", context={"allowed_roots": self.allowed_roots})
@@ -589,6 +602,171 @@ class CentralOrchestrator:
             }]
             return tool_res.is_success, tool_res.output or (tool_res.error or "Failed to open VS Code workspace"), "developer", side_effects
 
+        # 20b. Phase 1 End-to-End Media / Spotify Playback (STRICT: never fallback to YouTube)
+        spotify_play_match = re.match(
+            r"^(?:open\s+spotify(?:\s+(web))?\s*(?:,|\s+and)?\s*(?:search(?:\s+for)?|find)?\s*(?:the\s+)?(?:(?:song|track)\s+)?(.+?)(?:\s*(?:,|\s+and)?\s*play(?:\s+it)?)?|"
+            r"open\s+spotify(?:\s+(web))?\s*(?:,|\s+and)?\s*play\s+(?:the\s+)?(?:(?:song|track)\s+)?(.+?)|"
+            r"(?:spotify\s+)?play\s+(?:the\s+)?(?:(?:song|track)\s+)?(.+?)\s+(?:on|in|with)\s+spotify(?:\s+(web))?|"
+            r"play\s+(?:the\s+)?(?:(?:song|track)\s+)?(.+?)\s+on\s+spotify(?:\s+(web))?)\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if spotify_play_match:
+            groups = spotify_play_match.groups()
+            web_flag = bool(groups[0] or groups[2] or groups[5] or groups[7])
+            track_q = next((g for idx, g in enumerate(groups) if idx in (1, 3, 4, 6) and g), "").strip()
+            # Handle "open spotify and play <track>" where "play " stayed at start of group 1
+            track_q = re.sub(r"^(?:and\s+)?play\s+(?:the\s+)?(?:(?:song|track)\s+)?", "", track_q, flags=re.IGNORECASE).strip()
+            mode = "web" if web_flag else "desktop"
+            tool_res = self.tool_registry.execute(
+                "app_execute_action",
+                {
+                    "target_app": "spotify web" if web_flag else "spotify",
+                    "operation": "play_spotify_strict",
+                    "parameters": {"query": track_q, "mode": mode, "strict_spotify": True},
+                },
+                caller_agent="execution_agent",
+            )
+            return (
+                tool_res.is_success,
+                tool_res.output or (tool_res.error or f"Failed to play '{track_q}' on Spotify."),
+                "execution_agent",
+                [{
+                    "tool_name": "app_execute_action",
+                    "arguments": {"target_app": "spotify", "operation": "play_spotify_strict", "query": track_q},
+                    "status": tool_res.status,
+                    "output": tool_res.output,
+                    "evidence": tool_res.evidence,
+                    "error": tool_res.error,
+                }],
+            )
+
+        # 20c. Phase 1 Cross-Service Meeting Preparation & Integration Discovery
+        if re.match(r"^(?:prepare(?:\s+me)?\s+for\s+(?:my\s+)?next\s+meeting|next\s+meeting\s+briefing)\s*[\.\?]?$", stripped, re.IGNORECASE):
+            tool_res = self.tool_registry.execute("prepare_for_next_meeting", {}, caller_agent="personal_intelligence", allowed_tiers=[CapabilityTier.READ_ONLY])
+            return tool_res.is_success, tool_res.output or (tool_res.error or "No meeting found"), "personal_intelligence", [{"tool_name": "prepare_for_next_meeting", "status": tool_res.status, "evidence": tool_res.evidence}]
+
+        if re.match(r"^(?:which|what)\s+(?:personal\s+)?integrations\s+are\s+connected\s*\??$", stripped, re.IGNORECASE):
+            tool_res = self.tool_registry.execute("discover_personal_integrations", {}, caller_agent="personal_intelligence", allowed_tiers=[CapabilityTier.READ_ONLY])
+            return tool_res.is_success, tool_res.output, "personal_intelligence", [{"tool_name": "discover_personal_integrations", "status": tool_res.status, "evidence": tool_res.evidence}]
+
+        # 20c. Authoritative Active Model & Configuration Routing (never web-search or memory)
+        model_cfg_match = re.match(
+            r"^(?:(?:what|which)\s+(?:llm\s+|ai\s+|gemini\s+|ollama\s+)?model\s+(?:are\s+you\s+(?:using|running)|is\s+(?:active|configured|running))(?:\s+right\s+now)?|"
+            r"(?:are\s+you\s+(?:using|running)\s+(?:the\s+)?fallback\s+model|which\s+provider\s+is\s+active)|"
+            r"(?:check|show|inspect|report)\s+(?:your\s+|the\s+)?(?:active\s+)?(?:model|configuration|config)(?:\s+status)?)\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if model_cfg_match:
+            tool_res = self.tool_registry.execute(
+                "get_active_model_status",
+                {},
+                caller_agent="general",
+                allowed_tiers=[CapabilityTier.READ_ONLY],
+            )
+            return (
+                tool_res.is_success,
+                tool_res.output or (tool_res.error or "Failed to inspect active model configuration."),
+                "general",
+                [{
+                    "tool_name": "get_active_model_status",
+                    "status": tool_res.status,
+                    "output": tool_res.output,
+                    "evidence": tool_res.evidence,
+                }],
+            )
+
+        # 20d. Direct Gmail Important Morning Emails Routing (never memory or web search)
+        morning_mail_match = re.match(
+            r"^(?:find|check|show|get|list)\s+(?:any\s+|my\s+)?important\s+(?:e?mails?|messages?)(?:\s+(?:i\s+got|received))?(?:\s+(?:this\s+morning|today))?\s*[\.\?]?$|"
+            r"^(?:do\s+i\s+have\s+any\s+important\s+(?:e?mails?|messages?)\s+(?:this\s+morning|today))\s*\??$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if morning_mail_match:
+            tool_res = self.tool_registry.execute(
+                "get_important_morning_emails",
+                {"live_fetch": True},
+                caller_agent="personal_intelligence",
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.NETWORK_EXTERNAL],
+            )
+            return (
+                tool_res.is_success,
+                tool_res.output or (tool_res.error or "Failed to inspect morning Gmail messages."),
+                "personal_intelligence",
+                [{
+                    "tool_name": "get_important_morning_emails",
+                    "status": tool_res.status,
+                    "output": tool_res.output,
+                    "evidence": tool_res.evidence,
+                    "error": tool_res.error,
+                }],
+            )
+
+        # 20e. Single-Task Multi-Step Recursive File Search + Sequential Win+R Batch Opener
+        batch_open_match = re.match(
+            r"^(?:find|search(?:\s+for)?)\s+(?:all\s+|every\s+)?(.+?)\s+(?:pdfs?|files?|documents?)\s+"
+            r"(?:in|from|inside|under)\s+(?:my\s+|the\s+)?(downloads|desktop|documents|home|[a-zA-Z]:\\[^\s,]+)\s+"
+            r"(?:and\s+)?open\s+(?:them|all\s+of\s+them|each|every\s+one)\s*(?:one\s+by\s+one|sequentially)?(?:\s+(?:using|via|through|with)\s+(?:windows\s+run|win\s*\+\s*r|run\s+dialog))?\s*[\.\?]?$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if batch_open_match:
+            query_term = batch_open_match.group(1).strip()
+            root_dir = batch_open_match.group(2).strip()
+            wants_pdf = bool(re.search(r"\bpdfs?\b", stripped, re.IGNORECASE))
+            ext_filter = [".pdf"] if wants_pdf else None
+
+            from core.filesystem.service import UnifiedFilesystemService
+            fs = UnifiedFilesystemService.instance()
+            s_res = fs.search_files(
+                root_path=root_dir,
+                pattern="*",
+                recursive=True,
+                max_results=100,
+                extensions=ext_filter,
+                semantic=True,
+                semantic_query=query_term,
+            )
+            if not s_res.is_success:
+                return False, s_res.error or s_res.output, "file_agent", [{"tool_name": "search_files", "status": "failed", "error": s_res.error}]
+
+            matches = [m for m in (s_res.evidence or {}).get("matches", []) if not m.get("is_dir")]
+            ordered_paths = [m["path"] for m in sorted(matches, key=lambda x: str(x["path"]).lower())]
+            if not ordered_paths:
+                return False, f"No matching {'PDF ' if wants_pdf else ''}files found for '{query_term}' in '{root_dir}'.", "file_agent", [{
+                    "tool_name": "search_files",
+                    "status": "done",
+                    "evidence": s_res.evidence,
+                }]
+
+            open_res = self.tool_registry.execute(
+                "open_multiple_files_via_run",
+                {"paths": ordered_paths},
+                caller_agent="file_agent",
+                allowed_tiers=[CapabilityTier.READ_ONLY, CapabilityTier.EXECUTION],
+            )
+            batch = open_res.evidence or {}
+            lines = [
+                f"Found {len(ordered_paths)} matching {'PDF ' if wants_pdf else ''}file(s) in '{root_dir}' "
+                f"for '{query_term}' and executed sequential Win+R opening ({batch.get('succeeded', 0)}/{batch.get('total', len(ordered_paths))}):"
+            ]
+            for item in batch.get("results", []):
+                lines.append(
+                    f"- {item.get('canonical_path') or item.get('requested_path')}: "
+                    f"{'OK' if item.get('success') else 'FAILED'} [state={item.get('launch_state')}]"
+                )
+            return (
+                bool(open_res.is_success and batch.get("failed", 0) == 0),
+                "\n".join(lines) if batch.get("results") else (open_res.output or open_res.error or "Sequential Win+R opening failed."),
+                "file_agent",
+                [
+                    {"tool_name": "search_files", "status": "done", "evidence": s_res.evidence},
+                    {"tool_name": "open_multiple_files_via_run", "status": open_res.status, "evidence": batch, "error": open_res.error},
+                ],
+            )
+
         # 21. M17: Universal Dynamic Application Launch/Activation
         dyn_app_match = re.match(r"^(?:open|launch|start|activate)\s+(?:the\s+)?(?:app|application|program)?\s*([a-zA-Z0-9_\-\.\s]+)$", stripped, re.IGNORECASE)
         if dyn_app_match:
@@ -607,6 +785,59 @@ class CentralOrchestrator:
                         "error": tool_res.error,
                     }]
                     return tool_res.is_success, tool_res.output or (tool_res.error or f"Failed to launch '{app_target}'"), "execution_agent", side_effects
+
+        return None
+
+    def _update_conv_context(self, goal: str, task_id: str, output: str, side_effects: list[dict[str, Any]]) -> None:
+        """Record latest task context for unambiguous voice/chat follow-ups."""
+        self._conv_context["last_task_id"] = task_id
+        self._conv_context["last_goal"] = goal
+        self._conv_context["last_output"] = output
+        for se in side_effects:
+            args = se.get("arguments") or {}
+            ev = se.get("evidence") or {}
+            path = ev.get("canonical_path") or ev.get("path") or args.get("path")
+            if path and isinstance(path, str):
+                self._conv_context["last_file_path"] = path
+            if args.get("target_app") == "spotify" or se.get("tool_name") == "app_execute_action":
+                q = (args.get("parameters") or {}).get("query") or args.get("query")
+                if q:
+                    self._conv_context["last_media_query"] = q
+                    self._conv_context["last_app"] = args.get("target_app") or "spotify"
+
+    def _try_contextual_followup(self, lower: str, task_id: str) -> tuple[bool, str, str, list[dict[str, Any]]] | None:
+        """Resolve unambiguous contextual follow-ups against the active session context."""
+        if lower in ("cancel that", "stop that", "abort that"):
+            last_id = self._conv_context.get("last_task_id")
+            if last_id:
+                cancelled = self.cancel(last_id)
+                return True, f"Cancelled task '{last_id}'." if cancelled else f"Task '{last_id}' signalled for cancellation.", "orchestrator", []
+            return False, "No active task in current context to cancel.", "orchestrator", []
+
+        if lower in ("open that file", "open that", "open it"):
+            fpath = self._conv_context.get("last_file_path")
+            if fpath:
+                res = self.tool_registry.execute("open_file_via_run", {"path": fpath}, caller_agent="filesystem")
+                return res.is_success, res.output or (res.error or "Failed to open file"), "filesystem", [{"tool_name": "open_file_via_run", "status": res.status, "evidence": res.evidence}]
+
+        if lower in ("play the next one", "next song", "next track"):
+            if self._conv_context.get("last_app") == "spotify" or self._conv_context.get("last_media_query"):
+                res = self.tool_registry.execute(
+                    "app_execute_action",
+                    {"target_app": "spotify", "operation": "next_track", "parameters": {}},
+                    caller_agent="execution_agent",
+                )
+                return res.is_success, res.output or (res.error or "Triggered next track on Spotify."), "execution_agent", [{"tool_name": "app_execute_action", "status": res.status, "evidence": res.evidence}]
+
+        if lower in ("summarize it", "summarize that"):
+            out = self._conv_context.get("last_output")
+            if out:
+                return True, f"Summary: {out[:400]}", "general", []
+
+        if lower in ("try again", "retry that"):
+            prev_goal = self._conv_context.get("last_goal")
+            if prev_goal and prev_goal.lower() not in ("try again", "retry that"):
+                return self._try_fast_path(prev_goal, task_id)
 
         return None
 
@@ -1301,9 +1532,13 @@ class CentralOrchestrator:
         t_id = task_id or new_task_id()
         fast = self._try_fast_path(goal, t_id)
         if fast is not None:
+            ok, out, agent, effects = fast
+            if not any(kw in goal.lower() for kw in ("open that", "play the next", "cancel that", "try again", "summarize it")):
+                self._update_conv_context(goal, t_id, out, effects)
             return fast
         task = self.execute_task(goal, t_id)
         status_str = task.status.value if hasattr(task.status, "value") else str(task.status)
+        self._update_conv_context(goal, t_id, task.result or "", task.execution_evidence)
         return (status_str.lower() == "completed", task.result or "", "orchestrator", [])
 
     def execute_task(self, goal: str, task_id: str | None = None) -> TaskRecord:
@@ -1314,7 +1549,9 @@ class CentralOrchestrator:
         task = TaskRecord(
             task_id=t_id,
             goal=goal,
-            status=TaskStatus.PLANNING,
+            status=TaskStatus.UNDERSTANDING,
+            interpreted_objective=goal.strip(),
+            current_stage="UNDERSTANDING",
             created_at=now,
             started_at=now,
         )
@@ -1439,8 +1676,16 @@ class CentralOrchestrator:
                 return task
 
             # 1. Formulate Plan
+            task.status = TaskStatus.PLANNING
+            task.current_stage = "PLANNING"
+            self.task_store.save_task(task)
+
             plan = self.plan(goal, t_id)
             task.plan = plan
+            task.selected_agents = list(dict.fromkeys(st.assigned_agent for st in plan.subtasks))
+            task.verification_criteria = [
+                d for st in plan.subtasks for d in (st.expected_deliverables or [f"verify:{st.title}"])
+            ]
 
             if t_id in self._cancelled_tasks:
                 self.task_store.cancel_task(t_id, reason="Task cancelled by operator.")
@@ -1448,6 +1693,7 @@ class CentralOrchestrator:
                 return self.task_store.get_task(t_id)
 
             task.status = TaskStatus.RUNNING
+            task.current_stage = "EXECUTING"
             self.task_store.save_task(task)
 
             workflow_context: dict[str, Any] = {"goal": goal, "subtask_outputs": {}}
@@ -1495,8 +1741,13 @@ class CentralOrchestrator:
                     subtask.error = summary
                     self.task_store.update_subtask(subtask)
 
-                    task.status = TaskStatus.FAILED
+                    task.current_stage = "PARTIAL" if completed_summaries else "FAILED"
+                    task.status = TaskStatus.PARTIAL if completed_summaries else TaskStatus.FAILED
                     task.error = f"Subtask '{subtask.title}' failed: {summary}"
+                    if completed_summaries:
+                        task.result = "\n\n".join(completed_summaries)
+                        task.metadata["incomplete_subtasks"] = [st.subtask_id for st in plan.subtasks[subtask.index - 1:]]
+                    task.final_outcome = task.status.value
                     task.finished_at = time.time()
                     task.duration_seconds = round(task.finished_at - task.started_at, 2)
                     self.task_store.save_task(task)
@@ -1517,6 +1768,7 @@ class CentralOrchestrator:
 
                 # Transition: VERIFYING
                 subtask.status = SubtaskStatus.VERIFYING
+                task.current_stage = "VERIFYING"
                 self.task_store.update_subtask(subtask)
 
                 # Independent Verification
@@ -1525,6 +1777,13 @@ class CentralOrchestrator:
                     side_effects=side_effects,
                     output_summary=summary,
                 )
+                if evidence:
+                    task.execution_evidence.append({
+                        "subtask_id": subtask.subtask_id,
+                        "verdict": verdict,
+                        "verified": is_verified,
+                        "evidence": evidence,
+                    })
 
                 self.event_bus.publish(SubtaskVerifiedEvent(
                     task_id=t_id,
@@ -1551,8 +1810,13 @@ class CentralOrchestrator:
                         verification_verdict=verdict,
                     )
 
-                    task.status = TaskStatus.FAILED
+                    task.status = TaskStatus.PARTIAL if completed_summaries else TaskStatus.FAILED
+                    task.current_stage = task.status.value
+                    task.final_outcome = task.status.value
                     task.error = subtask.error
+                    if completed_summaries:
+                        task.result = "\n\n".join(completed_summaries)
+                        task.metadata["incomplete_subtasks"] = [st.subtask_id for st in plan.subtasks[subtask.index - 1:]]
                     task.finished_at = time.time()
                     task.duration_seconds = round(task.finished_at - task.started_at, 2)
                     self.task_store.save_task(task)
@@ -1617,6 +1881,8 @@ class CentralOrchestrator:
             # 3. Complete Task
             now_finish = time.time()
             task.status = TaskStatus.COMPLETED
+            task.current_stage = "COMPLETED"
+            task.final_outcome = "COMPLETED"
             task.finished_at = now_finish
             task.duration_seconds = round(now_finish - task.started_at, 2)
             task.result = "\n\n".join(completed_summaries)
@@ -1681,8 +1947,13 @@ class CentralOrchestrator:
         return initial_task
 
     def cancel(self, task_id: str) -> bool:
-        """Signal cooperative cancellation to a task."""
+        """Signal cooperative cancellation to a task and shared action scheduler."""
         self._cancelled_tasks.add(task_id)
+        try:
+            from core.orchestrator.scheduler import SharedActionScheduler
+            SharedActionScheduler.instance().cancel_task(task_id)
+        except Exception:
+            pass
         return bool(self.task_store.cancel_task(task_id))
 
     run_task = execute_task

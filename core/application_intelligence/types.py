@@ -200,7 +200,7 @@ class ExecutionEvidence:
     """Physical postcondition evidence matching core.outcome convention."""
     action_id: str
     status: str = "done"                       # Backward compatibility: "done", "unverified", "failed", "blocked"
-    verdict: ExecutionVerdict = ExecutionVerdict.COMPLETED_VERIFIED
+    verdict: ExecutionVerdict | None = None
     tier_used: AppInteractionTier = AppInteractionTier.TIER_2_ADAPTER
     facts: list[str] = field(default_factory=list)
     evidence_data: dict[str, Any] = field(default_factory=dict)
@@ -208,17 +208,26 @@ class ExecutionEvidence:
     uipi_blocked: bool = False
 
     def __post_init__(self) -> None:
-        # Synchronize status and verdict
-        if self.verdict == ExecutionVerdict.COMPLETED_VERIFIED:
-            self.status = "done"
-        elif self.verdict == ExecutionVerdict.ACTION_EXECUTED_UNVERIFIED:
-            self.status = "unverified"
-        elif self.verdict == ExecutionVerdict.BLOCKED:
-            self.status = "blocked"
-        elif self.verdict == ExecutionVerdict.FAILED:
-            self.status = "failed"
-        elif self.verdict == ExecutionVerdict.CANCELLED:
-            self.status = "cancelled"
+        # Synchronize status and verdict bidirectionally without clobbering explicit status
+        _status_to_verdict = {
+            "done": ExecutionVerdict.COMPLETED_VERIFIED,
+            "unverified": ExecutionVerdict.ACTION_EXECUTED_UNVERIFIED,
+            "blocked": ExecutionVerdict.BLOCKED,
+            "failed": ExecutionVerdict.FAILED,
+            "cancelled": ExecutionVerdict.CANCELLED,
+        }
+        _verdict_to_status = {
+            ExecutionVerdict.COMPLETED_VERIFIED: "done",
+            ExecutionVerdict.COMPLETED_WITH_LIMITATIONS: "done",
+            ExecutionVerdict.ACTION_EXECUTED_UNVERIFIED: "unverified",
+            ExecutionVerdict.BLOCKED: "blocked",
+            ExecutionVerdict.FAILED: "failed",
+            ExecutionVerdict.CANCELLED: "cancelled",
+        }
+        if self.verdict is None:
+            self.verdict = _status_to_verdict.get(self.status, ExecutionVerdict.FAILED)
+        else:
+            self.status = _verdict_to_status.get(self.verdict, self.status)
 
     @property
     def is_success(self) -> bool:

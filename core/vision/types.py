@@ -51,6 +51,20 @@ class BrowserTabInfo:
 
 
 @dataclass
+class ScreenEvent:
+    """Meaningful desktop screen event emitted by ScreenObserver for event-driven reasoning."""
+    event_type: str      # "app_launched" | "window_changed" | "dialog_appeared" | "error_detected" | "screen_content_changed"
+    timestamp: float
+    app_name: str = ""
+    window_title: str = ""
+    confidence: float = 0.9
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class DesktopState:
     """Snapshot representation of the current multi-monitor visible desktop."""
     timestamp: float
@@ -64,6 +78,12 @@ class DesktopState:
     is_paused: bool = False
     privacy_redacted: bool = False
     thumbnail_jpeg: bytes | None = None  # Downscaled ephemeral JPEG preview (max 480x270)
+    screen_events: list[dict[str, Any]] = field(default_factory=list)
+    last_action: str = ""
+    last_observed_result: str = ""
+    confidence: float = 1.0
+    elements_valid: bool = True
+    element_cache_epoch: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

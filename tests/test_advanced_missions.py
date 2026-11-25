@@ -51,6 +51,36 @@ def temp_mission_env():
     from core.agents.registry_ext import register_specialized_agents
     register_specialized_agents(agent_reg)
     tool_reg = ToolRegistry()
+
+    # Supply deterministic test mock for search_web to test research mission without external network
+    from core.orchestrator.tools import CapabilityTier, ToolDefinition, ToolResult
+    tool_reg.register(
+        ToolDefinition(
+            name="search_web",
+            description="Search information sources and gather research leads.",
+            parameters={
+                "type": "OBJECT",
+                "properties": {"query": {"type": "STRING", "description": "Search query terms"}},
+                "required": ["query"],
+            },
+            capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+            handler=lambda params=None, context=None, **kwargs: ToolResult(
+                status="done",
+                output=(
+                    "### Python Release Status\n"
+                    "Latest release: Python 3.13 / 3.14 development.\n"
+                    "Source URL: https://docs.python.org/3/whatsnew/\n"
+                    "Publication Date: 2026-10-01\n"
+                ),
+                evidence={
+                    "query": str(params.get("query") if params else ""),
+                    "urls": ["https://docs.python.org/3/whatsnew/"],
+                    "citations_count": 1,
+                },
+            ),
+            is_mutating=False,
+        )
+    )
     
     store = MissionStore(storage_dir=store_dir)
     planner = MissionPlanner(agent_reg, tool_reg)

@@ -36,9 +36,9 @@ from collections.abc import Callable
 
 _OS = platform.system()
 
-# The default chord. Ctrl+Space is free in most desktop environments and is the
-# same finger shape on every keyboard layout, which matters for a worldwide app.
-DEFAULT_CHORD = ("ctrl", "space")
+# The default chord. Ctrl+Alt is global and fast to hold/release without colliding with text editing.
+DEFAULT_CHORD = ("ctrl", "alt")
+FALLBACK_CHORD = ("ctrl", "space")
 
 # Windows virtual-key codes for the names we accept.
 _VK = {
@@ -71,17 +71,28 @@ def qt_sequence(chord=DEFAULT_CHORD) -> str:
 class PushToTalk:
     """Calls `on_change(held: bool)` whenever the chord is pressed or released.
 
-    Start it once; it is safe to start and stop repeatedly, and safe to stop a
-    detector that never started.
+    Supports Ctrl+Alt global polling on Windows, conflict/hook-failure fallback
+    to FALLBACK_CHORD / window-scoped Qt shortcuts, cooperative cancellation,
+    and stuck-recording timeout recovery.
     """
 
-    def __init__(self, on_change: Callable[[bool], None], chord=DEFAULT_CHORD):
+    def __init__(
+        self,
+        on_change: Callable[[bool], None],
+        chord=DEFAULT_CHORD,
+        fallback_chord=FALLBACK_CHORD,
+        max_hold_seconds: float = 120.0,
+    ):
         self._on_change = on_change
         self._chord = tuple(chord)
+        self._fallback_chord = tuple(fallback_chord)
+        self._max_hold_seconds = max_hold_seconds
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._cancelled = threading.Event()
         self._held = False
         self._scope = "window"
+        self._conflict_reason: str | None = None
 
     # ── state ───────────────────────────────────────────────────────────────
 
@@ -95,16 +106,58 @@ class PushToTalk:
         return self._scope
 
     @property
+    def chord(self) -> tuple[str, ...]:
+        return self._chord
+
+    @property
+    def conflict_reason(self) -> str | None:
+        return self._conflict_reason
+
+    @property
     def label(self) -> str:
         return chord_label(self._chord)
 
     # ── lifecycle ───────────────────────────────────────────────────────────
 
+    def set_chord(self, chord: tuple[str, ...]) -> None:
+        self._chord = tuple(chord)
+
+    def use_fallback_chord(self) -> tuple[str, ...]:
+        """Switch to configurable fallback chord when primary chord conflicts."""
+        self._chord = self._fallback_chord
+        self._conflict_reason = None
+        return self._chord
+
+    def detect_conflict(self) -> str | None:
+        """Check whether configured chord keys are unsupported or blocked."""
+        if not self._chord or any(k not in _VK for k in self._chord):
+            return f"Unsupported chord keys: {self._chord}"
+        return None
+
+    def cancel(self) -> None:
+        """Cancel active recording hold immediately without waiting for physical key release."""
+        self._cancelled.set()
+        self._set_held(False)
+
+    def on_focus_lost(self) -> bool:
+        """Release hold safely on focus loss when operating in window scope."""
+        if getattr(self, "_scope", "window") == "window":
+            was_held = bool(self.held)
+            self._set_held(False)
+            return was_held
+        return False
+
     def start(self) -> str:
-        """Begin watching. Returns the scope actually achieved."""
+        """Begin watching. Returns the scope actually achieved ('global' or 'window')."""
         self.stop()
         self._stop.clear()
-        if _OS == "Windows" and self._can_poll():
+        self._cancelled.clear()
+        self._conflict_reason = self.detect_conflict()
+        if self._conflict_reason and self._chord != self._fallback_chord:
+            self.use_fallback_chord()
+            self._conflict_reason = self.detect_conflict()
+
+        if _OS == "Windows" and not self._conflict_reason and self._can_poll():
             self._scope = "global"
             self._thread = threading.Thread(
                 target=self._poll_loop, name="push-to-talk", daemon=True)
@@ -115,6 +168,7 @@ class PushToTalk:
 
     def stop(self) -> None:
         self._stop.set()
+        self._cancelled.set()
         t, self._thread = self._thread, None
         if t is not None and t.is_alive():
             t.join(timeout=1.0)
@@ -160,12 +214,19 @@ class PushToTalk:
                 break     # driver or session teardown — fall back to windowed
             now = time.monotonic()
             if down:
-                if down_since == 0.0:
+                if self._cancelled.is_set():
+                    # Ignore residual physical hold after explicit cancellation until released
+                    pass
+                elif down_since == 0.0:
                     down_since = now
+                elif (now - down_since) >= self._max_hold_seconds:
+                    # Anti-stuck safeguard
+                    self._set_held(False)
                 elif now - down_since >= _DEBOUNCE_S:
                     self._set_held(True)
             else:
                 down_since = 0.0
+                self._cancelled.clear()
                 self._set_held(False)
             self._stop.wait(period)
 

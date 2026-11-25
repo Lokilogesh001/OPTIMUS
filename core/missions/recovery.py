@@ -60,13 +60,28 @@ class MissionRecoveryEngine:
 
         return FailureType.UNKNOWN
 
-    def select_alternative_tool(self, tool_name: str) -> str | None:
+    def select_alternative_tool(self, tool_name: str, available_tools: list[str] | None = None) -> str | None:
         """Find a viable registered substitute for a failed or unavailable tool via CapabilityRegistry.
         
         Resolves LOW-03: Semantic discovery replacing static nonsensical fallbacks.
         """
         alt = self.capability_registry.find_alternative_capability(tool_name)
+        if available_tools:
+            if alt and alt.capability_id in available_tools:
+                return alt.capability_id
+            for candidate in available_tools:
+                if ("search" in candidate and "search" in tool_name) or ("read" in candidate and "read" in tool_name):
+                    return candidate
+            return available_tools[0] if available_tools else None
         return alt.capability_id if alt else None
+
+    def select_alternative_agent(self, agent_name: str, available_agents: list[str] | None = None) -> str | None:
+        """Find an alternative specialized agent capable of executing the domain."""
+        if available_agents:
+            for candidate in available_agents:
+                if candidate != agent_name:
+                    return candidate
+        return None
 
     def can_retry(self, subtask: MissionSubtask) -> bool:
         """Determine if subtask retry limit has not been exhausted."""
@@ -78,6 +93,8 @@ class MissionRecoveryEngine:
         subtask: MissionSubtask,
         failure_type: FailureType,
         plan: MissionPlan | None = None,
+        available_tools: list[str] | None = None,
+        available_agents: list[str] | None = None,
     ) -> bool:
         """Modify subtask parameters or inject prerequisite steps to attempt safe recovery.
         
@@ -166,3 +183,5 @@ class MissionRecoveryEngine:
             if s.subtask_id in dependents and s.status == SubtaskStatus.PENDING:
                 s.status = SubtaskStatus.SKIPPED
                 logger.info("Skipped downstream subtask '%s' due to failure of upstream '%s'", s.title, failed_subtask_id)
+
+        plan.version += 1

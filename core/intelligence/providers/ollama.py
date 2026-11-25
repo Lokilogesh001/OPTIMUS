@@ -205,9 +205,9 @@ class OllamaProvider(ModelProvider):
             return False
 
     def list_models(self) -> list[ModelMetadata]:
-        """Query installed local Ollama models from `/api/tags`."""
+        """Query installed local Ollama models from `/api/tags` with fast loopback timeout."""
         try:
-            status, body = self._transport(f"{self.base_url}/api/tags", None, {}, 5.0)
+            status, body = self._transport(f"{self.base_url}/api/tags", None, {}, 0.35)
             if status != 200:
                 return self._default_catalog()
             data = json.loads(body.decode("utf-8"))

@@ -76,24 +76,24 @@ def _compress_silence(
 
 
 def _play_np(samples, sample_rate: int) -> None:
-    """Play float32 mono (or stereo) audio via sounddevice.
+    """Play float32 mono (or stereo) audio via ContinuousAudioStreamPlayer.
     Accepts numpy arrays or PyTorch tensors.
     """
-    sd.play(_to_numpy(samples), sample_rate)
-    sd.wait()
+    from core.audio_stream import ContinuousAudioStreamPlayer
+    ContinuousAudioStreamPlayer.instance().play_np(_to_numpy(samples), sample_rate)
 
 
 def _play_audio_bytes(audio_bytes: bytes) -> None:
-    """Decode MP3/WAV/OGG bytes and play via sounddevice (uses miniaudio)."""
+    """Decode MP3/WAV/OGG bytes and play via ContinuousAudioStreamPlayer (uses miniaudio)."""
     import miniaudio
+    from core.audio_stream import ContinuousAudioStreamPlayer
     decoded = miniaudio.decode(
         audio_bytes,
         output_format=miniaudio.SampleFormat.FLOAT32,
         nchannels=1,
     )
     samples = np.array(decoded.samples, dtype=np.float32)
-    sd.play(samples, decoded.sample_rate)
-    sd.wait()
+    ContinuousAudioStreamPlayer.instance().play_np(samples, decoded.sample_rate)
 
 
 # ---------------------------------------------------------------------------
@@ -335,12 +335,21 @@ class KokoroTTSEngine:
         synth_thread = threading.Thread(target=_synth, daemon=True)
         synth_thread.start()
 
-        # Player runs in this thread so sd.wait() doesn't block the synth thread.
+        from core.audio_stream import ContinuousAudioStreamPlayer
+        player = ContinuousAudioStreamPlayer.instance()
+        player.begin_utterance()
+
+        # Stream chunks seamlessly into continuous audio player
         while True:
             arr = audio_q.get()
             if arr is None:
                 break
-            _play_np(arr, 24000)
+            if player.is_interrupted:
+                break
+            player.feed_chunk(arr, 24000)
+
+        player.end_utterance()
+        player.wait_drained()
 
         synth_thread.join()
 
@@ -415,7 +424,15 @@ class TTSPlayer:
                 on_done()
 
     def stop(self) -> None:
-        sd.stop()
+        from core.audio_stream import ContinuousAudioStreamPlayer
+        try:
+            ContinuousAudioStreamPlayer.instance().stop(abort=True)
+        except Exception:
+            pass
+        try:
+            sd.stop()
+        except Exception:
+            pass
         with self._lock:
             self._playing = False
 

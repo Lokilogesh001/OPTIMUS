@@ -74,6 +74,26 @@ class DevToolsAdapter(BaseApplicationAdapter):
             logger.warning("Command execution restricted outside workspace root: %s", cwd)
             cwd = ws_root
 
+        # Security check: validate command through central command guard (fail closed)
+        try:
+            from core.sandbox.command_guard import check_command_safety
+            is_safe, reason = check_command_safety(command, caller_agent="developer")
+            if not is_safe:
+                return {
+                    "exit_code": -1,
+                    "stdout": "",
+                    "stderr": f"COMMAND_PROHIBITED: {reason}",
+                    "is_success": False,
+                }
+        except Exception as exc:
+            logger.warning("Command safety check failed: %s", exc)
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"COMMAND_PROHIBITED: safety check unavailable ({exc})",
+                "is_success": False,
+            }
+
         try:
             res = subprocess.run(
                 command,

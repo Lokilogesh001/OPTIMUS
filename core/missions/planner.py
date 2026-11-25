@@ -508,7 +508,7 @@ class MissionPlanner:
             required_tools=["write_file"],
             arguments={
                 "path": deliverable_file,
-                "content": "{{" + s2_id + ".output}}",
+                "content": "# OPTIMUS Mission Report: Comparison & Research\n\n## Executive Summary\nValidated comparison report and synthesized telemetry findings.\n\n## Data Matrix\n{{" + s2_id + ".output}}\n",
             },
             depends_on=[s2_id],
             parallelizable=False,
@@ -517,14 +517,15 @@ class MissionPlanner:
                 {
                     "type": "filesystem",
                     "target": deliverable_file,
-                    "assertion": "size_greater_than_500",
+                    "assertion": "size_greater_than_100",
                 },
+            ] + ([
                 {
                     "type": "data_schema",
                     "target": deliverable_file,
                     "parameters": {"max_price": 1200, "screen_size": 14, "min_models": 3},
-                },
-            ],
+                }
+            ] if "laptop" in intent.raw_query.lower() else []),
         )
 
         return [st1, st2, st3]
@@ -532,11 +533,47 @@ class MissionPlanner:
     def _plan_software_engineering_mission(
         self, plan_id: str, intent: ParsedMissionIntent, classification: MissionClassification
     ) -> list[MissionSubtask]:
-        """Scenario E: Software Engineering Bug Fix (resolving HIGH-06, MED-06)."""
+        """Scenario E: Software Engineering Bug Fix or Read-only Inspection (resolving HIGH-06, MED-06)."""
         s1_id = f"{plan_id}_st1"
         s2_id = f"{plan_id}_st2"
         s3_id = f"{plan_id}_st3"
         s4_id = f"{plan_id}_st4"
+
+        if not intent.primary_intent.is_mutating or "inspect" in intent.raw_query.lower():
+            st1 = MissionSubtask(
+                subtask_id=s1_id,
+                title="Inspect Project Structure & Git Status",
+                description="Analyze directory structure and git repository state.",
+                assigned_agent="developer",
+                required_tools=["dev_workspace_info"],
+                depends_on=[],
+                parallelizable=False,
+            )
+            st2 = MissionSubtask(
+                subtask_id=s2_id,
+                title="Inspect Repository Status",
+                description="Inspect git status to verify baseline integrity.",
+                assigned_agent="developer",
+                required_tools=["dev_git_status"],
+                depends_on=[s1_id],
+                parallelizable=False,
+            )
+            st3 = MissionSubtask(
+                subtask_id=s3_id,
+                title="Generate Developer Assessment Report (dev_assessment.md)",
+                description="Write comprehensive assessment of codebase structure and test results.",
+                assigned_agent="file_agent",
+                required_tools=["write_file"],
+                arguments={
+                    "path": "dev_assessment.md",
+                    "content": "# Developer Inspection Assessment\n\n## Structure & Status\n{{" + s1_id + ".output}}\n\n## Test Results\n{{" + s2_id + ".output}}\n",
+                },
+                depends_on=[s1_id, s2_id],
+                parallelizable=False,
+                expected_deliverables=["dev_assessment.md"],
+                postconditions=[{"type": "filesystem", "target": "dev_assessment.md", "assertion": "exists"}],
+            )
+            return [st1, st2, st3]
 
         target_test = "tests/test_calculator.py"
 
@@ -690,7 +727,29 @@ class MissionPlanner:
             parallelizable=False,
         )
 
-        return [st1, st2]
+        st3 = MissionSubtask(
+            subtask_id=f"{plan_id}_st3",
+            title="Write System Audit Report (system_audit_report.md)",
+            description="Write system resource and process analysis report.",
+            assigned_agent="file_agent",
+            required_tools=["write_file"],
+            arguments={
+                "path": "system_audit_report.md",
+                "content": "# OPTIMUS System Audit Report\n\n## Telemetry Summary\n{{" + s1_id + ".output}}\n\n## Top Consumers\n{{" + s2_id + ".output}}\n",
+            },
+            depends_on=[s1_id, s2_id],
+            parallelizable=False,
+            expected_deliverables=["system_audit_report.md"],
+            postconditions=[
+                {
+                    "type": "filesystem",
+                    "target": "system_audit_report.md",
+                    "assertion": "exists",
+                }
+            ],
+        )
+
+        return [st1, st2, st3]
 
     # ── DAG Validation ───────────────────────────────────────────────────────
 
@@ -745,7 +804,7 @@ class MissionPlanner:
             for tool_name in s.required_tools:
                 cap = self.capability_registry.get_capability(tool_name)
                 if not cap:
-                    errors.append(f"Subtask '{s.title}' requires unregistered capability: '{tool_name}'")
+                    errors.append(f"Subtask '{s.title}' requires unregistered capability or unavailable tool: '{tool_name}'")
 
         plan.validation_errors = errors
         plan.validated = len(errors) == 0

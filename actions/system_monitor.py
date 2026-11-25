@@ -130,6 +130,13 @@ def get_system_status() -> dict:
     uptime_h    = int(uptime_secs // 3600)
     uptime_m    = int((uptime_secs % 3600) // 60)
 
+    model_status: dict = {}
+    try:
+        from core.intelligence.model_status import get_active_model_status
+        model_status = get_active_model_status()
+    except Exception:
+        model_status = {"provider": "unknown", "configured_model_id": "unconfigured", "active_model_id": "unknown", "verification_status": "unverified"}
+
     return {
         "cpu_percent":   round(cpu, 1),
         "ram_percent":   round(ram.percent, 1),
@@ -139,6 +146,7 @@ def get_system_status() -> dict:
         "gpu_percent":   round(gpu,  1) if gpu  >= 0 else None,
         "uptime":        f"{uptime_h}h {uptime_m}m",
         "process_count": len(psutil.pids()),
+        "model_config":  model_status,
     }
 
 

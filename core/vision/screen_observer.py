@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from core.lazyimport import installed
-from core.vision.types import DesktopState, PrivacyConfig, WindowInfo
+from core.vision.types import DesktopState, PrivacyConfig, ScreenEvent, WindowInfo
 
 _HAS_MSS = installed("mss")
 _HAS_PIL = installed("PIL")
@@ -137,6 +137,45 @@ class ScreenObserver:
         self.active_poll_interval: float = 0.15     # ~6.6 Hz during active supervision
         self.tree_scan_cooldown: float = 2.0        # Min 2.0s between full UIA tree walks
         self.is_active_supervision: bool = False
+
+        # Short-lived screen state & event-driven element invalidation
+        self._cached_elements: list[dict[str, Any]] = []
+        self._element_cache_epoch: int = 0
+        self._last_action: str = ""
+        self._last_observed_result: str = ""
+        self._event_listeners: list[Any] = []
+        self._known_window_hwnds: set[int] = set()
+
+    def register_event_listener(self, callback: Any) -> None:
+        """Subscribe a listener to meaningful semantic ScreenEvents."""
+        with self._lock:
+            if callback not in self._event_listeners:
+                self._event_listeners.append(callback)
+
+    def unregister_event_listener(self, callback: Any) -> None:
+        with self._lock:
+            if callback in self._event_listeners:
+                self._event_listeners.remove(callback)
+
+    def invalidate_elements(self, reason: str = "screen_changed") -> int:
+        """Invalidate cached UI element coordinates after a major screen transition."""
+        with self._lock:
+            self._cached_elements.clear()
+            self._element_cache_epoch += 1
+            return self._element_cache_epoch
+
+    def update_cached_elements(self, elements: list[dict[str, Any]]) -> None:
+        with self._lock:
+            self._cached_elements = list(elements[:150])
+
+    def get_cached_elements(self) -> tuple[int, list[dict[str, Any]]]:
+        with self._lock:
+            return self._element_cache_epoch, list(self._cached_elements)
+
+    def record_action_outcome(self, action: str, observed_result: str) -> None:
+        with self._lock:
+            self._last_action = action
+            self._last_observed_result = observed_result
 
     @property
     def is_paused(self) -> bool:
@@ -278,26 +317,35 @@ class ScreenObserver:
         if active_window and self.privacy_config.is_window_excluded(active_window.app_name, active_window.title):
             is_privacy_excluded = True
 
-        cached_wins = self._last_state.windows if self._last_state else []
-        cached_tabs = self._last_state.browser_tabs if self._last_state else []
+        with self._lock:
+            prev_state = self._last_state
+            prev_dhash = self._last_dhash
+            known_hwnds = set(self._known_window_hwnds)
+
+        cached_wins = prev_state.windows if prev_state else []
+        cached_tabs = prev_state.browser_tabs if prev_state else []
         resolved_windows = windows if windows is not None else cached_wins
         resolved_tabs = browser_tabs if browser_tabs is not None else cached_tabs
 
         if is_privacy_excluded:
-            redacted_state = DesktopState(
-                timestamp=now,
-                monitors=monitors,
-                active_window=active_window,
-                windows=resolved_windows,
-                browser_tabs=resolved_tabs,
-                dhash="0000000000000000",
-                has_changed=False,
-                ui_elements_count=0,
-                is_paused=False,
-                privacy_redacted=True,
-                thumbnail_jpeg=create_blank_thumbnail(),
-            )
+            self.invalidate_elements("privacy_redacted")
             with self._lock:
+                cache_epoch = self._element_cache_epoch
+                redacted_state = DesktopState(
+                    timestamp=now,
+                    monitors=monitors,
+                    active_window=active_window,
+                    windows=resolved_windows,
+                    browser_tabs=resolved_tabs,
+                    dhash="0000000000000000",
+                    has_changed=False,
+                    ui_elements_count=0,
+                    is_paused=False,
+                    privacy_redacted=True,
+                    thumbnail_jpeg=create_blank_thumbnail(),
+                    elements_valid=False,
+                    element_cache_epoch=cache_epoch,
+                )
                 self._last_state = redacted_state
             return redacted_state
 
@@ -307,9 +355,74 @@ class ScreenObserver:
         roi_rect = active_window.rect if active_window else None
         current_dhash = compute_dhash(raw_bytes, roi_rect=roi_rect)
 
-        # Compare with previous dHash
-        dist = hamming_distance(current_dhash, self._last_dhash)
-        has_changed = (dist > 1) or force_scan or (active_window != (self._last_state.active_window if self._last_state else None))
+        # Compare with previous dHash & detect meaningful events / stale elements
+        dist = hamming_distance(current_dhash, prev_dhash)
+        prev_win = prev_state.active_window if prev_state else None
+        win_changed = (
+            (active_window is None) != (prev_win is None)
+            or (
+                active_window is not None
+                and prev_win is not None
+                and (active_window.hwnd != prev_win.hwnd or active_window.rect != prev_win.rect)
+            )
+        )
+        major_change = win_changed or (dist > 6)
+        has_changed = (dist > 1) or force_scan or win_changed
+
+        elements_valid = not major_change
+        if major_change:
+            self.invalidate_elements("major_screen_change")
+
+        # Classify meaningful semantic ScreenEvents (no LLM call per frame)
+        emitted_events: list[ScreenEvent] = []
+        cur_hwnds: set[int] = set()
+        if active_window:
+            cur_hwnds = {w.hwnd for w in resolved_windows}
+            if active_window.hwnd not in known_hwnds and known_hwnds:
+                emitted_events.append(ScreenEvent(
+                    event_type="app_launched",
+                    timestamp=now,
+                    app_name=active_window.app_name,
+                    window_title=active_window.title,
+                    confidence=0.92,
+                    details={"hwnd": active_window.hwnd},
+                ))
+            if win_changed:
+                emitted_events.append(ScreenEvent(
+                    event_type="window_changed",
+                    timestamp=now,
+                    app_name=active_window.app_name,
+                    window_title=active_window.title,
+                    confidence=0.95,
+                    details={"hwnd": active_window.hwnd},
+                ))
+            title_low = active_window.title.lower()
+            if active_window.class_name == "#32770" or bool(re.search(r"\b(?:dialog|save as|confirm|alert)\b", title_low)):
+                emitted_events.append(ScreenEvent(
+                    event_type="dialog_appeared",
+                    timestamp=now,
+                    app_name=active_window.app_name,
+                    window_title=active_window.title,
+                    confidence=0.90,
+                    details={"class_name": active_window.class_name},
+                ))
+            if any(kw in title_low for kw in ("error", "exception", "not responding", "failed", "warning")):
+                emitted_events.append(ScreenEvent(
+                    event_type="error_detected",
+                    timestamp=now,
+                    app_name=active_window.app_name,
+                    window_title=active_window.title,
+                    confidence=0.88,
+                ))
+        if dist > 6 and not emitted_events:
+            emitted_events.append(ScreenEvent(
+                event_type="screen_content_changed",
+                timestamp=now,
+                app_name=active_window.app_name if active_window else "",
+                window_title=active_window.title if active_window else "",
+                confidence=0.85,
+                details={"hamming_distance": dist},
+            ))
 
         # Downscale thumbnail immediately; release raw_bytes to GC
         thumbnail = self.generate_downscaled_thumbnail(raw_bytes)
@@ -325,8 +438,14 @@ class ScreenObserver:
                 self._last_tree_scan_time = now
             except Exception:
                 ui_elements_count = 0
-        elif self._last_state:
-            ui_elements_count = self._last_state.ui_elements_count
+        elif prev_state:
+            ui_elements_count = prev_state.ui_elements_count
+
+        with self._lock:
+            cache_epoch = self._element_cache_epoch
+            last_act = self._last_action
+            last_obs = self._last_observed_result
+            listeners = list(self._event_listeners)
 
         state = DesktopState(
             timestamp=now,
@@ -340,12 +459,27 @@ class ScreenObserver:
             is_paused=False,
             privacy_redacted=is_privacy_excluded,
             thumbnail_jpeg=thumbnail,
+            screen_events=[e.to_dict() for e in emitted_events],
+            last_action=last_act,
+            last_observed_result=last_obs,
+            confidence=0.95 if active_window else 0.75,
+            elements_valid=elements_valid,
+            element_cache_epoch=cache_epoch,
         )
 
         with self._lock:
+            if cur_hwnds:
+                self._known_window_hwnds = cur_hwnds
             self._last_dhash = current_dhash
             self._last_state = state
             self._history.append(state)
+
+        for ev in emitted_events:
+            for cb in listeners:
+                try:
+                    cb(ev)
+                except Exception:
+                    pass
 
         return state
 

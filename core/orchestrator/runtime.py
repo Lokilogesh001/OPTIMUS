@@ -20,10 +20,19 @@ from typing import Any
 
 class TaskStatus(str, Enum):
     """Lifecycle status of a top-level OPTIMUS task."""
+    CREATED = "CREATED"
+    UNDERSTANDING = "UNDERSTANDING"
     PENDING = "PENDING"
     PLANNING = "PLANNING"
+    READY = "READY"
     RUNNING = "RUNNING"
+    EXECUTING = "EXECUTING"
+    WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL"
+    WAITING_FOR_RESOURCE = "WAITING_FOR_RESOURCE"
+    VERIFYING = "VERIFYING"
+    RECOVERING = "RECOVERING"
     COMPLETED = "COMPLETED"
+    PARTIAL = "PARTIAL"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
 
@@ -188,7 +197,7 @@ class TaskRecord:
     """Operational and persistent record of an OPTIMUS task lifecycle."""
     task_id: str
     goal: str
-    status: TaskStatus = TaskStatus.PENDING
+    status: TaskStatus = TaskStatus.CREATED
     plan: ExecutionPlan | None = None
     created_at: float = field(default_factory=time.time)
     started_at: float = 0.0
@@ -197,6 +206,17 @@ class TaskRecord:
     error: str | None = None
     duration_seconds: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+    interpreted_objective: str = ""
+    current_stage: str = "CREATED"
+    dependencies: list[str] = field(default_factory=list)
+    selected_agents: list[str] = field(default_factory=list)
+    required_permissions: list[str] = field(default_factory=list)
+    execution_evidence: list[dict[str, Any]] = field(default_factory=list)
+    verification_criteria: list[str] = field(default_factory=list)
+    retry_count: int = 0
+    max_retries: int = 2
+    recovery_history: list[dict[str, Any]] = field(default_factory=list)
+    final_outcome: str = ""
 
     @property
     def subtasks(self) -> list[Subtask]:
@@ -225,6 +245,17 @@ class TaskRecord:
             "error": self.error,
             "duration_seconds": self.duration_seconds,
             "metadata": self.metadata,
+            "interpreted_objective": self.interpreted_objective,
+            "current_stage": self.current_stage,
+            "dependencies": self.dependencies,
+            "selected_agents": self.selected_agents,
+            "required_permissions": self.required_permissions,
+            "execution_evidence": self.execution_evidence,
+            "verification_criteria": self.verification_criteria,
+            "retry_count": self.retry_count,
+            "max_retries": self.max_retries,
+            "recovery_history": self.recovery_history,
+            "final_outcome": self.final_outcome,
         }
 
     @classmethod
@@ -233,7 +264,9 @@ class TaskRecord:
         d["status"] = TaskStatus(d.get("status", "PENDING"))
         if d.get("plan"):
             d["plan"] = ExecutionPlan.from_dict(d["plan"])
-        return cls(**d)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in d.items() if k in known}
+        return cls(**filtered)
 
 
 # ── Thread-Safe Atomic Persistence Store ─────────────────────────────────────
@@ -324,11 +357,13 @@ class TaskStore:
             if not task:
                 return None
 
-            if task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+            if task.status in (TaskStatus.COMPLETED, TaskStatus.PARTIAL, TaskStatus.FAILED, TaskStatus.CANCELLED):
                 return None
 
             now = time.time()
             task.status = TaskStatus.CANCELLED
+            task.current_stage = "CANCELLED"
+            task.final_outcome = "CANCELLED"
             task.error = reason
             task.finished_at = now
             if task.started_at > 0:

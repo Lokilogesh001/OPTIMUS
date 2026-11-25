@@ -603,16 +603,42 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
 
     # 9. send_email (Approval Gated via PolicyEngine)
     def _send_email_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
-        to = params.get("to", "")
-        subject = params.get("subject", "")
-        body = params.get("body", "")
+        import os
+        to = str(params.get("to") or "").strip()
+        subject = str(params.get("subject") or "").strip()
+        body = str(params.get("body") or "")
         if not to or not subject or not body:
             return ToolResult(status="failed", error="Missing required parameters: to, subject, body")
 
+        if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
+            return ToolResult(
+                status="done",
+                output=f"Email sent successfully to '{to}' with subject '{subject}'.",
+                evidence={"to": to, "subject": subject, "timestamp": time.time(), "mode": "mock"},
+            )
+
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        if not accounts:
+            return ToolResult(status="failed", error="No connected Gmail account available to send email.")
+        from core.personal_intelligence.providers.gmail import GmailAdapter
+        adapter = GmailAdapter(account=accounts[0])
+        res = adapter.send_message(to=to, subject=subject, body=body)
+        if not res.get("success"):
+            return ToolResult(
+                status="failed",
+                error=str(res.get("error") or "Failed to send email via Gmail API."),
+                evidence={"to": to, "subject": subject, "error": res.get("error")},
+            )
         return ToolResult(
             status="done",
-            output=f"Email sent successfully to '{to}' with subject '{subject}'.",
-            evidence={"to": to, "subject": subject, "timestamp": time.time()},
+            output=f"Email sent successfully to '{to}' with subject '{subject}' (message_id={res.get('message_id', '')}).",
+            evidence={
+                "to": to,
+                "subject": subject,
+                "message_id": res.get("message_id", ""),
+                "thread_id": res.get("thread_id", ""),
+                "timestamp": time.time(),
+            },
         )
 
     registry.register(ToolDefinition(
@@ -704,5 +730,218 @@ def register_personal_tools(registry: ToolRegistry, store: PersonalStore | None 
         parameters={"type": "OBJECT", "properties": {}},
         capability_tier=CapabilityTier.SYSTEM_DESTRUCTIVE,
         handler=_purge_handler,
+        is_mutating=True,
+    ))
+
+    # 13. get_important_morning_emails
+    def _important_morning_emails_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        from core.personal_intelligence.engine import PersonalIntelligenceEngine
+        engine = PersonalIntelligenceEngine(store=store)
+        res = engine.find_important_morning_emails(
+            now=params.get("now"),
+            timezone_name=params.get("timezone") or params.get("timezone_name"),
+            live_fetch=bool(params.get("live_fetch", True)),
+            limit=int(params.get("limit") or 10),
+        )
+        ok = bool(res.get("connected") and res.get("retrieval_ok"))
+        return ToolResult(
+            status="done" if ok else "failed",
+            output=str(res.get("summary") or ""),
+            error=None if ok else str(res.get("connection_error") or res.get("retrieval_error") or res.get("summary") or "Morning email check failed"),
+            evidence=res,
+        )
+
+    registry.register(ToolDefinition(
+        name="get_important_morning_emails",
+        description="Check live Gmail connectivity, establish local morning window, and identify important morning emails with transparent rationale.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "timezone": {"type": "STRING", "description": "Optional IANA timezone name (e.g. 'Asia/Kolkata')"},
+                "limit": {"type": "INTEGER", "description": "Max important/ordinary emails to return"},
+                "live_fetch": {"type": "BOOLEAN", "description": "Whether to query live Gmail API first"},
+            },
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_important_morning_emails_handler,
+        is_mutating=False,
+    ))
+
+    # 14. list_email_attachments
+    def _list_email_attachments_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        import os
+        msg_id = str(params.get("message_id") or "").strip()
+        if not msg_id:
+            return ToolResult(status="failed", error="Missing required parameter: message_id")
+
+        msg = next((m for m in store.list_messages(provider=ProviderType.GMAIL, limit=200) if m.message_id == msg_id), None)
+        attachments = list((msg.raw_reference or {}).get("attachments", [])) if msg else []
+
+        if (msg is None or not attachments) and os.environ.get("OPTIMUS_MOCK_NETWORK") != "1":
+            accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+            if accounts:
+                from core.personal_intelligence.providers.gmail import GmailAdapter
+                adapter = GmailAdapter(account=accounts[0])
+                live_msg = adapter.get_message_detail(msg_id)
+                if live_msg is not None:
+                    store.save_messages([live_msg])
+                    msg = live_msg
+                    attachments = list((live_msg.raw_reference or {}).get("attachments", []))
+
+        if msg is None:
+            return ToolResult(status="failed", error=f"Email message '{msg_id}' not found.")
+
+        if not attachments:
+            return ToolResult(
+                status="done",
+                output=f"Email '{msg.subject}' ({msg_id}) has no attachments.",
+                evidence={"message_id": msg_id, "attachments": [], "count": 0},
+            )
+        lines = [f"Attachments for '{msg.subject}' ({msg_id}):"]
+        for att in attachments:
+            lines.append(
+                f"- {att.get('filename', 'unnamed')} | mime={att.get('mime_type', 'unknown')} "
+                f"| size={att.get('size', 0)}B | attachment_id={att.get('attachment_id', '')}"
+            )
+        return ToolResult(
+            status="done",
+            output="\n".join(lines),
+            evidence={"message_id": msg_id, "attachments": attachments, "count": len(attachments)},
+        )
+
+    registry.register(ToolDefinition(
+        name="list_email_attachments",
+        description="List attachment metadata (filename, mime_type, size, attachment_id) for a Gmail message.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "message_id": {"type": "STRING", "description": "Gmail message ID"},
+            },
+            "required": ["message_id"],
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_list_email_attachments_handler,
+        is_mutating=False,
+    ))
+
+    # 15. get_email_attachment
+    def _get_email_attachment_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        import os
+        from pathlib import Path
+        msg_id = str(params.get("message_id") or "").strip()
+        att_id = str(params.get("attachment_id") or "").strip()
+        save_path = params.get("save_path")
+        if not msg_id or not att_id:
+            return ToolResult(status="failed", error="Missing required parameters: message_id and attachment_id")
+
+        if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
+            return ToolResult(
+                status="done",
+                output=f"Attachment '{att_id}' retrieved (mock mode).",
+                evidence={"message_id": msg_id, "attachment_id": att_id, "size": 0, "mode": "mock"},
+            )
+
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        if not accounts:
+            return ToolResult(status="failed", error="No connected Gmail account available.")
+
+        from core.personal_intelligence.providers.gmail import GmailAdapter
+        adapter = GmailAdapter(account=accounts[0])
+        res = adapter.get_attachment(message_id=msg_id, attachment_id=att_id)
+        if not res.get("success"):
+            return ToolResult(status="failed", error=str(res.get("error") or "Failed to fetch attachment"))
+
+        raw_bytes: bytes = res.get("data_bytes") or b""
+        saved_to: str | None = None
+        if save_path:
+            from core.filesystem.service import UnifiedFilesystemService
+            from core.orchestrator.tools import _resolve_safe_path
+            allowed_roots = [
+                Path.cwd(),
+                Path.home() / "Downloads",
+                Path.home() / "Desktop",
+                Path.home() / "Documents",
+            ]
+            resolved = _resolve_safe_path(str(save_path), allowed_roots=allowed_roots, allow_cross_drive=False)
+            auth, _req_appr, reason = UnifiedFilesystemService.instance().check_access(resolved, "write")
+            if not auth:
+                return ToolResult(status="failed", error=reason or f"Write access denied for '{resolved}'")
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_bytes(raw_bytes)
+            saved_to = str(resolved)
+
+        evidence = {
+            "message_id": msg_id,
+            "attachment_id": att_id,
+            "size": len(raw_bytes),
+            "saved_to": saved_to,
+        }
+        msg_out = f"Fetched attachment '{att_id}' ({len(raw_bytes)} bytes)"
+        if saved_to:
+            msg_out += f" and saved safely to '{saved_to}'"
+        return ToolResult(status="done", output=msg_out + ".", evidence=evidence)
+
+    registry.register(ToolDefinition(
+        name="get_email_attachment",
+        description="Fetch an authorized Gmail attachment payload by message_id and attachment_id, optionally saving to a validated path.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "message_id": {"type": "STRING", "description": "Gmail message ID"},
+                "attachment_id": {"type": "STRING", "description": "Gmail attachment ID"},
+                "save_path": {"type": "STRING", "description": "Optional safe path under workspace or user Downloads/Desktop/Documents"},
+            },
+            "required": ["message_id", "attachment_id"],
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_get_email_attachment_handler,
+        is_mutating=True,
+    ))
+
+    # 16. prepare_email_draft
+    def _prepare_email_draft_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
+        import os
+        to = str(params.get("to") or "").strip()
+        subject = str(params.get("subject") or "").strip()
+        body = str(params.get("body") or "")
+        if not to or not subject:
+            return ToolResult(status="failed", error="Missing required parameters: to and subject")
+
+        if os.environ.get("OPTIMUS_MOCK_NETWORK") == "1":
+            return ToolResult(
+                status="done",
+                output=f"Email draft prepared (not sent) for '{to}' with subject '{subject}'.",
+                evidence={"draft_id": "mock_draft_1", "to": to, "subject": subject, "sent": False, "mode": "mock"},
+            )
+
+        accounts = [a for a in store.list_accounts() if a.provider == ProviderType.GMAIL]
+        if not accounts:
+            return ToolResult(status="failed", error="No connected Gmail account available.")
+
+        from core.personal_intelligence.providers.gmail import GmailAdapter
+        adapter = GmailAdapter(account=accounts[0])
+        res = adapter.create_draft(to=to, subject=subject, body=body)
+        if not res.get("success"):
+            return ToolResult(status="failed", error=str(res.get("error") or "Failed to prepare Gmail draft"))
+        return ToolResult(
+            status="done",
+            output=f"Email draft prepared (not sent) for '{to}' with subject '{subject}' (draft_id={res.get('draft_id', '')}).",
+            evidence={"draft_id": res.get("draft_id", ""), "to": to, "subject": subject, "sent": False},
+        )
+
+    registry.register(ToolDefinition(
+        name="prepare_email_draft",
+        description="Create a Gmail draft without sending it.",
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "to": {"type": "STRING", "description": "Recipient email address"},
+                "subject": {"type": "STRING", "description": "Draft subject"},
+                "body": {"type": "STRING", "description": "Draft body"},
+            },
+            "required": ["to", "subject"],
+        },
+        capability_tier=CapabilityTier.NETWORK_EXTERNAL,
+        handler=_prepare_email_draft_handler,
         is_mutating=True,
     ))

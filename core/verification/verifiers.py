@@ -160,9 +160,40 @@ class FilesystemVerifier(BaseVerifier):
                 verdict=f"Missing deliverable file: '{target_path}' is not a regular file.",
             )
 
-        raw_bytes = target_path.read_bytes()
-        actual_size = len(raw_bytes)
-        actual_sha = hashlib.sha256(raw_bytes).hexdigest()
+        try:
+            stat_res = target_path.stat()
+            actual_size = stat_res.st_size
+        except OSError as stat_err:
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result={"error": f"Failed to stat file: {stat_err}"},
+                status=VerificationStatus.FAIL,
+                verdict=f"Cannot inspect deliverable file '{target_path}': {stat_err}",
+            )
+
+        # 64 KB streaming chunk hash calculation to prevent unbounded RAM allocation
+        hasher = hashlib.sha256()
+        try:
+            with target_path.open("rb") as f:
+                while chunk := f.read(65536):
+                    hasher.update(chunk)
+            actual_sha = hasher.hexdigest()
+        except OSError as read_err:
+            return VerificationRecord(
+                evidence_id=evidence_id,
+                task_id=task_id,
+                subtask_id=subtask_id,
+                verifier_identity=self.verifier_identity,
+                expected_postcondition=spec,
+                actual_observed_result={"error": f"Failed to read file: {read_err}"},
+                status=VerificationStatus.FAIL,
+                verdict=f"Cannot read deliverable file '{target_path}': {read_err}",
+            )
+
         observed["bytes"] = actual_size
         observed["sha256"] = actual_sha
 
@@ -235,11 +266,25 @@ class FilesystemVerifier(BaseVerifier):
                     verdict=f"File extension mismatch on '{target_path.name}': expected '{expected_ext}', got '{target_path.suffix}'.",
                 )
 
-        # 5. Content pattern checks
+        # 5. Content pattern checks (preview up to 1 MB to prevent unbounded RAM usage)
         expected_content = spec.get("expected_content")
         if expected_content is not None:
-            text = raw_bytes.decode("utf-8", errors="replace")
-            if expected_content not in text:
+            try:
+                with target_path.open("rb") as f:
+                    content_bytes = f.read(1048576)
+                text = content_bytes.decode("utf-8", errors="replace")
+                if expected_content not in text:
+                    return VerificationRecord(
+                        evidence_id=evidence_id,
+                        task_id=task_id,
+                        subtask_id=subtask_id,
+                        verifier_identity=self.verifier_identity,
+                        expected_postcondition=spec,
+                        actual_observed_result=observed,
+                        status=VerificationStatus.FAIL,
+                        verdict=f"Expected content string not found in '{target_path.name}'.",
+                    )
+            except OSError as read_err:
                 return VerificationRecord(
                     evidence_id=evidence_id,
                     task_id=task_id,
@@ -248,7 +293,7 @@ class FilesystemVerifier(BaseVerifier):
                     expected_postcondition=spec,
                     actual_observed_result=observed,
                     status=VerificationStatus.FAIL,
-                    verdict=f"Expected content string not found in '{target_path.name}'.",
+                    verdict=f"Failed reading '{target_path.name}' for content check: {read_err}",
                 )
 
         return VerificationRecord(
@@ -331,17 +376,34 @@ class ProcessVerifier(BaseVerifier):
             observed["pid"] = pid
             is_running = False
             try:
-                # Portable pid check
-                if os.name == "nt":
-                    import ctypes
-                    kernel32 = ctypes.windll.kernel32
-                    handle = kernel32.OpenProcess(0x0400, False, int(pid))  # PROCESS_QUERY_INFORMATION
-                    if handle != 0:
-                        is_running = True
-                        kernel32.CloseHandle(handle)
+                pid_int = int(pid)
+                if pid_int <= 0:
+                    is_running = False
                 else:
-                    os.kill(int(pid), 0)
-                    is_running = True
+                    try:
+                        import psutil  # type: ignore
+                        proc = psutil.Process(pid_int)
+                        is_running = proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+                    except ImportError:
+                        # Portable pid check fallback
+                        if os.name == "nt":
+                            import ctypes
+                            from ctypes import wintypes
+                            kernel32 = ctypes.windll.kernel32
+                            kernel32.OpenProcess.restype = wintypes.HANDLE
+                            handle = kernel32.OpenProcess(0x1000, False, pid_int)  # PROCESS_QUERY_LIMITED_INFORMATION
+                            if handle:
+                                try:
+                                    exit_code = wintypes.DWORD()
+                                    if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                                        is_running = (exit_code.value == 259)  # STILL_ACTIVE
+                                finally:
+                                    kernel32.CloseHandle(handle)
+                        else:
+                            os.kill(pid_int, 0)
+                            is_running = True
+                    except Exception:
+                        is_running = False
             except (OSError, ProcessLookupError, ValueError):
                 is_running = False
 

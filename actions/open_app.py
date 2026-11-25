@@ -270,10 +270,9 @@ def _launch_and_verify(player, spoken: str, launcher_name: str,
             trouble = (f"{spoken} could not be started - nothing on this system "
                        f"answers to that name, so it may not be installed")
         else:
-            trouble = (f"{spoken} was asked to start but no new application "
-                       f"appeared within {int(_LAUNCH_TIMEOUT)} seconds, so it "
-                       f"is NOT confirmed open - it may be slow to load, or not "
-                       f"installed under that name")
+            trouble = (f"{spoken} was asked to start (launch requested), but no new "
+                       f"top-level window appeared within {int(_LAUNCH_TIMEOUT)} seconds "
+                       f"— it may have opened inside an existing viewer tab/process or is still loading")
 
         _log(player, f"OPTIMUS: {trouble}")
         _say(player, "Tell the user, in one short sentence in their own "

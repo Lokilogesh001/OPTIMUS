@@ -139,7 +139,7 @@ class UnifiedFilesystemService:
         - Canonical resolution via Path.resolve().
         - Mounted drive presence check.
         """
-        raw = str(raw_path or "").strip().strip('"').strip("'")
+        raw = os.path.expandvars(str(raw_path or "").strip().strip('"').strip("'"))
         if not raw:
             return Path.cwd().resolve()
 
@@ -155,10 +155,19 @@ class UnifiedFilesystemService:
         if re.match(r"^[a-zA-Z]:[^\/\\]", raw):
             raise ValueError(f"{ErrorCategory.PATH_INVALID.value}: DRIVE_RELATIVE_VIOLATION: Drive-relative paths without leading separator are prohibited: '{raw}'")
 
-        # 4. Expand shortcuts
+        # 4. Expand shortcuts (use Known Folder for Desktop & Downloads when redirected)
+        try:
+            from core.runtime.startup import DesktopShortcutManager
+            desktop_dir = DesktopShortcutManager.resolve_desktop_dir()
+        except Exception:
+            desktop_dir = Path.home() / "Desktop"
+        downloads_dir = self._resolve_known_folder(
+            "{374DE290-123F-4565-9164-39C4925E467B}",
+            Path.home() / "Downloads",
+        )
         shortcuts: dict[str, Path] = {
-            "desktop": Path.home() / "Desktop",
-            "downloads": Path.home() / "Downloads",
+            "desktop": desktop_dir,
+            "downloads": downloads_dir,
             "documents": Path.home() / "Documents",
             "pictures": Path.home() / "Pictures",
             "music": Path.home() / "Music",
@@ -666,16 +675,92 @@ class UnifiedFilesystemService:
             dur = (time.perf_counter() - t0) * 1000.0
             return ToolResult(status="failed", error=str(ex), output=f"Deletion error: {ex}", duration_ms=dur)
 
+    @staticmethod
+    def _resolve_known_folder(guid_str: str, fallback: Path) -> Path:
+        """Resolve a Windows Known Folder GUID (e.g. Downloads) safely with fallback."""
+        if os.name == "nt":
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                class _GUID(ctypes.Structure):
+                    _fields_ = [
+                        ("Data1", wintypes.DWORD),
+                        ("Data2", wintypes.WORD),
+                        ("Data3", wintypes.WORD),
+                        ("Data4", ctypes.c_ubyte * 8),
+                    ]
+
+                clean = guid_str.strip("{}")
+                parts = clean.split("-")
+                d4 = bytes.fromhex(parts[3] + parts[4])
+                guid = _GUID(
+                    int(parts[0], 16),
+                    int(parts[1], 16),
+                    int(parts[2], 16),
+                    (ctypes.c_ubyte * 8)(*d4),
+                )
+                p_path = ctypes.c_wchar_p()
+                hr = ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(p_path))
+                if hr == 0 and p_path.value:
+                    val = Path(p_path.value)
+                    ctypes.windll.ole32.CoTaskMemFree(p_path)
+                    if val.exists():
+                        return val
+            except Exception:
+                pass
+        return fallback
+
+    @staticmethod
+    def match_semantic_tokens(entry_name: str, query: str) -> bool:
+        """Match filename against query supporting space/hyphen/underscore normalization and SuvAI/SOI equivalences."""
+        stem = Path(entry_name).stem.lower()
+        q_low = (query or "").strip().lower()
+        if not q_low:
+            return True
+
+        stem_alnum = re.sub(r"[^a-z0-9]+", "", stem)
+        q_alnum = re.sub(r"[^a-z0-9]+", "", q_low)
+        # Only allow raw substring shortcut when query is descriptive (> 3 chars) and not an acronym collision
+        if len(q_alnum) > 3 and (q_low in entry_name.lower() or q_alnum in stem_alnum):
+            return True
+
+        stem_tokens = set(re.findall(r"[a-z0-9]+", stem))
+        q_tokens = re.findall(r"[a-z0-9]+", q_low)
+        suvai_variants = {"suvai", "soi"}
+        for qt in q_tokens:
+            if qt in suvai_variants:
+                if any(st in suvai_variants or "suvai" in st for st in stem_tokens):
+                    continue
+                if "suvai" in stem_alnum:
+                    continue
+                return False
+            else:
+                if len(qt) <= 3:
+                    if not any(st == qt for st in stem_tokens):
+                        return False
+                elif not any(qt in st for st in stem_tokens):
+                    return False
+        return True
+
     def search_files(
         self,
-        root_path: str = ".",
+        root_path: str | Path = ".",
         pattern: str = "*",
         recursive: bool = True,
         max_results: int = 100,
         max_depth: int = 12,
         context: dict[str, Any] | None = None,
+        *,
+        terms: list[str] | None = None,
+        extensions: list[str] | None = None,
+        semantic: bool = False,
+        semantic_query: str | None = None,
+        include_hidden: bool = False,
+        cancel_event: threading.Event | None = None,
+        progress_cb: Any | None = None,
     ) -> ToolResult:
-        """Search files by pattern with symlink cycle detection and depth boundaries."""
+        """Recursively search files by pattern/terms/extensions with cycle detection, skip reporting, and cancellation."""
         t0 = time.perf_counter()
         try:
             start_dir = self.resolve_path(root_path)
@@ -691,60 +776,137 @@ class UnifiedFilesystemService:
         if not start_dir.is_dir():
             return ToolResult(status="failed", error=f"{ErrorCategory.PATH_NOT_FOUND.value}: Not a directory: '{start_dir}'")
 
+        # Normalize search filters
+        norm_terms = [t.strip().lower() for t in (terms or []) if str(t).strip()]
+        norm_exts = {
+            (e.lower() if e.startswith(".") else f".{e.lower()}")
+            for e in (extensions or [])
+            if str(e).strip()
+        }
+        raw_pattern = (pattern or "*").strip()
+        if "|" in raw_pattern or "," in raw_pattern:
+            patterns = [p.strip().lower() for p in re.split(r"[|,]", raw_pattern) if p.strip()]
+        else:
+            patterns = [raw_pattern.lower()]
+
         results: list[dict[str, Any]] = []
+        seen_match_paths: set[str] = set()
+        skipped_locations: list[str] = []
         visited_real_paths: set[str] = set()
         visited_real_paths.add(str(start_dir.resolve()).lower())
+        dirs_scanned = 0
+        was_cancelled = False
+
+        def _matches(entry_name: str, is_dir: bool) -> bool:
+            lname = entry_name.lower()
+            if norm_exts:
+                if is_dir or Path(lname).suffix not in norm_exts:
+                    return False
+            if semantic and semantic_query:
+                if not self.match_semantic_tokens(entry_name, semantic_query):
+                    return False
+            if norm_terms:
+                if semantic:
+                    if not all(self.match_semantic_tokens(entry_name, term) for term in norm_terms):
+                        return False
+                elif not all(term in lname for term in norm_terms):
+                    return False
+            if patterns and patterns != ["*"]:
+                return any(
+                    fnmatch.fnmatch(lname, pat) or (pat not in ("*", "*.*") and "*" not in pat and "?" not in pat and pat in lname)
+                    for pat in patterns
+                )
+            return True
 
         def _walk(curr_path: Path, current_depth: int) -> None:
+            nonlocal dirs_scanned, was_cancelled
+            if cancel_event and cancel_event.is_set():
+                was_cancelled = True
+                return
             if current_depth > max_depth or len(results) >= max_results:
                 return
+
+            dirs_scanned += 1
+            if progress_cb and dirs_scanned % 25 == 0:
+                try:
+                    progress_cb(len(results), str(curr_path))
+                except Exception:
+                    pass
 
             try:
                 with os.scandir(curr_path) as it:
                     for entry in it:
+                        if cancel_event and cancel_event.is_set():
+                            was_cancelled = True
+                            return
                         if len(results) >= max_results:
                             break
 
+                        if not include_hidden and entry.name.startswith("."):
+                            continue
+
                         # Check sensitive credential directories to skip them during auto search
-                        entry_str = str(Path(entry.path).resolve())
+                        try:
+                            resolved_entry = Path(entry.path).resolve()
+                            entry_str = str(resolved_entry)
+                            canon_key = entry_str.lower()
+                        except OSError:
+                            skipped_locations.append(entry.path)
+                            continue
+
                         if any(pat.search(entry_str) for pat in _PROTECTED_CREDENTIAL_PATTERNS):
+                            skipped_locations.append(entry.path)
                             continue
 
                         try:
                             is_sym = entry.is_symlink()
                             is_dir = entry.is_dir(follow_symlinks=False)
 
-                            if fnmatch.fnmatch(entry.name.lower(), pattern.lower()):
+                            if _matches(entry.name, is_dir) and canon_key not in seen_match_paths:
                                 st = entry.stat(follow_symlinks=False)
+                                seen_match_paths.add(canon_key)
                                 results.append({
                                     "name": entry.name,
-                                    "path": entry.path,
+                                    "path": entry_str,
                                     "is_dir": is_dir,
                                     "size": st.st_size if not is_dir else 0,
                                 })
 
                             if recursive and is_dir and not is_sym:
-                                real_sub = str(Path(entry.path).resolve()).lower()
-                                if real_sub not in visited_real_paths:
-                                    visited_real_paths.add(real_sub)
+                                if canon_key not in visited_real_paths:
+                                    visited_real_paths.add(canon_key)
                                     _walk(Path(entry.path), current_depth + 1)
+                        except PermissionError:
+                            skipped_locations.append(entry.path)
+                            continue
                         except OSError:
+                            skipped_locations.append(entry.path)
                             continue
             except PermissionError:
-                pass
+                skipped_locations.append(str(curr_path))
             except OSError:
-                pass
+                skipped_locations.append(str(curr_path))
 
         _walk(start_dir, 0)
         dur = (time.perf_counter() - t0) * 1000.0
 
         lines = [f"{'📁' if r['is_dir'] else '📄'} {r['name']} ({_format_size(r['size']) if not r['is_dir'] else 'dir'}) -> {r['path']}" for r in results]
         out = f"Found {len(results)} matches for '{pattern}' in '{start_dir}':\n" + "\n".join(lines) if results else f"No matches found for '{pattern}' in '{start_dir}'."
+        if skipped_locations:
+            out += f"\n[Skipped {len(skipped_locations)} inaccessible or restricted location(s)]"
 
         return ToolResult(
             status="done",
             output=out,
-            evidence={"root": str(start_dir), "count": len(results), "matches": results},
+            evidence={
+                "root": str(start_dir),
+                "count": len(results),
+                "matches": results,
+                "recursive": recursive,
+                "skipped_locations": skipped_locations[:50],
+                "skipped_count": len(skipped_locations),
+                "cancelled": was_cancelled,
+            },
             duration_ms=dur,
         )
 

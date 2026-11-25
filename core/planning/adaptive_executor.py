@@ -78,7 +78,7 @@ class AdaptiveExecutionEngine:
         while True:
             # Check cooperative cancellation
             if self._cancel_requested.is_set():
-                outcome = ExecutionOutcome(
+                exec_outcome = ExecutionOutcome(
                     outcome_id=f"out-{uuid.uuid4().hex[:10]}",
                     plan_id=current_plan.plan_id,
                     goal=current_plan.goal,
@@ -91,8 +91,8 @@ class AdaptiveExecutionEngine:
                     agents_used=list(dict.fromkeys(agents_used)),
                     tools_used=list(dict.fromkeys(tools_used)),
                 )
-                self.outcome_store.record_outcome(outcome)
-                self._dispatch_outcome_event(outcome)
+                self.outcome_store.record_outcome(exec_outcome)
+                self._dispatch_outcome_event(exec_outcome)
                 return OutcomeType.USER_CANCELLED, current_plan
 
             # Find next runnable step whose dependencies are satisfied
@@ -110,7 +110,7 @@ class AdaptiveExecutionEngine:
 
             if runnable_step is None:
                 # Deadlock or cyclic blockage in dependencies
-                outcome = ExecutionOutcome(
+                exec_outcome = ExecutionOutcome(
                     outcome_id=f"out-{uuid.uuid4().hex[:10]}",
                     plan_id=current_plan.plan_id,
                     goal=current_plan.goal,
@@ -125,8 +125,8 @@ class AdaptiveExecutionEngine:
                     agents_used=list(dict.fromkeys(agents_used)),
                     tools_used=list(dict.fromkeys(tools_used)),
                 )
-                self.outcome_store.record_outcome(outcome)
-                self._dispatch_outcome_event(outcome)
+                self.outcome_store.record_outcome(exec_outcome)
+                self._dispatch_outcome_event(exec_outcome)
                 return OutcomeType.INCOMPLETE, current_plan
 
             # Track agent and tools
@@ -177,7 +177,7 @@ class AdaptiveExecutionEngine:
                         print(f"[AdaptiveExecutionEngine] Replanning failed: {replan_err}")
 
                 # If replans exhausted or failed
-                outcome = ExecutionOutcome(
+                exec_outcome = ExecutionOutcome(
                     outcome_id=f"out-{uuid.uuid4().hex[:10]}",
                     plan_id=current_plan.plan_id,
                     goal=current_plan.goal,
@@ -192,13 +192,13 @@ class AdaptiveExecutionEngine:
                     agents_used=list(dict.fromkeys(agents_used)),
                     tools_used=list(dict.fromkeys(tools_used)),
                 )
-                self.outcome_store.record_outcome(outcome)
-                self._dispatch_outcome_event(outcome)
+                self.outcome_store.record_outcome(exec_outcome)
+                self._dispatch_outcome_event(exec_outcome)
                 return OutcomeType.VERIFIED_FAILURE, current_plan
 
         # Final Verified Success
         total_duration = time.time() - start_time
-        outcome = ExecutionOutcome(
+        exec_outcome = ExecutionOutcome(
             outcome_id=f"out-{uuid.uuid4().hex[:10]}",
             plan_id=current_plan.plan_id,
             goal=current_plan.goal,
@@ -211,8 +211,8 @@ class AdaptiveExecutionEngine:
             agents_used=list(dict.fromkeys(agents_used)),
             tools_used=list(dict.fromkeys(tools_used)),
         )
-        self.outcome_store.record_outcome(outcome)
-        self._dispatch_outcome_event(outcome)
+        self.outcome_store.record_outcome(exec_outcome)
+        self._dispatch_outcome_event(exec_outcome)
         return OutcomeType.VERIFIED_SUCCESS, current_plan
 
     def _default_step_runner(self, step: PlanStep) -> dict[str, Any]:

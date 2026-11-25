@@ -65,6 +65,17 @@ class WindowsSystemMonitorAdapter:
                 cls._instance = cls()
             return cls._instance
 
+    @classmethod
+    def reset(cls) -> None:
+        """Reset singleton and cleanly stop background worker thread."""
+        with cls._lock:
+            if cls._instance is not None:
+                try:
+                    cls._instance.stop()
+                except Exception:
+                    pass
+                cls._instance = None
+
     def __init__(self, refresh_interval_s: float = 2.0, auto_start: bool = True) -> None:
         self.refresh_interval_s = max(0.5, refresh_interval_s)
         self._snapshot_lock = threading.RLock()
@@ -470,10 +481,33 @@ class WindowsSystemMonitorAdapter:
         self._wmi_last_check_time = now
 
         try:
+            import gc
             import pythoncom  # type: ignore
-            import wmi  # type: ignore
+            import win32com.client  # type: ignore
         except ImportError:
             return False, {}
+
+        def _query_lhm_com() -> dict[str, list[dict[str, Any]]]:
+            locator = None
+            services = None
+            sensors = None
+            try:
+                locator = win32com.client.Dispatch("WbemScripting.SWbemLocator")
+                services = locator.ConnectServer(".", "root/LibreHardwareMonitor")
+                sensors = services.ExecQuery("SELECT SensorType, Name, Value FROM Sensor")
+                parsed: dict[str, list[dict[str, Any]]] = {}
+                for idx, s in enumerate(sensors):
+                    if idx >= 20:
+                        break
+                    stype = getattr(s, "SensorType", "Other")
+                    name = getattr(s, "Name", "Unknown")
+                    val = getattr(s, "Value", 0.0)
+                    parsed.setdefault(str(stype), []).append({"name": name, "value": val})
+                return parsed
+            finally:
+                sensors = None
+                services = None
+                locator = None
 
         co_init = False
         try:
@@ -483,14 +517,7 @@ class WindowsSystemMonitorAdapter:
             except Exception:
                 pass
 
-            w = wmi.WMI(namespace="root/LibreHardwareMonitor", find_classes=False)
-            sensors = w.Sensor()
-            parsed: dict[str, list[dict[str, Any]]] = {}
-            for s in sensors[:20]:
-                stype = getattr(s, "SensorType", "Other")
-                name = getattr(s, "Name", "Unknown")
-                val = getattr(s, "Value", 0.0)
-                parsed.setdefault(stype, []).append({"name": name, "value": val})
+            parsed = _query_lhm_com()
             self._wmi_available = True
             self._wmi_backoff_s = 60.0
             return True, parsed
@@ -500,11 +527,8 @@ class WindowsSystemMonitorAdapter:
             self._wmi_backoff_s = min(600.0, self._wmi_backoff_s * 2.0)
             return False, {}
         finally:
-            import gc
-            w = None
-            sensors = None
-            gc.collect()
             if co_init:
+                gc.collect(0)
                 try:
                     pythoncom.CoUninitialize()
                 except Exception:

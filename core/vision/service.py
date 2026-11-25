@@ -169,6 +169,51 @@ class UnifiedVisionService:
             retry_count=retry_count,
         )
 
+    def register_screen_event_listener(self, callback: Any) -> None:
+        self.observer.register_event_listener(callback)
+
+    def observe_act_verify(
+        self,
+        action_fn: Any,
+        *,
+        task_id: str = "vision_op",
+        step_index: int = 1,
+        action_type: str = "click",
+        target_element: str = "",
+        expected_state: str = "",
+    ) -> dict[str, Any]:
+        """Execute OBSERVE -> UNDERSTAND -> ACT -> VERIFY -> UPDATE STATE safely."""
+        pre_state = self.get_desktop_state(force_scan=True)
+        pre_epoch = pre_state.element_cache_epoch
+
+        # Re-check element epoch & execute action
+        action_result = action_fn()
+        post_state = self.get_desktop_state(force_scan=True)
+
+        step_res = self.supervise_step(
+            task_id=task_id,
+            step_index=step_index,
+            action_type=action_type,
+            target_element=target_element,
+            expected_state=expected_state,
+            pre_state=pre_state,
+            post_state=post_state,
+            action_result=action_result if isinstance(action_result, dict) else {"result": action_result},
+        )
+        self.observer.record_action_outcome(
+            f"{action_type}:{target_element}",
+            step_res.actual_state,
+        )
+        if not step_res.is_successful or post_state.element_cache_epoch != pre_epoch:
+            self.observer.invalidate_elements("post_action_reassess")
+        return {
+            "pre_state": pre_state.to_dict(),
+            "post_state": post_state.to_dict(),
+            "action_result": action_result,
+            "supervision": step_res.to_dict(),
+            "coordinates_invalidated": post_state.element_cache_epoch != pre_epoch or not step_res.is_successful,
+        }
+
     # ── Natural Language State Explanation ───────────────────────────────────
 
     def explain_desktop_state(self, question: str | None = None) -> str:

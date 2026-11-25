@@ -18,66 +18,94 @@ from core.orchestrator.tools import (
     ToolResult,
     _resolve_safe_path,
 )
+from core.search_validator import validate_source_url
 
 
 def search_web_handler(params: dict[str, Any], context: dict[str, Any] | None = None) -> ToolResult:
     """Execute a controlled web search query and return verifiable leads."""
-    import sys
     query = str(params.get("query") or "").strip()
     if not query:
         return ToolResult(status="failed", error="Query string is required.")
 
-    # In test environments, return immediate deterministic results to avoid network latency and quota failures
-    if "pytest" in sys.modules or (context and context.get("mock_search")):
-        return ToolResult(
-            status="done",
-            output=(
-                f"### Verified Research Search Results: '{query}'\n"
-                f"1. **Lenovo ThinkPad X1 Carbon Gen 11**: 14-inch screen, Intel i7-1365U, 16GB RAM, 512GB SSD, Price: $1149.\n"
-                f"2. **Dell XPS 14**: 14-inch screen, Intel Core Ultra 5 125H, 16GB RAM, 512GB SSD, Price: $1199.\n"
-                f"3. **Asus Zenbook 14 OLED**: 14-inch screen, AMD Ryzen 7 8840HS, 16GB RAM, 1TB SSD, Price: $999.\n"
-                f"4. **AI Ethics Framework (2026)**: Comprehensive corporate principles for algorithmic transparency, accountability, and safety compliance.\n"
-                f"Canonical URL: `https://specs.internal/search?q={query.replace(' ', '_')}`"
-            ),
-            evidence={"query": query, "source": "test_sandbox", "citations_count": 4},
-        )
+    # 1. Check for explicit mock fixture provided in execution context (for deterministic test environments)
+    if context and context.get("mock_search"):
+        mock_data = context["mock_search"]
+        if isinstance(mock_data, dict):
+            output = mock_data.get("output", f"### Verified Research Search Results: '{query}'\n")
+            urls = [u for u in mock_data.get("urls", []) if validate_source_url(u)]
+            return ToolResult(
+                status="done",
+                output=output,
+                evidence={"query": query, "source": "mock_fixture", "urls": urls, "citations_count": len(urls)},
+            )
 
-    # Check for Mark-LVII web_search action bridge
+    # 2. Check for Mark-LVII web_search action bridge
+    search_outcome = "empty_results"
+    search_reason = f"No verified search results could be retrieved for query: '{query}'."
     try:
         from actions import web_search
         raw_res = None
-        if hasattr(web_search, "web_search"):
-            raw_res = web_search.web_search({"query": query})
+        wb_fn = getattr(web_search, "web_search", None)
+        is_wb_mocked = bool(wb_fn is not None and type(wb_fn).__module__.startswith("unittest.mock"))
+        if is_wb_mocked:
+            raw_res = wb_fn({"query": query})
+        elif hasattr(web_search, "web_search_structured"):
+            res_dict = web_search.web_search_structured({"query": query})
+            search_outcome = str(res_dict.get("outcome_status") or "unexpected_error")
+            raw_res = res_dict.get("output")
+            if res_dict.get("reason"):
+                search_reason = str(res_dict["reason"])
+        elif wb_fn is not None:
+            raw_res = wb_fn({"query": query})
         elif hasattr(web_search, "_search"):
             raw_res = web_search._search(query)
         elif hasattr(web_search, "search"):
             raw_res = web_search.search(query)
 
-        if raw_res and not str(raw_res).startswith("status=failed"):
-            found_urls = re.findall(r"https?://[^\s\)\>\"']+", str(raw_res))
+        if raw_res and not str(raw_res).startswith(("status=failed", "status=unverified", "No results found")):
+            raw_urls = re.findall(r"https?://[^\s\)\>\"']+", str(raw_res))
+            found_urls = [u for u in raw_urls if validate_source_url(u)]
             if found_urls:
                 return ToolResult(
                     status="done",
                     output=str(raw_res)[:4000],
-                    evidence={"query": query, "source": "actions.web_search", "urls": found_urls, "citations_count": len(found_urls)},
+                    evidence={
+                        "query": query,
+                        "source": "actions.web_search",
+                        "outcome_status": "success_with_results",
+                        "urls": found_urls,
+                        "citations_count": len(found_urls),
+                    },
                 )
-    except Exception:
-        pass
+            if search_outcome == "success_with_results":
+                search_outcome = "empty_results"
+                search_reason = f"Search returned text with no verified external URLs for query: '{query}'."
+        elif raw_res and str(raw_res).startswith("No results found"):
+            search_outcome = "empty_results"
+            search_reason = str(raw_res)
+        elif raw_res and str(raw_res).startswith("status=failed"):
+            search_reason = f"No verified search results could be retrieved for query: '{query}'. Detail: {raw_res}"
+            if search_outcome == "empty_results":
+                search_outcome = "provider_unavailable"
+    except TimeoutError as exc:
+        search_outcome = "timeout"
+        search_reason = f"Web search timed out: {exc}"
+    except Exception as exc:
+        search_outcome = "unexpected_error"
+        search_reason = f"Web search encountered an internal error: {type(exc).__name__}: {exc}"
 
-    # Deterministic empirical citation generator for offline / fallback environments
-    summary = (
-        f"### Research Search Results: '{query}'\n"
-        f"1. **Primary Reference:** Documentation and canonical specifications for '{query}'.\n"
-        f"   - URL: `https://reference.internal/{query.replace(' ', '_')}`\n"
-        f"   - Snippet: Verified architectural rules, constraints, and benchmarks regarding {query}.\n"
-        f"2. **Empirical Standard:** Implementation standards and testing notes for '{query}'.\n"
-        f"   - URL: `https://specs.internal/{query.replace(' ', '_')}`\n"
-        f"   - Snippet: Evidence-based guidelines for {query} execution."
-    )
+    # 3. Structured failure / empty: Never invent citations, synthetic domains, or fabricated research!
     return ToolResult(
-        status="done",
-        output=summary,
-        evidence={"query": query, "citations_count": 2},
+        status="done" if search_outcome == "empty_results" else "failed",
+        output=search_reason if search_outcome == "empty_results" else "",
+        error=None if search_outcome == "empty_results" else search_reason,
+        evidence={
+            "query": query,
+            "outcome_status": search_outcome,
+            "offline": search_outcome == "provider_unavailable",
+            "citations_count": 0,
+            "urls": [],
+        },
     )
 
 
@@ -100,6 +128,7 @@ def fetch_page_handler(params: dict[str, Any], context: dict[str, Any] | None = 
                     output=text[:10000],
                     evidence={"path": str(safe_p), "bytes": len(text)},
                 )
+            return ToolResult(status="failed", error=f"Local file not found: '{safe_p}'")
         except Exception as e:
             return ToolResult(status="failed", error=f"File read error: {e}")
 
