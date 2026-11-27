@@ -1,11 +1,14 @@
-# OPTIMUS — An Autonomous Personal Agentic AI Assistant
+# OPTIMUS — Autonomous AI System
 
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
-[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-cyan.svg)](https://www.python.org/)
-[![UI: PyQt6](https://img.shields.io/badge/UI-PyQt6%20Cinematic%20HUD-00d4ff.svg)](https://riverbankcomputing.com/software/pyqt/)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary%20%E2%80%94%20All%20Rights%20Reserved-blue.svg)](LICENSE)
+[![Python: 3.11+](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-cyan.svg)](https://www.python.org/)
+[![UI: PyQt6](https://img.shields.io/badge/UI-PyQt6%20Mission%20Control-00d4ff.svg)](https://riverbankcomputing.com/software/pyqt/)
 [![Architecture: Hybrid Multi-Agent](https://img.shields.io/badge/Architecture-Autonomous%20Hierarchical%20Agents-blueviolet.svg)](#architecture--component-responsibilities)
 
-> **OPTIMUS** is an autonomous personal AI system that can hear, see, speak, plan, verify, and orchestrate complex tasks on your computer. Evolved from the desktop foundation of [Mark-LVII by @FatihMakes](https://www.youtube.com/@FatihMakes), OPTIMUS introduces a production-hardened multi-agent engine, cryptographic verification ledger, dynamic workflow scheduler, and adaptive model intelligence gateway with both local and cloud inference.
+> **OPTIMUS** is an independently developed autonomous personal AI system created by **Logeshwaran V**. It can hear, see, speak, plan, verify, and orchestrate complex tasks on your computer using a multi-agent engine, cryptographic verification ledger, dynamic workflow scheduler, and adaptive model intelligence gateway with both local and cloud inference.
+>
+> **Copyright © 2026 Logeshwaran V. All rights reserved.**  
+> This software is proprietary. Unauthorized copying, modification, redistribution, or commercial use without prior written authorization is prohibited. See [`LICENSE`](LICENSE) for full terms.
 
 ---
 
@@ -24,8 +27,9 @@
 - [Hardware Requirements & Resource Efficiency](#-hardware-requirements--resource-efficiency)
 - [Supported Model Providers](#-supported-model-providers)
 - [Installation & Setup](#-installation--setup)
+- [Basic Usage](#-basic-usage)
 - [Current Development Status](#-current-development-status)
-- [Attribution & License](#-attribution--license)
+- [License & Third-Party Acknowledgements](#-license--third-party-acknowledgements)
 
 ---
 
@@ -172,13 +176,20 @@ OPTIMUS is optimized for standard consumer workstations and laptops:
 
 ## 🚀 Installation & Setup
 
-### 1. Clone the Repository
+### Option 1: Windows Installer (Recommended)
+1. Download **`OPTIMUS_Setup.exe`** from the [GitHub Releases](https://github.com/Lokilogesh001/OPTIMUS/releases/tag/v1.1.0-stable) page.
+2. Run **`OPTIMUS_Setup.exe`** and follow the on-screen setup wizard to install OPTIMUS.
+3. Launch **OPTIMUS** from the Start Menu or Desktop shortcut and enter your API keys / local provider settings when prompted.
+
+### Option 2: From Source (Developers)
+
+1. **Clone the Repository**
 ```bash
 git clone https://github.com/Lokilogesh001/OPTIMUS.git
 cd OPTIMUS
 ```
 
-### 2. Configure Virtual Environment
+2. **Configure Virtual Environment**
 ```bash
 # Create environment
 python -m venv .venv
@@ -190,12 +201,12 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+3. **Install Dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure Environment & Keys
+4. **Configure Environment & Keys**
 Copy the example templates and add your API credentials:
 ```bash
 cp .env.example .env
@@ -213,15 +224,24 @@ Edit `config/api_keys.json` with your Gemini API key (obtainable from [Google AI
 }
 ```
 
-### 5. Launch OPTIMUS
+5. **Launch OPTIMUS**
 ```bash
 python main.py
 ```
 
-To run without voice interaction or in test mode:
+To run automated tests:
 ```bash
 python -m pytest tests/
 ```
+
+---
+
+## 💻 Basic Usage
+
+- **Voice & Command HUD**: Speak naturally using Push-to-Talk (`Ctrl+Alt` default) or type directives directly in the **Assistant Conversation & Directive Stream**.
+- **Switch Views (`F2`)**: Press `F2` (or click the **OPTIMUS** header toggle) to switch between the **Classic HUD** and the **OPTIMUS Control Center** (Dashboard, Missions, Execution Graph, Integration Graph, Memory Graph, Approvals, Settings).
+- **Keyboard Shortcuts**: `F4` toggles microphone mute, `F11` toggles fullscreen, and `Esc` interrupts active speech.
+- **Human-in-the-Loop Approvals**: Sensitive actions (e.g., sending/replying to emails or mutating files outside workspace bounds) pause in `WAITING_FOR_APPROVAL` until explicitly confirmed on-screen.
 
 ---
 
@@ -244,10 +264,13 @@ python -m pytest tests/
 
 ---
 
-## 📄 Attribution & License
+## 📄 License & Third-Party Acknowledgements
 
-OPTIMUS is distributed under the **[Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/)** license.
+**OPTIMUS Software License — Proprietary Software (All Rights Reserved)**  
+**Copyright © 2026 Logeshwaran V**
 
-### Upstream Attributions
-- **Mark-LVII Base Architecture**: Developed by **[@FatihMakes](https://www.youtube.com/@FatihMakes)**. Foundational HUD layout, audio pipeline, and desktop integration derived with appreciation from Mark-LVII.
+All original source code, architecture, user interface elements, and documentation in this repository are proprietary and protected by copyright. Without prior written authorization from the copyright holder, you may not copy, modify, redistribute, sublicense, or commercially distribute this software. See the [`LICENSE`](LICENSE) file for the complete license terms.
+
+### Third-Party Acknowledgements
 - **MediaPipe Canonical Face Model (`core/face_model.obj`)**: Copyright Google LLC, licensed under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+- **Third-Party Python & Qt Dependencies**: PyQt6, NumPy, Playwright, Requests, `psutil`, and other packages listed in `requirements.txt` remain subject to their respective open-source licenses.

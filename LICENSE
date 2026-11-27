@@ -1,37 +1,58 @@
-Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+# OPTIMUS SOFTWARE LICENSE
+## Copyright © 2026 Logeshwaran V
 
-Copyright (c) 2026 OPTIMUS Contributors
-Derived from Mark-LVII (Copyright (c) 2026 @FatihMakes)
+Copyright (c) 2026 Logeshwaran V. All rights reserved.
 
-==============================================================================
-License Terms
-==============================================================================
+OPTIMUS is an independently developed software project created by Logeshwaran V. This project does not incorporate source code from Mark-LVII or other third-party software projects, except for separately identified third-party components and dependencies.
 
-You are free to:
-- Share — copy and redistribute the material in any medium or format
-- Adapt — remix, transform, and build upon the material
+## 1. Copyright Ownership
 
-Under the following terms:
-- Attribution — You must give appropriate credit, provide a link to the license,
-  and indicate if changes were made. You may do so in any reasonable manner,
-  but not in any way that suggests the licensor endorses you or your use.
-- NonCommercial — You may not use the material for commercial purposes.
-- No additional restrictions — You may not apply legal terms or technological
-  measures that legally restrict others from doing anything the license permits.
+All original source code, software architecture, design, documentation, user interface elements, and other original materials contained in this project are protected by applicable copyright laws.
 
-Full license text available at:
-https://creativecommons.org/licenses/by-nc/4.0/legalcode
+The copyright holder retains all rights to the software unless expressly granted under this license.
 
-==============================================================================
-Third-Party Attributions & Licenses
-==============================================================================
+## 2. Restrictions on Use
 
-1. Mark-LVII Base Architecture:
-   Copyright (c) @FatihMakes (YouTube: @FatihMakes, Instagram: @fatihmakes)
-   Licensed under CC BY-NC 4.0.
+Without prior written authorization from the copyright holder, you may not:
 
-2. MediaPipe Canonical Face Model (`core/face_model.obj`):
-   Copyright (c) Google LLC
-   Licensed under the Apache License, Version 2.0 (the "License").
-   You may obtain a copy of the License at:
-   http://www.apache.org/licenses/LICENSE-2.0
+- Copy, reproduce, or redistribute the software or substantial portions of its source code.
+- Modify, adapt, or create derivative works based on the software.
+- Sell, sublicense, rent, lease, or otherwise commercially distribute the software.
+- Reverse engineer, decompile, or disassemble the software, except where applicable law expressly permits such activity.
+- Remove or alter copyright notices, license notices, or other proprietary notices.
+
+## 3. Authorized Use
+
+The copyright holder may authorize individuals or organizations to use, modify, distribute, or commercially exploit the software through separate written agreements or additional licenses.
+
+No rights are granted beyond those expressly stated in this license.
+
+## 4. Third-Party Components
+
+This license applies only to original materials owned by Logeshwaran V.
+
+Third-party libraries, frameworks, models, assets, and other dependencies remain subject to their respective licenses and terms.
+
+Their applicable copyright notices and license requirements must be preserved.
+
+## 5. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF OR INABILITY TO USE THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+
+## 6. Termination
+
+Any violation of the terms of this license may result in termination of the permissions granted under it.
+
+Upon termination, the affected party must cease all use and distribution of the software, except where otherwise permitted by applicable law.
+
+## 7. Governing Law
+
+This license shall be interpreted in accordance with the applicable laws of India, subject to any mandatory legal provisions.
+
+---
+
+**OPTIMUS**  
+Copyright © 2026 Logeshwaran V  
+All rights reserved.
